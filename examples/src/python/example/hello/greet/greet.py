@@ -4,6 +4,7 @@
 
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
+
 # python-ansicolors-import-example
 from colors import green
 # end-python-ansicolors-import-example
