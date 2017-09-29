@@ -99,7 +99,7 @@ sample](https://github.com/pantsbuild/pants/tree/master/examples/src/java/org/pa
 code shows the BUILD file for a simple Java binary (in the `main/`
 directory):
 
-!inc[start-after=runnable&end-before=README page](hello/main/BUILD)
+!inc[start-after=jvm-binary-example-build&end-before=end-jvm-binary-example-build](hello/main/BUILD)
 
 This small program has just one dependency. It is a library, a `java_library`, a compiled set of
 source code from this workspace.
@@ -113,7 +113,7 @@ of this code to another directory," you probably also want to set up a
 see the library target which `main-bin` depends on. This library target
 lives in `hello/greet/BUILD`:
 
-!inc[start-after=LICENSE](hello/greet/BUILD)
+!inc[start-after=java-library-build-example&end-before=end-java-library-build-example](hello/greet/BUILD)
 
 This library could depend on other build targets and artifacts; if your
 code imports something, that implies a `BUILD` dependency.
@@ -125,7 +125,7 @@ tests](https://github.com/pantsbuild/pants/tree/master/examples/tests/java/org/p
 are normal JUnit tests. To run them with Pants, we need a target for
 them:
 
-!inc[start-after=Test the](../../../../../tests/java/org/pantsbuild/example/hello/greet/BUILD)
+!inc[start-after=junit-3rdparty-example&end-before=end-junit-3rdparty-example](../../../../../tests/java/org/pantsbuild/example/hello/greet/BUILD)
 
 As with other targets, this one depends on code that it imports. Thus, a typical test target
 depends the library that it tests and perhaps some others (here, `junit`).
@@ -140,19 +140,11 @@ version conflicts, we use the 3rdparty idiom: we keep references to
 these "third-party" jars together in `BUILD` files under the `3rdparty/`
 directory. Thus, the test has a `3rdparty` dependency:
 
-!inc[start-after=Test the](../../../../../tests/java/org/pantsbuild/example/hello/greet/BUILD)
+!inc[start-after=junit-3rdparty-example&end-before=end-junit-3rdparty-example](../../../../../tests/java/org/pantsbuild/example/hello/greet/BUILD)
 
 The `BUILD` files in `3rdparty/` have targets like:
 
-    :::python
-    jar_library(name='junit',
-                jars = [
-                  jar(org='junit', name='junit-dep', rev='4.11').with_sources(),
-                ],
-                dependencies = [
-                  ':hamcrest-core',
-                ],
-               )
+!inc[start-after=junit-jar-library-example&end-before=end-junit-jar-library-example](../../../../3rdparty/BUILD)
 
 Those <a pantsref="bdict_jar">`jar()` things</a> are references to public jars.
 You can read more about
@@ -246,14 +238,7 @@ for just one pants invocation:
 If you sometimes need to compile some code in Java 6 and sometimes Java 7, you can define
 jvm-platforms in pants.ini, and set what targets use which platforms. For example, in pants.ini:
 
-    :::ini
-    [jvm-platform]
-    default_platform: java6
-    platforms: {
-        'java6': {'source': '6', 'target': '6', 'args': [] },
-        'java7': {'source': '7', 'target': '7', 'args': [] },
-        'java8': {'source': '8', 'target': '8', 'args': [] },
-      }
+!inc[start-after=jvm-platforms-definition&end-before=end-jvm-platforms-definition](../../../../pants.ini)
 
 And then in a BUILD file:
 
@@ -272,12 +257,7 @@ If you want to set the `-bootclasspath` (or `-Xbootclasspath`) to use the
 appropriate java distribution, you can use the `$JAVA_HOME` symbol in the
 `args` list. For example:
 
-    :::ini
-    [jvm-platform]
-    default_platform: java6
-    platforms: {
-        'java7': {'source': '7', 'target': '7', 'args': ["-C-bootclasspath:$JAVA_HOME/jre/lib/resources.jar:$JAVA_HOME/jre/lib/rt.jar:$JAVA_HOME/jre/lib/sunrsasign.jar:$JAVA_HOME/jre/lib/jsse.jar:$JAVA_HOME/jre/lib/jce.jar:$JAVA_HOME/jre/lib/charsets.jar:$JAVA_HOME/jre/lib/jfr.jar:$JAVA_HOME/jre/classes"] },
-      }
+!inc[start-after=jvm-platforms-definition&end-before=end-jvm-platforms-definition](../../../../pants.ini)
 
 Your `-bootclasspath` should be designed to work with any compatible version of
 the JVM that might be used. If you make use of `[jvm-distributions]` and have
@@ -305,7 +285,7 @@ correctly. (You can try to run without the configuration file, but the
 program crashes immediately.) We define a `jvm_app` that represents a
 runnable binary and "bundles" of extra files:
 
-!inc[start-after=Like Hello World&end-before=The binary](hello/main/BUILD)
+!inc[start-after=define-jvm-app-build-example&end-before=end-define-jvm-app-build-example](hello/main/BUILD)
 
 Here, we keep the extra files in a subdirectory, `config/` so that they
 don't clutter up this directory. (In this simple example, there's just
@@ -477,8 +457,8 @@ names. E.g., this syntax works:
 
 Which can also be done by:
 
-   :::python
-   shading_relocate_package('com.*.foo.bar')
+    :::python
+    shading_relocate_package('com.*.foo.bar')
 
 The default shading prefix is `__shaded_by_pants__`, but you can change it:
 

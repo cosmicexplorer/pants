@@ -29,11 +29,11 @@ file and make a pip `requirements.txt` file in the same directory.
 
 E.g, your `3rdparty/python/BUILD` file might look like:
 
-!inc[start-at=python_requirement&end-before=#](../../../../3rdparty/python/BUILD)
+!inc[start-after=python-requirements-example&end-before=end-python-requirements-example](../../../../3rdparty/python/BUILD)
 
 ...with `3rdparty/python/requirements.txt` like:
 
-!inc[end-before=pathspec](../../../../3rdparty/python/requirements.txt)
+!inc[lines=1-12](../../../../3rdparty/python/requirements.txt)
 
 `python_requirements` defines a named target for each line in the
 `requirements.txt` line. For example, a line like `ansicolors==1.0.2` in
@@ -49,13 +49,7 @@ with one or more
 <a pantsref="bdict_python_requirement">`python_requirement`</a>s
 like:
 
-    :::python
-    python_requirement_library(
-      name='beautifulsoup',
-      requirements=[
-        python_requirement(name='beautifulsoup',
-                           requirement='BeautifulSoup==3.2.0'),
-      ])
+!inc[start-after=python-requirement-library-example&end-before=end-python-requirement-library-example](../../../../examples/src/python/example/hello/greet/BUILD)
 
 Your Code's BUILD File
 ----------------------
@@ -63,12 +57,11 @@ Your Code's BUILD File
 In your code's `BUILD` file, introduce a dependency on the `3rdparty`
 target:
 
-!inc[start-at=python_library](hello/greet/BUILD)
+!inc[start-after=python-3rdparty-example&end-before=end-python-3rdparty-example](hello/greet/BUILD)
 
 Then in your Python code, you can `import` from that package:
 
-    :::python
-    from colors import green
+!inc[start-after=python-ansicolors-import-example&end-before=end-python-ansicolors-import-example](hello/greet/greet.py)
 
 Managing dependencies for multiple platforms
 ----------------------

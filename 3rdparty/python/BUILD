@@ -1,11 +1,14 @@
 # Copyright 2014 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+# python-requirements-example
 # see/edit requirements.txt in this directory to change deps.
 python_requirements()
+# end-python-requirements-example
 
 # Only used by tests so we lift this library out of the requirements.txt
 # file used to bootstrap pants itself.
+# python-requirement-library-example
 python_requirement_library(
   name='antlr-3.1.3',
   requirements=[
@@ -17,3 +20,4 @@ python_requirement_library(
                        repository='http://www.antlr3.org/download/Python/')
   ]
 )
+# end-python-requirement-library-example

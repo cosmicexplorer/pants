@@ -56,6 +56,24 @@ class WikilinksExtension(markdown.Extension):
 # !inc[start-at=void main&end-before=private HelloMain](HelloMain.java)
 INCLUDE_PATTERN = r'!inc(\[(?P<params>[^]]*)\])?\((?P<path>[^' + '\n' + r']*)\)'
 
+SPHINX_LINE_SINGLE_PATTERN = r'^([0-9]+)-([0-9]+)$'
+
+def interpret_lines_arg(value):
+  match = SPHINX_LINE_SINGLE_PATTERN.match(value)
+  if not match:
+    raise TaskError('"{0}" did not match "{1}"'.format(value, SPHINX_LINE_SINGLE_PATTERN))
+  start = int(match.group(1))
+  end = int(match.group(2))
+  if start <= 0:
+    raise TaskError('start line "{0}" must be positive in "{1}"'.format(start, value))
+  if start > end:
+    raise TaskError('start line "{0}" greater than end line "{1}"'
+                    ' in "{2}"'.format(start, end, value))
+  return (start, end)
+
+def scan_strings(strings, substring):
+  matching_idx = (i for i in range(len(strings)) if substring in strings[i])
+  return next(matching_idx)
 
 def choose_include_text(s, params, source_path):
   """Given the contents of a file and !inc[these params], return matching lines
@@ -71,6 +89,7 @@ def choose_include_text(s, params, source_path):
   start_at = None
   end_before = None
   end_at = None
+  lines_arg = None
 
   for term in params.split("&"):
     if '=' in term:
@@ -78,7 +97,7 @@ def choose_include_text(s, params, source_path):
     else:
       param, value = term.strip(), ''
     if not param: continue
-    if param == "start-after":
+    elif param == "start-after":
       start_after = value
     elif param == "start-at":
       start_at = value
@@ -86,9 +105,21 @@ def choose_include_text(s, params, source_path):
       end_before = value
     elif param == "end-at":
       end_at = value
+    elif param == "lines":
+      try:
+        lines_arg = interpret_lines_arg(value)
+      except TaskError as err:
+        raise TaskError('"lines" directive "{0}" could not be interpreted'
+                        'in "{1}" at "{2}"'
+                        ': "{3}"'.format(value, params, source_path, err))
     else:
-      raise TaskError('Invalid include directive "{0}"'
-                      ' in {1}'.format(params, source_path))
+      raise TaskError('Invalid include directive "{0}" for "{1}"'
+                      ' in {2}'.format(param, params, source_path))
+
+  if lines_arg:
+    start_line, end_line = lines_arg
+    chosen_lines = lines[(start_line - 1):(end_line + 1)]
+    return '\n'.join(chosen_lines)
 
   chosen_lines = []
   # two loops, one waits to "start recording", one "records"

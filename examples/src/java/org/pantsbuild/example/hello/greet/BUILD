@@ -1,6 +1,7 @@
 # Copyright 2014 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+# java-library-build-example
 # Note that the target has no explicit name, so it defaults to the name
 # of the directory, in this case 'greet'.
 # It also has no explicit sources, so it defaults to the sources implied
@@ -12,3 +13,4 @@ java_library(
                       name='hello-greet',
                       repo=public,),
 )
+# end-java-library-build-example

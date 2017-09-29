@@ -3,7 +3,8 @@
 
 # Like Hello World, but built with Pants.
 
-# Note that the target has no explicit name, so it defaults to the name
+# define-jvm-app-build-example
+# note that the target has no explicit name, so it defaults to the name
 # of the directory, in this case 'main'.
 jvm_app(
   basename = 'hello-example',
@@ -14,9 +15,11 @@ jvm_app(
     bundle(relative_to='config', fileset=globs('config/*'))
   ]
 )
+# end-define-jvm-app-build-example
 
 # The binary, the "runnable" part:
 
+# jvm-binary-example-build
 jvm_binary(name = 'main-bin',
   dependencies = [
     'examples/src/java/org/pantsbuild/example/hello/greet',
@@ -26,9 +29,11 @@ jvm_binary(name = 'main-bin',
   main = 'org.pantsbuild.example.hello.main.HelloMain',
   basename = 'hello-example',
 )
+# end-jvm-binary-example-build
 
 # README page:
 
+# readme-page-build-example
 page(name="readme",
   source="README.md")
-
+# end-readme-page-build-example

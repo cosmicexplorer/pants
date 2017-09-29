@@ -5,7 +5,9 @@
 
 package org.pantsbuild.example.hello.greet;
 
+// junit-java-import-example
 import org.junit.Test;
+// end-junit-java-import-example
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertThat;

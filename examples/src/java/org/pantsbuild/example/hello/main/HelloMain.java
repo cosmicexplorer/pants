@@ -9,6 +9,7 @@ import org.pantsbuild.example.hello.greet.Greeting;
 
 public class HelloMain {
 
+  // java-example-code-pants-example
   public static void main(String[] args) throws IOException {
     // Target of greeting is config'd in greetee.txt file, so read that:
     System.out.println(Greeting.greetFromFile("greetee.txt"));
@@ -16,6 +17,7 @@ public class HelloMain {
     // Target of other greeting is config'd in resource, so read that:
     System.out.println(Greeting.greetFromResource("org/pantsbuild/example/hello/world.txt"));
   }
+  // end-java-example-code-pants-example
 
   private HelloMain() {
     // not called. placates checkstyle

@@ -19,12 +19,6 @@ jar_library(name='args4j',
               jar('args4j', 'args4j', '2.33')
             ])
 
-jar_library(name='guava',
-            jars=[
-              jar('com.google.guava', 'guava', '18.0',
-                  apidocs='http://google.github.io/guava/releases/18.0/api/docs/')
-            ])
-
 jar_library(name='jansi',
             jars=[
               jar('org.fusesource.jansi', 'jansi', '1.11'),
@@ -36,17 +30,28 @@ jar_library(name='jsr305',
             ],
             scope='compile')
 
+# jar-exclude-replace-transitive-dependency
+jar_library(name='guava',
+            jars=[
+              jar('com.google.guava', 'guava', '18.0',
+                  apidocs='http://google.github.io/guava/releases/18.0/api/docs/')
+            ])
+
 jar_library(name='checkstyle',
             jars = [
               jar(org='com.puppycrawl.tools', name='checkstyle', rev='5.5',
                   excludes=[
+                    # if this jar has a transitive dependency on the
+                    # google-collections package, don't include it in the
+                    # classpath
                     exclude(org='com.google.collections', name='google-collections'),
                   ])
             ],
             dependencies = [
-              # Needs this as the replacement for the excluded google-collections.
+              # our previously-declared target has its own version of google-collections
               ':guava',
             ])
+# end-jar-exclude-replace-transitive-dependency
 
 jar_library(name='commons-lang',
             jars = [
@@ -147,12 +152,15 @@ jar_library(name='guava-testlib',
               jar('com.google.guava', 'guava-testlib', '18.0')
             ])
 
+# junit-jar-library-example
+# use this by adding '3rdparty:junit' as a dependency
 jar_library(name='junit',
             jars=[
               jar('junit', 'junit', '4.12')
             ],
             # junit is frequently used only for its annotations.
             scope='forced',)
+# end-junit-jar-library-example
 
 jar_library(name='scalatest',
             jars=[

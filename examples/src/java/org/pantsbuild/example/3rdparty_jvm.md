@@ -21,7 +21,7 @@ may make sense to organize them in multiple subdirectories, say by category or b
 In the appropriate `BUILD` file, you create a <a pantsref="bdict_jar_library">`jar_library`</a>
 referencing the <a pantsref="bdict_jar">`jar`</a>s you want:
 
-!inc[start-at=junit&end-before=scalatest](../../../../../../3rdparty/BUILD)
+!inc[start-after=junit-jar-library-example&end-before=end-junit-jar-library-example](../../../../../../3rdparty/BUILD)
 
 Here, the <a pantsref="bdict_jar_library">`jar_library`</a>'s name
 defines a target address that other build targets can refer to. The
@@ -35,14 +35,13 @@ To set up your code to import the external jar, you add a dependency to
 the appropriate Java target[s] in your `BUILD` file and add `import`
 statements in your Java code.
 
-For example, your `BUILD` file might have
+For example, your `BUILD` file might have:
 
-!inc[start-after=junit_tests&end-before=src/java](../../../../../tests/java/org/pantsbuild/example/hello/greet/BUILD)
+!inc[start-after=junit-3rdparty-example&end-before=end-junit-3rdparty-example](../../../../../tests/java/org/pantsbuild/example/hello/greet/BUILD)
 
 And your Java code might have:
 
-    :::java
-    import org.junit.Test;
+!inc[start-after=junit-java-import-example&end-before=end-junit-java-import-example](../../../../../tests/java/org/pantsbuild/example/hello/greet/GreetingTest.java)
 
 "Round Trip" Dependencies
 -------------------------
@@ -59,21 +58,7 @@ Fortunately, the remedy for this is simple.  If you add a `provides=` parameter
 that matches the one used to publish the artifact, pants will always prefer the
 local target definition to the published jar if it is in the context:
 
-    :::python
-    java_library(name='api',
-      sources = globs('*.java'),
-      provides = artifact(org='org.archie', name='api', repo=myrepo),
-    )
-
-    jar_library(name='bin-dep',
-      jars=[
-        jar(org='org.archie', name='consumer', rev='1.2.3'),
-      ],
-      dependencies=[
-        # Include the local, source copy of the API to cause it to be used rather than
-        # any versioned binary copy that the `consumer` lib might depend on transitively.
-        ':api',
-      ])
+!inc[start-after=jar-exclude-replace-transitive-dependency&end-before=end-jar-exclude-replace-transitive-dependency](../../../../3rdparty/BUILD)
 
 Controlling JAR Dependency Versions
 -----------------------------------
@@ -86,7 +71,7 @@ carefully add hand-picked versions:
     :::python
     jar_library(name="retro-naming-factory",
       jars=[
-	      jar(org='retro', name='retro-factory', rev='5.0.18', intransitive=True),
+          jar(org='retro', name='retro-factory', rev='5.0.18', intransitive=True),
       ],
       dependencies=[
         # Don't use retro's expected (old, incompatible) common-logging
@@ -99,16 +84,7 @@ carefully add hand-picked versions:
 Rather than mark the `jar` intransitive, you can `exclude` some
 transitive dependencies from JVM targets:
 
-    :::python
-    java_library(name = 'loadtest',
-      dependencies = [
-        '3rdparty/storm:storm',
-      ],
-      sources = globs('*.java'),
-      excludes = [
-        exclude('org.sonatype.sisu.inject', 'cglib')
-      ]
-    )
+!inc[start-after=jar-exclude-replace-transitive-dependency&end-before=end-jar-exclude-replace-transitive-dependency](../../../../3rdparty/BUILD)
 
 Managing Transitive Dependencies
 -------------------------------

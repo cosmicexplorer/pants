@@ -10,7 +10,7 @@ coordinates, except that it does *not* specify a version; that changes each time
 For an example, see
 [examples/src/java/org/pantsbuild/example/hello/greet/BUILD](https://github.com/pantsbuild/pants/blob/master/examples/src/java/org/pantsbuild/example/hello/greet/BUILD):
 
-!inc[start-at=java_library](./hello/greet/BUILD)
+!inc[start-after=java-library-build-example&end-before=end-java-library-build-example](hello/greet/BUILD)
 
 (That `repo=` parameter assumes someone has set up your Pants configuration to know about that
 artifact repository. If that assumption is false, keep reading to find out how to set this up.)
@@ -49,7 +49,7 @@ pantsref="bdict_artifact">`artifact`</a>. For example,
 [examples/src/java/org/pantsbuild/example/hello/greet/BUILD](https://github.com/pantsbuild/pants/blob/master/examples/src/java/org/pantsbuild/example/hello/greet/BUILD)
 refers to the `public` repository defined above. (Notice it's a Python object, not a string.)
 
-!inc[start-at=java_library](./hello/greet/BUILD)
+!inc[start-after=java-library-build-example&end-before=end-java-library-build-example](hello/greet/BUILD)
 
 If you get an error that the repo name (here, `public`) isn't defined, your plugin didn't register
 with Pants successfully. Make sure you bootstrap Pants in a way that loads your `register.py`.

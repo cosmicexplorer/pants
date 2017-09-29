@@ -12,4 +12,4 @@ It's the example code for some pants documentation:
 
 The Java code that does something, such as it is:
 
-!inc[start-at=void main&end-before=private HelloMain](HelloMain.java)
+!inc[start-after=java-example-code-pants-example&end-before=end-java-example-code-pants-example](HelloMain.java)

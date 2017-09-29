@@ -12,7 +12,7 @@ To tell Pants about your Markdown or ReST file, use a
 target in a `BUILD` file as in this excerpt from
 [examples/src/java/org/pantsbuild/example/hello/main/BUILD](https://github.com/pantsbuild/pants/blob/master/examples/src/java/org/pantsbuild/example/hello/main/BUILD):
 
-!inc[start-after=README page](hello/main/BUILD)
+!inc[start-after=readme-page-build-example&end-before=end-readme-page-build-example](hello/main/BUILD)
 
 To render the page as HTML, use the
 <a pantsref="oref_goal_markdown">markdown goal</a>. For example, to view
@@ -106,6 +106,9 @@ When excerpting the file to include, stop before a line containing
 end-at=*substring*<br>
 When excerpting the file to include, stop at a line containing
 *substring*.
+
+lines=*a*-*b*<br>
+When excerpting the file to include, include lines *a* through *b* inclusive. 0 < *a* <= *b* < *n*, with *n* the number of lines in the file.
 
 ReStructedText Syntax
 ---------------------
