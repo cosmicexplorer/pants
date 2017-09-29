@@ -58,6 +58,7 @@ INCLUDE_PATTERN = r'!inc(\[(?P<params>[^]]*)\])?\((?P<path>[^' + '\n' + r']*)\)'
 
 SPHINX_LINE_SINGLE_PATTERN = r'^([0-9]+)-([0-9]+)$'
 
+
 def interpret_lines_arg(value):
   match = SPHINX_LINE_SINGLE_PATTERN.match(value)
   if not match:
@@ -71,9 +72,11 @@ def interpret_lines_arg(value):
                     ' in "{2}"'.format(start, end, value))
   return (start, end)
 
+
 def scan_strings(strings, substring):
   matching_idx = (i for i in range(len(strings)) if substring in strings[i])
   return next(matching_idx)
+
 
 def choose_include_text(s, params, source_path):
   """Given the contents of a file and !inc[these params], return matching lines
