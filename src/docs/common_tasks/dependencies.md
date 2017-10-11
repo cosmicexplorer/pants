@@ -14,10 +14,12 @@ your target. Dependencies to other targets are typically added to
 
 Below is an example `scala_library` definition that specifies dependencies on other targets:
 
+<!-- FIXME: was `rglobs('\*.scala')`; why? -->
+
     ::python
     # myproject/src/main/scala/BUILD
     scala_library(name='scala',
-      sources=rglobs('\*.scala'),
+      sources=rglobs('*.scala'),
       dependencies=[
         'myproject/library-a',
         'myproject/library-b:some-target'

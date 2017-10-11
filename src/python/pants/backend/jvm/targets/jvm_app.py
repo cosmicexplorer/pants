@@ -87,6 +87,8 @@ class BundleProps(namedtuple('_BundleProps', ['rel_path', 'mapper', 'fileset']))
     return hash((self.rel_path, self.mapper))
 
 
+# FIXME: rst syntax in docstrings isn't interpreted before it gets exported --
+# either turn this on, implement it, or don't use it
 class Bundle(object):
   """A set of files to include in an application bundle.
 
