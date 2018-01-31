@@ -6,15 +6,13 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 from setuptools import setup, find_packages
-from distutils.core import Extension
 
-
-c_module = Extension(str('super_greet'), sources=[str('super_greet.c')])
+from pantssetup import find_external_modules
 
 setup(
   name='fasthello_test',
   version='1.0.0',
-  ext_modules=[c_module],
+  ext_modules=find_external_modules(),
   packages=find_packages(),
   install_requires=['pycountry==17.1.2']
 )

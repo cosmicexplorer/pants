@@ -4,12 +4,8 @@
 
 python_dist(
   name='fasthello',
-  sources=[
-    'super_greet.c',
-    'hello_package/hello.py',
-    'hello_package/__init__.py',
-    'setup.py'
-  ]
+  sources=rglobs('*.py'),
+  cpp_sources=globs('*.c'),
 )
 
 python_binary(

@@ -7,10 +7,23 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 from pants.backend.python.targets.python_target import PythonTarget
 from pants.base.payload import Payload
+from pants.source.payload_fields import SourcesField
+from pants.source.wrapped_globs import FilesetWithSpec
+from pants.util.memo import memoized_property
 
 
 class PythonDistribution(PythonTarget):
   """A Python distribution target that accepts a user-defined setup.py."""
+
+  @memoized_property
+  def _cpp_sources_field(self):
+    cpp_sources_field = self.payload.get_field('cpp_sources')
+    if cpp_sources_field is not None:
+      return cpp_sources_field
+    return SourcesField(sources=FilesetWithSpec.empty(self.address.spec_path))
+
+  def cpp_sources_relative_to_target_base(self):
+    return self._cpp_sources_field.sources
 
   default_sources_globs = '*.py'
 
@@ -22,7 +35,7 @@ class PythonDistribution(PythonTarget):
                address=None,
                payload=None,
                sources=None,
-               c_sources=None,
+               cpp_sources=None,
                **kwargs):
     """
     :param address: The Address that maps to this Target in the BuildGraph.
@@ -36,7 +49,7 @@ class PythonDistribution(PythonTarget):
     """
     payload = payload or Payload()
     payload.add_fields({
-      'c_sources': self.create_sources_field(sources, address.spec_path, key_arg='c_sources'),
+      'cpp_sources': self.create_sources_field(cpp_sources, address.spec_path, key_arg='cpp_sources'),
     })
     super(PythonDistribution, self).__init__(
       address=address, payload=payload, sources=sources, **kwargs)
