@@ -5,15 +5,18 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
-from pants.backend.python.targets.python_target import PythonTarget
+from pants.backend.python.targets.python_library import PythonLibrary
 from pants.base.payload import Payload
 from pants.source.payload_fields import SourcesField
 from pants.source.wrapped_globs import FilesetWithSpec
 from pants.util.memo import memoized_property
 
 
-class PythonDistribution(PythonTarget):
+class PythonDistribution(PythonLibrary):
   """A Python distribution target that accepts a user-defined setup.py."""
+
+  default_native_sources_globs = '*.c'
+  default_native_sources_exclude_globs = None
 
   @memoized_property
   def _cpp_sources_field(self):
@@ -24,8 +27,6 @@ class PythonDistribution(PythonTarget):
 
   def cpp_sources_relative_to_target_base(self):
     return self._cpp_sources_field.sources
-
-  default_sources_globs = '*.py'
 
   @classmethod
   def alias(cls):

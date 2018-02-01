@@ -91,8 +91,7 @@ class BuildLocalPythonDistributions(Task):
                                   src_relative_to_target_base)
       shutil.copyfile(abs_src_path, src_rel_to_results_dir)
     with temporary_dir() as tmpdir:
-      native_sources =
-        "'{}'".format(x) for x in dist_tgt.cpp_sources_relative_to_target_base()
+      native_sources = ("'{}'".format(x) for x in dist_tgt.cpp_sources_relative_to_target_base())
       pantssetup_import_contents = PANTSSETUP_IMPORT_BOILERPLATE.format(
         setup_target=repr(dist_tgt),
         native_sources_joined=','.join(native_sources),
