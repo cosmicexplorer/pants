@@ -13,6 +13,7 @@ from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 
+from pants.backend.python.subsystems.python_native_toolchain import PythonNativeToolchain
 from pants.backend.python.tasks.pex_build_util import is_local_python_dist
 from pants.backend.python.tasks.setup_py import SetupPyRunner
 from pants.base.build_environment import get_buildroot
@@ -21,6 +22,7 @@ from pants.base.fingerprint_strategy import DefaultFingerprintStrategy
 from pants.task.task import Task
 from pants.util.contextutil import environment_as, temporary_dir
 from pants.util.dirutil import safe_mkdir
+from pants.util.memo import memoized_property
 
 
 PANTSSETUP_IMPORT_BOILERPLATE = """
@@ -47,6 +49,14 @@ class BuildLocalPythonDistributions(Task):
   @classmethod
   def prepare(cls, options, round_manager):
     round_manager.require_data(PythonInterpreter)
+
+  @classmethod
+  def subsystem_dependencies(cls):
+    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (PythonNativeToolchain.Factory,)
+
+  @memoized_property
+  def python_native_toolchain(self):
+    return PythonNativeToolchain.Factory.scoped_instance(self).create()
 
   @property
   def cache_target_dirs(self):
