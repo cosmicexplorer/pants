@@ -9,6 +9,7 @@ import glob
 import os
 import re
 import shutil
+from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 
@@ -72,17 +73,14 @@ class BuildLocalPythonDistributions(Task):
 
     self.context.products.register_data(self.PYTHON_DISTS, built_dists)
 
-  def _create_dist(self, dist_tgt, dist_target_dir):
-    """Create a .whl file for the specified python_distribution target."""
-    interpreter = self.context.products.get_data(PythonInterpreter)
-
+  @contextmanager
+  def _with_copied_sources_gen_pantssetup_pythonpath(self, dist_tgt, dist_target_dir):
     # Copy sources and setup.py over to vt results directory for packaging.
     # NB: The directory structure of the destination directory needs to match 1:1
     # with the directory structure that setup.py expects.
-    all_sources = (
-      list(dist_tgt.sources_relative_to_target_base()) +
-      list(dist_tgt.cpp_sources_relative_to_target_base())
-    )
+    py_sources = list(dist_tgt.sources_relative_to_target_base())
+    native_sources = list(dist_tgt.cpp_sources_relative_to_target_base())
+    all_sources = py_sources + native_sources
     for src_relative_to_target_base in all_sources:
       src_rel_to_results_dir = os.path.join(dist_target_dir, src_relative_to_target_base)
       safe_mkdir(os.path.dirname(src_rel_to_results_dir))
@@ -91,26 +89,35 @@ class BuildLocalPythonDistributions(Task):
                                   src_relative_to_target_base)
       shutil.copyfile(abs_src_path, src_rel_to_results_dir)
     with temporary_dir() as tmpdir:
-      native_sources = ("'{}'".format(x) for x in dist_tgt.cpp_sources_relative_to_target_base())
+      native_sources_joined = ','.join("'{}'".format(x) for x in native_sources)
       pantssetup_import_contents = PANTSSETUP_IMPORT_BOILERPLATE.format(
         setup_target=repr(dist_tgt),
-        native_sources_joined=','.join(native_sources),
-      )
+        native_sources_joined=native_sources_joined)
+
       self.context.log.info(pantssetup_import_contents)
+
       pantssetup_module_path = os.path.join(tmpdir, 'pantssetup.py')
       with open(pantssetup_module_path, 'w') as pantssetup_module_fh:
         pantssetup_module_fh.write(pantssetup_import_contents)
+
       prev_pypath = os.environ.get('PYTHONPATH')
       if prev_pypath is None:
         new_pypath = tmpdir
       else:
         scrubbed_pypath = re.sub(':$', '', prev_pypath)
         new_pypath = '{}:{}'.format(scrubbed_pypath, tmpdir)
+
       with environment_as(PYTHONPATH=new_pypath):
-        # Build a whl using SetupPyRunner and return its absolute path.
-        setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=interpreter)
-        setup_runner.run()
-      return self._get_whl_from_dir(os.path.join(dist_target_dir, 'dist'))
+        yield
+
+  def _create_dist(self, dist_tgt, dist_target_dir):
+    """Create a .whl file for the specified python_distribution target."""
+    interpreter = self.context.products.get_data(PythonInterpreter)
+    with self._with_copied_sources_gen_pantssetup_pythonpath(dist_tgt, dist_target_dir):
+      # Build a whl using SetupPyRunner and return its absolute path.
+      setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=interpreter)
+      setup_runner.run()
+    return self._get_whl_from_dir(os.path.join(dist_target_dir, 'dist'))
 
   def _get_whl_from_dir(self, install_dir):
     """Return the absolute path of the whl in a setup.py install directory."""
