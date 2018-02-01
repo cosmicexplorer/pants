@@ -17,6 +17,7 @@ use externs;
 use fs::{self, Dir, File, FileContent, Link, PathGlobs, PathStat, VFS};
 use process_execution as process_executor;
 use hashing;
+use reqwest;
 use rule_graph;
 use selectors::{self, Selector};
 use tasks;

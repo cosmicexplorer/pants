@@ -28,3 +28,4 @@ lazy_static = "0.2.2"
 ordermap = "0.2.8"
 petgraph = "0.4.5"
 process_execution = { path = "process_execution" }
+reqwests = "0.8.4"
