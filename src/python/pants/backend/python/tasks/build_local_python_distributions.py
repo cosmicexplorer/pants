@@ -32,7 +32,7 @@ PANTSSETUP_IMPORT_BOILERPLATE = """
 from distutils.core import Extension
 
 def find_external_modules():
-  return [Extension('native', [{native_sources_joined}])]
+  return [Extension(str('native'), [{native_sources_joined}])]
 """
 
 
@@ -51,8 +51,17 @@ class BuildLocalPythonDistributions(Task):
     round_manager.require_data(PythonInterpreter)
 
   @classmethod
+  def implementation_version(cls):
+    return super(BuildLocalPythonDistributions, cls).implementation_version() + [('BuildLocalPythonDistributions', 1)]
+
+  @classmethod
   def subsystem_dependencies(cls):
-    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (PythonNativeToolchain.Factory,)
+    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (PythonNativeToolchain.Factory.scoped(cls),)
+
+  @classmethod
+  def register_options(cls, register):
+    super(BuildLocalPythonDistributions, cls).register_options(register)
+    register('--an-option', default='wow')
 
   @memoized_property
   def python_native_toolchain(self):
@@ -63,6 +72,8 @@ class BuildLocalPythonDistributions(Task):
     return True
 
   def execute(self):
+    self.context.log.debug('an_option: {}'.format(self.context.options.for_scope(self.options_scope).an_option))
+
     dist_targets = self.context.targets(is_local_python_dist)
     built_dists = set()
 
@@ -72,14 +83,18 @@ class BuildLocalPythonDistributions(Task):
                             invalidate_dependents=True) as invalidation_check:
         for vt in invalidation_check.all_vts:
           if vt.valid:
+            self.context.log.debug('(valid) vt: {}'.format(repr(vt)))
             built_dists.add(self._get_whl_from_dir(os.path.join(vt.results_dir, 'dist')))
           else:
+            self.context.log.debug('(invalid) vt: {}'.format(repr(vt)))
             if vt.target.dependencies :
               raise TargetDefinitionException(
                 vt.target, 'The `dependencies` field is disallowed on `python_dist` targets. List any 3rd '
                            'party requirements in the install_requirements argument of your setup function.'
               )
             built_dists.add(self._create_dist(vt.target, vt.results_dir))
+
+    self.context.log.info('built_dists: {}'.format(built_dists))
 
     self.context.products.register_data(self.PYTHON_DISTS, built_dists)
 
@@ -91,6 +106,7 @@ class BuildLocalPythonDistributions(Task):
     py_sources = list(dist_tgt.sources_relative_to_target_base())
     native_sources = list(dist_tgt.cpp_sources_relative_to_target_base())
     all_sources = py_sources + native_sources
+    self.context.log.info('all_sources: {}'.format(all_sources))
     for src_relative_to_target_base in all_sources:
       src_rel_to_results_dir = os.path.join(dist_target_dir, src_relative_to_target_base)
       safe_mkdir(os.path.dirname(src_rel_to_results_dir))
@@ -104,9 +120,13 @@ class BuildLocalPythonDistributions(Task):
         setup_target=repr(dist_tgt),
         native_sources_joined=native_sources_joined)
 
-      self.context.log.info(pantssetup_import_contents)
-
       pantssetup_module_path = os.path.join(tmpdir, 'pantssetup.py')
+
+      self.context.log.info(repr(dist_tgt))
+      self.context.log.info('payload fingerprint: {}'.format(dist_tgt.payload.fingerprint()))
+      self.context.log.info(pantssetup_import_contents)
+      self.context.log.info('pantssetup_module_path: {}'.format(pantssetup_module_path))
+
       with open(pantssetup_module_path, 'w') as pantssetup_module_fh:
         pantssetup_module_fh.write(pantssetup_import_contents)
 
@@ -117,16 +137,20 @@ class BuildLocalPythonDistributions(Task):
         scrubbed_pypath = re.sub(':$', '', prev_pypath)
         new_pypath = '{}:{}'.format(scrubbed_pypath, tmpdir)
 
+      self.context.log.info('new_pypath: {}'.format(repr(new_pypath)))
+
       with environment_as(PYTHONPATH=new_pypath):
         yield
 
   def _create_dist(self, dist_tgt, dist_target_dir):
     """Create a .whl file for the specified python_distribution target."""
+    self.context.log.info('dist_target_dir: {}'.format(dist_target_dir))
     interpreter = self.context.products.get_data(PythonInterpreter)
     with self._with_copied_sources_gen_pantssetup_pythonpath(dist_tgt, dist_target_dir):
-      # Build a whl using SetupPyRunner and return its absolute path.
-      setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=interpreter)
-      setup_runner.run()
+      with self.python_native_toolchain.within_setuppy_compile_sandbox():
+        # Build a whl using SetupPyRunner and return its absolute path.
+        setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=interpreter)
+        setup_runner.run()
     return self._get_whl_from_dir(os.path.join(dist_target_dir, 'dist'))
 
   def _get_whl_from_dir(self, install_dir):

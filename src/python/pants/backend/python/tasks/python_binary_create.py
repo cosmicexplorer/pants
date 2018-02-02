@@ -70,7 +70,9 @@ class PythonBinaryCreate(Task):
 
     with self.invalidated(binaries, invalidate_dependents=True) as invalidation_check:
       python_deployable_archive = self.context.products.get('deployable_archives')
+      self.context.log.debug('python_deployable_archive: {}'.format(repr(python_deployable_archive)))
       python_pex_product = self.context.products.get('pex_archives')
+      self.context.log.debug('python_pex_product: {}'.format(repr(python_pex_product)))
       for vt in invalidation_check.all_vts:
         pex_path = os.path.join(vt.results_dir, '{}.pex'.format(vt.target.name))
         if not vt.valid:
@@ -82,6 +84,8 @@ class PythonBinaryCreate(Task):
         basename = os.path.basename(pex_path)
         python_pex_product.add(vt.target, os.path.dirname(pex_path)).append(basename)
         python_deployable_archive.add(vt.target, os.path.dirname(pex_path)).append(basename)
+        self.context.log.debug('python_pex_product: {}'.format(repr(python_pex_product)))
+        self.context.log.debug('python_deployable_archive: {}'.format(repr(python_deployable_archive)))
         self.context.log.debug('created {}'.format(os.path.relpath(pex_path, get_buildroot())))
 
         # Create a copy for pex.
@@ -141,6 +145,7 @@ class PythonBinaryCreate(Task):
 
       # Dump built python distributions, if any, into builder's chroot.
       built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
+      self.context.log.debug('built_dists: {}'.format(repr(built_dists)))
       if built_dists:
         for dist in built_dists:
           # Ensure only python_dist dependencies of binary_tgt are added to the output pex.

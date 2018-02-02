@@ -5,6 +5,8 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
+from contextlib import contextmanager
+
 from pants.binaries.binary_util import BinaryUtil
 from pants.subsystem.subsystem import Subsystem
 from pants.util.memo import memoized_property
@@ -19,10 +21,11 @@ class PythonNativeToolchain(object):
 
     @classmethod
     def subsystem_dependencies(cls):
-      return (BinaryUtil.Factory,)
+      return super(PythonNativeToolchain.Factory, cls).subsystem_dependencies() + (BinaryUtil.Factory,)
 
     @classmethod
     def register_options(cls, register):
+      super(PythonNativeToolchain.Factory, cls).register_options(register)
       register('--supportdir', advanced=True,
                help='Find the go distributions under this dir.  Used as part '
                     'of the path to lookup the distribution with '
@@ -55,6 +58,10 @@ class PythonNativeToolchain(object):
     return self._clang_version
 
   @memoized_property
-  def clang_path(self):
+  def cpp_compiler_path(self):
     return self._binary_util.select_binary(
       self._relpath, self.clang_version, 'clang')
+
+  @contextmanager
+  def within_setuppy_compile_sandbox(self):
+    yield

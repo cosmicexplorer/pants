@@ -15,7 +15,15 @@ from pants.util.memo import memoized_property
 class PythonDistribution(PythonLibrary):
   """A Python distribution target that accepts a user-defined setup.py."""
 
-  default_native_sources_globs = '*.c'
+  default_native_sources_globs = [
+    '*.c',
+    '*.h',
+    '*.cpp',
+    '*.hpp',
+    '*.cxx',
+    '*.hxx',
+    '*.cc',
+  ]
   default_native_sources_exclude_globs = None
 
   @memoized_property

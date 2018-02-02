@@ -120,10 +120,12 @@ def dump_requirements(builder, interpreter, req_libs, log, platforms=None):
 
   # Resolve the requirements into distributions.
   distributions = _resolve_multi(interpreter, reqs_to_build, platforms, find_links)
+  log.debug('distributions: {}'.format(repr(distributions)))
   locations = set()
   for platform, dists in distributions.items():
     for dist in dists:
       if dist.location not in locations:
+        log.debug('loc: {}'.format(dist.location))
         log.debug('  Dumping distribution: .../{}'.format(os.path.basename(dist.location)))
         builder.add_distribution(dist)
       locations.add(dist.location)
@@ -179,6 +181,7 @@ def build_req_libs_provided_by_setup_file(context, local_built_dists, class_name
   req_libs = []
   local_whl_reqs = []
   if local_built_dists:
+    context.log.info('local_built_dists: {}'.format(repr(local_built_dists)))
     for whl_location in local_built_dists:
       base = os.path.basename(whl_location)
       whl_dir = os.path.dirname(whl_location)
