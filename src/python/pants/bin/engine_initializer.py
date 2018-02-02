@@ -19,7 +19,7 @@ from pants.engine.legacy.graph import HydratedTargets, LegacyBuildGraph, create_
 from pants.engine.legacy.parser import LegacyPythonCallbacksParser
 from pants.engine.legacy.structs import (GoTargetAdaptor, JavaLibraryAdaptor, JunitTestsAdaptor,
                                          JvmAppAdaptor, PythonLibraryAdaptor, PythonTargetAdaptor,
-                                         PythonDistributionAdaptor, PythonTestsAdaptor, RemoteSourcesAdaptor,
+                                         PythonTestsAdaptor, RemoteSourcesAdaptor,
                                          ScalaLibraryAdaptor, TargetAdaptor)
 from pants.engine.mapper import AddressMapper
 from pants.engine.native import Native
@@ -51,9 +51,8 @@ class LegacySymbolTable(SymbolTable):
       self._table[alias] = JavaLibraryAdaptor
     for alias in ['scala_library', 'scalac_plugin']:
       self._table[alias] = ScalaLibraryAdaptor
-    for alias in ['python_library', 'pants_plugin']:
+    for alias in ['python_library', 'pants_plugin', 'python_dist']:
       self._table[alias] = PythonLibraryAdaptor
-    self._table['python_dist'] = PythonDistributionAdaptor
     for alias in ['go_library', 'go_binary']:
       self._table[alias] = GoTargetAdaptor
 

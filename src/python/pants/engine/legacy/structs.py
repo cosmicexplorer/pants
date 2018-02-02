@@ -230,29 +230,6 @@ class PythonLibraryAdaptor(PythonTargetAdaptor):
     return PythonTestsAdaptor.python_test_globs
 
 
-class PythonDistributionAdaptor(PythonTargetAdaptor):
-
-  def _get_cpp_sources(self):
-    cpp_sources = getattr(self, 'cpp_sources', None)
-    if cpp_sources is None and self.default_native_sources_globs is not None:
-      return Globs(*self.default_native_sources_globs,
-                   spec_path=self.address.spec_path,
-                   exclude=self.default_native_sources_exclude_globs)
-    return cpp_sources
-
-  @property
-  def field_adaptors(self):
-    with exception_logging(logger, 'Exception in `field_adaptors` property'):
-      field_adaptors = super(PythonDistributionAdaptor, self).field_adaptors
-      cpp_sources = self._get_cpp_sources()
-      if not cpp_sources:
-        return field_adaptors
-      base_globs = BaseGlobs.from_sources_field(cpp_sources, self.address.spec_path)
-      path_globs = base_globs.to_path_globs(self.address.spec_path)
-      cpp_sources_field = SourcesField(self.address, 'cpp_sources', base_globs.filespecs, path_globs)
-      return field_adaptors + (cpp_sources_field,)
-
-
 class PythonTestsAdaptor(PythonTargetAdaptor):
   python_test_globs = ('test_*.py', '*_test.py')
 

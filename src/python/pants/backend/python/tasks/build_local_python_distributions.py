@@ -103,9 +103,7 @@ class BuildLocalPythonDistributions(Task):
     # Copy sources and setup.py over to vt results directory for packaging.
     # NB: The directory structure of the destination directory needs to match 1:1
     # with the directory structure that setup.py expects.
-    py_sources = list(dist_tgt.sources_relative_to_target_base())
-    native_sources = list(dist_tgt.cpp_sources_relative_to_target_base())
-    all_sources = py_sources + native_sources
+    all_sources = list(dist_tgt.sources_relative_to_target_base())
     self.context.log.info('all_sources: {}'.format(all_sources))
     for src_relative_to_target_base in all_sources:
       src_rel_to_results_dir = os.path.join(dist_target_dir, src_relative_to_target_base)
@@ -115,32 +113,33 @@ class BuildLocalPythonDistributions(Task):
                                   src_relative_to_target_base)
       shutil.copyfile(abs_src_path, src_rel_to_results_dir)
     with temporary_dir() as tmpdir:
-      native_sources_joined = ','.join("'{}'".format(x) for x in native_sources)
-      pantssetup_import_contents = PANTSSETUP_IMPORT_BOILERPLATE.format(
-        setup_target=repr(dist_tgt),
-        native_sources_joined=native_sources_joined)
+      # native_sources_joined = ','.join("'{}'".format(x) for x in native_sources)
+      # pantssetup_import_contents = PANTSSETUP_IMPORT_BOILERPLATE.format(
+      #   setup_target=repr(dist_tgt),
+      #   native_sources_joined=native_sources_joined)
 
-      pantssetup_module_path = os.path.join(tmpdir, 'pantssetup.py')
+      # pantssetup_module_path = os.path.join(tmpdir, 'pantssetup.py')
 
-      self.context.log.info(repr(dist_tgt))
-      self.context.log.info('payload fingerprint: {}'.format(dist_tgt.payload.fingerprint()))
-      self.context.log.info(pantssetup_import_contents)
-      self.context.log.info('pantssetup_module_path: {}'.format(pantssetup_module_path))
+      # self.context.log.info(repr(dist_tgt))
+      # self.context.log.info('payload fingerprint: {}'.format(dist_tgt.payload.fingerprint()))
+      # self.context.log.info(pantssetup_import_contents)
+      # self.context.log.info('pantssetup_module_path: {}'.format(pantssetup_module_path))
 
-      with open(pantssetup_module_path, 'w') as pantssetup_module_fh:
-        pantssetup_module_fh.write(pantssetup_import_contents)
+      # with open(pantssetup_module_path, 'w') as pantssetup_module_fh:
+      #   pantssetup_module_fh.write(pantssetup_import_contents)
 
-      prev_pypath = os.environ.get('PYTHONPATH')
-      if prev_pypath is None:
-        new_pypath = tmpdir
-      else:
-        scrubbed_pypath = re.sub(':$', '', prev_pypath)
-        new_pypath = '{}:{}'.format(scrubbed_pypath, tmpdir)
+      # prev_pypath = os.environ.get('PYTHONPATH')
+      # if prev_pypath is None:
+      #   new_pypath = tmpdir
+      # else:
+      #   scrubbed_pypath = re.sub(':$', '', prev_pypath)
+      #   new_pypath = '{}:{}'.format(scrubbed_pypath, tmpdir)
 
-      self.context.log.info('new_pypath: {}'.format(repr(new_pypath)))
+      # self.context.log.info('new_pypath: {}'.format(repr(new_pypath)))
 
-      with environment_as(PYTHONPATH=new_pypath):
-        yield
+      # with environment_as(PYTHONPATH=new_pypath):
+      #   yield
+      yield
 
   def _create_dist(self, dist_tgt, dist_target_dir):
     """Create a .whl file for the specified python_distribution target."""
