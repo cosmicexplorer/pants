@@ -5,16 +5,64 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
+import os
 from contextlib import contextmanager
 
+from pex.interpreter import PythonInterpreter
+
 from pants.binaries.binary_util import BinaryUtil
+from pants.fs.archive import TGZ
 from pants.subsystem.subsystem import Subsystem
-from pants.util.memo import memoized_property
+from pants.util.contextutil import temporary_dir, environment_as
+from pants.util.memo import memoized_method
+
+
+class SandboxedInterpreter(PythonInterpreter):
+  """???"""
+
+  class BinaryDirectoryError(Exception):
+    def __init__(self, dir_path):
+      msg = "path '{}' does not exist or is not a directory".format(dir_path)
+      super(BinaryDirectoryError, self).__init__(msg)
+
+  class BaseInterpreterError(Exception): pass
+
+  def __init__(self, clang_bin_dir_path, base_interp):
+
+    if not os.path.isdir(clang_bin_dir_path):
+      raise BinaryDirectoryError(clang_bin_dir_path)
+    if not isinstance(base_interp, PythonInterpreter):
+      raise BaseInterpreterError("invalid PythonInterpreter: '{}'".format(repr(base_interp)))
+
+    self._clang_bin_dir_path = clang_bin_dir_path
+
+    super(SandboxedInterpreter, self).__init__(
+      base_interp.binary, base_interp.identity, extras=base_interp.extras)
+
+  # made into an instance method here to use self._clang_bin_dir_path
+  def sanitized_environment(self):
+    pre_sanitized_env = super(SandboxedInterpreter, self).sanitized_environment()
+    pre_sanitized_env['PATH'] = self._clang_bin_dir_path
+    # TODO: see Lib/distutils/sysconfig.py and Lib/_osx_support.py in CPython.
+    # this line tells distutils to only compile for 64-bit archs -- if not, it
+    # will attempt to build a fat binary for 32- and 64-bit archs, which makes
+    # clang invoke "lipo", an osx command which does not appear to be open
+    # source.
+    pre_sanitized_env['ARCHFLAGS'] = '-arch x86_64'
+    for env_var in ['CC', 'CXX']:
+      pre_sanitized_env.pop(env_var, None)
+    return pre_sanitized_env
 
 
 class PythonNativeToolchain(object):
   """Represents a self-boostrapping set of binaries and libraries used to
   compile native code in for python dists."""
+
+  class InvalidToolRequest(Exception):
+
+    def __init__(self, rel_path_requested):
+      msg = "relative path '{}' does not exist in the python native toolchain".format(rel_path_requested)
+      super(InvalidToolRequest, self).__init__(msg)
 
   class Factory(Subsystem):
     options_scope = 'python-native-toolchain'
@@ -35,7 +83,7 @@ class PythonNativeToolchain(object):
                help='Clang version used to compile python native extensions.  '
                     'Used as part of the path to lookup the distribution '
                     'with --binary-util-baseurls and --pants-bootstrapdir',
-               default='5.0.0')
+               default='5.0.1')
 
     # NB: create() is an instance method to allow the user to choose global or
     # scoped -- It's not unreasonable to imagine different stacks for different
@@ -53,15 +101,22 @@ class PythonNativeToolchain(object):
     self._relpath = relpath
     self._clang_version = clang_version
 
-  @property
-  def clang_version(self):
-    return self._clang_version
+  @memoized_method
+  def _clang_llvm_distribution_base(self):
+    clang_archive_path = self._binary_util.select_binary(
+      self._relpath, self._clang_version, 'clang+llvm.tar.gz')
+    distribution_workdir = os.path.dirname(clang_archive_path)
+    outdir = os.path.join(distribution_workdir, 'unpacked')
+    if not os.path.exists(outdir):
+      with temporary_dir(root_dir=distribution_workdir) as tmp_dist:
+        TGZ.extract(clang_archive_path, tmp_dist)
+        os.rename(tmp_dist, outdir)
+    return outdir
 
-  @memoized_property
-  def cpp_compiler_path(self):
-    return self._binary_util.select_binary(
-      self._relpath, self.clang_version, 'clang')
-
-  @contextmanager
-  def within_setuppy_compile_sandbox(self):
-    yield
+  @memoized_method
+  def clang_bin_dir_path(self):
+    dist_base = self._clang_llvm_distribution_base()
+    bin_dir_path = os.path.join(dist_base, 'bin')
+    if not os.path.exists(bin_dir_path):
+      raise InvalidToolRequest('bin')
+    return bin_dir_path
