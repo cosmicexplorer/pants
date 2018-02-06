@@ -117,7 +117,7 @@ class BuildLocalPythonDistributions(Task):
     self.context.log.info('dist_target_dir: {}'.format(dist_target_dir))
     interpreter = self.context.products.get_data(PythonInterpreter)
     sandboxed_interpreter = SandboxedInterpreter(
-      self.python_native_toolchain.clang_bin_dir_path(), interpreter)
+      self.python_native_toolchain.llvm_toolchain_dir(), interpreter)
     self._copy_sources(dist_tgt, dist_target_dir)
     # Build a whl using SetupPyRunner and return its absolute path.
     setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=sandboxed_interpreter)

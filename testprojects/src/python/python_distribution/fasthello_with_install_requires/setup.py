@@ -20,7 +20,7 @@ setup(
   # generate the setup.py. python_distribution could then be a complete
   # alternative to provides=setup_py(...) (???)
   # ext_modules=find_external_modules(),
-  ext_modules=[Extension(str('super_greet'), [str('super_greet.cpp')])],
+  ext_modules=[Extension(str('super_greet'), [str('super_greet.c')])],
   packages=find_packages(),
   install_requires=['pycountry==17.1.2']
 )

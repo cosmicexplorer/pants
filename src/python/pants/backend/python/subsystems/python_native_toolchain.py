@@ -8,6 +8,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 import os
 from contextlib import contextmanager
 
+from pex.executor import Executor
 from pex.interpreter import PythonInterpreter
 
 from pants.binaries.binary_util import BinaryUtil
@@ -17,32 +18,49 @@ from pants.util.contextutil import temporary_dir, environment_as
 from pants.util.memo import memoized_method
 
 
-class SandboxedInterpreter(PythonInterpreter):
-  """???"""
+INC_DIR_INPUT = b"""
+import sys
+from distutils import sysconfig
 
-  class BinaryDirectoryError(Exception):
+sys.stdout.write(sysconfig.get_python_inc())
+"""
+
+
+class SandboxedInterpreter(PythonInterpreter):
+
+  class ToolchainLocationError(Exception):
     def __init__(self, dir_path):
       msg = "path '{}' does not exist or is not a directory".format(dir_path)
-      super(BinaryDirectoryError, self).__init__(msg)
+      super(ToolchainLocationError, self).__init__(msg)
 
   class BaseInterpreterError(Exception): pass
 
-  def __init__(self, clang_bin_dir_path, base_interp):
+  def __init__(self, llvm_toolchain_dir, base_interp):
 
-    if not os.path.isdir(clang_bin_dir_path):
-      raise BinaryDirectoryError(clang_bin_dir_path)
+    if not os.path.isdir(llvm_toolchain_dir):
+      raise ToolchainLocationError(llvm_toolchain_dir)
     if not isinstance(base_interp, PythonInterpreter):
       raise BaseInterpreterError("invalid PythonInterpreter: '{}'".format(repr(base_interp)))
 
-    self._clang_bin_dir_path = clang_bin_dir_path
+    self._llvm_toolchain_dir = llvm_toolchain_dir
 
     super(SandboxedInterpreter, self).__init__(
       base_interp.binary, base_interp.identity, extras=base_interp.extras)
 
-  # made into an instance method here to use self._clang_bin_dir_path
+  # made into an instance method here (unlike parent class) to use
+  # self._llvm_toolchain_dir
+  @memoized_method
   def sanitized_environment(self):
     pre_sanitized_env = super(SandboxedInterpreter, self).sanitized_environment()
-    pre_sanitized_env['PATH'] = self._clang_bin_dir_path
+    pre_sanitized_env['PATH'] = os.path.join(self._llvm_toolchain_dir, 'bin')
+
+    llvm_include = os.path.join(self._llvm_toolchain_dir, 'include')
+    python_inc_stdout, _ = Executor.execute([self.binary], env=pre_sanitized_env, stdin_payload=INC_DIR_INPUT)
+    pre_sanitized_env['CPATH'] = '{}:{}'.format(llvm_include, python_inc_stdout)
+
+    # TODO: we may not need this. if removed, (probably) remove the 'lib/' dir
+    # from the llvm packaging script too!
+    # pre_sanitized_env['LD_LIBRARY_PATH'] = os.path.join(self._llvm_toolchain_dir, 'lib')
     # TODO: see Lib/distutils/sysconfig.py and Lib/_osx_support.py in CPython.
     # this line tells distutils to only compile for 64-bit archs -- if not, it
     # will attempt to build a fat binary for 32- and 64-bit archs, which makes
@@ -79,8 +97,8 @@ class PythonNativeToolchain(object):
                     'of the path to lookup the distribution with '
                     '--binary-util-baseurls and --pants-bootstrapdir',
                default='bin/python-native-toolchain')
-      register('--clang-version', advanced=True,
-               help='Clang version used to compile python native extensions.  '
+      register('--llvm-version', advanced=True,
+               help='LLVM version used to compile python native extensions.  '
                     'Used as part of the path to lookup the distribution '
                     'with --binary-util-baseurls and --pants-bootstrapdir',
                default='5.0.1')
@@ -94,29 +112,21 @@ class PythonNativeToolchain(object):
       options = self.get_options()
       return PythonNativeToolchain(binary_util=binary_util,
                                    relpath=options.supportdir,
-                                   clang_version=options.clang_version)
+                                   llvm_version=options.llvm_version)
 
-  def __init__(self, binary_util, relpath, clang_version):
+  def __init__(self, binary_util, relpath, llvm_version):
     self._binary_util = binary_util
     self._relpath = relpath
-    self._clang_version = clang_version
+    self._llvm_version = llvm_version
 
   @memoized_method
-  def _clang_llvm_distribution_base(self):
-    clang_archive_path = self._binary_util.select_binary(
-      self._relpath, self._clang_version, 'clang+llvm.tar.gz')
-    distribution_workdir = os.path.dirname(clang_archive_path)
+  def llvm_toolchain_dir(self):
+    llvm_archive_path = self._binary_util.select_binary(
+      self._relpath, self._llvm_version, 'llvm-tools.tar.gz')
+    distribution_workdir = os.path.dirname(llvm_archive_path)
     outdir = os.path.join(distribution_workdir, 'unpacked')
     if not os.path.exists(outdir):
       with temporary_dir(root_dir=distribution_workdir) as tmp_dist:
-        TGZ.extract(clang_archive_path, tmp_dist)
+        TGZ.extract(llvm_archive_path, tmp_dist)
         os.rename(tmp_dist, outdir)
     return outdir
-
-  @memoized_method
-  def clang_bin_dir_path(self):
-    dist_base = self._clang_llvm_distribution_base()
-    bin_dir_path = os.path.join(dist_base, 'bin')
-    if not os.path.exists(bin_dir_path):
-      raise InvalidToolRequest('bin')
-    return bin_dir_path

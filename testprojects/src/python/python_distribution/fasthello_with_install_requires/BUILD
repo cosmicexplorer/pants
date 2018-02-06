@@ -4,7 +4,7 @@
 
 python_dist(
   name='fasthello',
-  sources=rglobs('*.py', '*.cpp'),
+  sources=rglobs('*.py', '*.c'),
 )
 
 python_binary(
