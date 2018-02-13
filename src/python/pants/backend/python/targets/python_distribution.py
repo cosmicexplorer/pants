@@ -24,7 +24,6 @@ class PythonDistribution(PythonLibrary):
     '*.hxx',
     '*.cc',
   ] + list(PythonLibrary.default_sources_globs)
-  default_sources_exclude_globs = PythonLibrary.default_sources_exclude_globs
 
   @classmethod
   def alias(cls):
@@ -32,11 +31,6 @@ class PythonDistribution(PythonLibrary):
 
   def __init__(self, sources=None, **kwargs):
     """
-    :param address: The Address that maps to this Target in the BuildGraph.
-    :type address: :class:`pants.build_graph.address.Address`
-    :param payload: The configuration encapsulated by this target.  Also in charge of most
-                    fingerprinting details.
-    :type payload: :class:`pants.base.payload.Payload`
     :param sources: Files to "include". Paths are relative to the
       BUILD file's directory.
     :type sources: ``Fileset`` or list of strings. Must include setup.py.

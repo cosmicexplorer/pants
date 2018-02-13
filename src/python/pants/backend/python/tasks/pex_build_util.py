@@ -121,6 +121,7 @@ def dump_requirements(builder, interpreter, req_libs, log, platforms=None):
   # Resolve the requirements into distributions.
   distributions = _resolve_multi(interpreter, reqs_to_build, platforms, find_links)
   log.debug('distributions: {}'.format(repr(distributions)))
+
   locations = set()
   for platform, dists in distributions.items():
     for dist in dists:
@@ -168,28 +169,46 @@ def _resolve_multi(interpreter, requirements, platforms, find_links):
   return distributions
 
 
-def build_req_libs_provided_by_setup_file(context, local_built_dists, class_name):
+def build_req_lib_provided_by_setup_file(build_graph, local_built_dists,
+                                         synthetic_address, in_tgts=None):
   """Build a requirements library from a local wheel.
 
-  :param context: The context of the calling task needed for injecting synthetic targets.
+  :param build_graph: The build graph needed for injecting synthetic targets.
   :param local_built_dists: A list of paths to locally built wheels to package into
   requirements libraries.
-  :param class_name: The name of the calling task class for naming synthetic targets.
-  :return: a :class: `PythonRequirementLibrary` containing a local wheel and its
-  transitive dependencies.
+  :param synthetic_address: A generative address for addressing synthetic targets.
+  :return: a :class: `PythonRequirementLibrary` with `requirements` that map to locally-built wheels.
   """
-  req_libs = []
+  context.log.info('local_built_dists: {}'.format(repr(local_built_dists)))
+
+  tgt_ids = None
+  if in_tgts is not None:
+    tgt_ids = frozenset([t.id for t in in_tgts])
+
+  def should_create_req(loc):
+    if tgt_ids is None:
+      return True
+    return any([tid in loc for tid in tgt_ids])
+
+  def python_requirement_from_wheel(path):
+    base = os.path.basename(path)
+    whl_dir = os.path.dirname(path)
+    whl_metadata = base.split('-')
+    req_name = '=='.join([whl_metadata[0], whl_metadata[1]])
+    return PythonRequirement(req_name, repository=whl_dir)
+
   local_whl_reqs = []
-  if local_built_dists:
-    context.log.info('local_built_dists: {}'.format(repr(local_built_dists)))
-    for whl_location in local_built_dists:
-      base = os.path.basename(whl_location)
-      whl_dir = os.path.dirname(whl_location)
-      whl_metadata = base.split('-')
-      req_name = '=='.join([whl_metadata[0], whl_metadata[1]])
-      local_whl_reqs.append(PythonRequirement(req_name, repository=whl_dir))
-    if local_whl_reqs:
-      addr = Address.parse(class_name)
-      context.build_graph.inject_synthetic_target(addr, PythonRequirementLibrary, requirements=local_whl_reqs)
-      req_libs = [context.build_graph.get_target(addr)]
-  return req_libs
+  for whl_location in local_built_dists:
+    if not should_create_req(whl_location):
+      continue
+    whl_req = python_requirement_from_wheel(whl_location)
+    local_whl_reqs.append(PythonRequirement(req_name, repository=whl_dir))
+
+  if len(local_whl_reqs) == 0:
+    return None
+
+  syn_addr = Address.parse(synthetic_address)
+  build_graph.inject_synthetic_target(
+    syn_addr, PythonRequirementLibrary,
+    requirements=local_whl_reqs)
+  return build_graph.get_target(syn_addr)

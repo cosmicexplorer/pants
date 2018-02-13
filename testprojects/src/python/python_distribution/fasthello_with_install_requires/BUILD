@@ -12,7 +12,7 @@ python_binary(
   source='main.py',
   dependencies=[
     ':fasthello',
-  ]
+  ],
 )
 
 python_binary(
@@ -20,13 +20,18 @@ python_binary(
   source='main.py',
   dependencies=[
     ':fasthello',
-    ':pycountry'
-  ]
+    ':pycountry',
+  ],
 )
 
 python_requirement_library(
   name='pycountry',
   requirements=[
     python_requirement('pycountry==17.9.23'),
-  ]
+  ],
+)
+
+python_binary(
+  name='main_with_no_pycountry',
+  source='main.py',
 )

@@ -14,7 +14,7 @@ from pex.pex_info import PexInfo
 from pants.backend.python.targets.python_binary import PythonBinary
 from pants.backend.python.tasks.build_local_python_distributions import \
   BuildLocalPythonDistributions
-from pants.backend.python.tasks.pex_build_util import (build_req_libs_provided_by_setup_file,
+from pants.backend.python.tasks.pex_build_util import (build_req_lib_provided_by_setup_file,
                                                         dump_requirements, dump_sources,
                                                         has_python_requirements, has_python_sources,
                                                         has_resources)
@@ -136,15 +136,25 @@ class PythonBinaryCreate(Task):
         dump_sources(builder, tgt, self.context.log)
 
       # Handle locally-built python distribution dependencies.
-      built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
-      local_dist_req_libs = build_req_libs_provided_by_setup_file(self.context,
-                                                                  built_dists,
-                                                                  self.__class__.__name__)
-      req_tgts = local_dist_req_libs + req_tgts
+      built_dists = self.context.products.get_data(
+        BuildLocalPythonDistributions.PYTHON_DISTS)
+
+      if built_dists is not None:
+        synthetic_address = ':'.join(2 * [binary_tgt.invalidation_has()])
+
+        local_dist_req_lib = build_req_lib_provided_by_setup_file(
+          self.context.build_graph,
+          built_dists,
+          synthetic_address,
+          in_tgts=binary_tgt.closure())
+        if local_dist_req_lib is not None:
+          req_tgts = [local_dist_req_lib] + req_tgts
+
       dump_requirements(builder, interpreter, req_tgts, self.context.log, binary_tgt.platforms)
 
       # Dump built python distributions, if any, into builder's chroot.
-      built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
+      built_dists = self.context.products.get_data(
+        BuildLocalPythonDistributions.PYTHON_DISTS)
       self.context.log.debug('built_dists: {}'.format(repr(built_dists)))
       if built_dists:
         for dist in built_dists:

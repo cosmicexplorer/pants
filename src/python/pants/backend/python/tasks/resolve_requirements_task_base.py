@@ -13,8 +13,8 @@ from pex.pex_builder import PEXBuilder
 
 from pants.backend.python.tasks.build_local_python_distributions import \
   BuildLocalPythonDistributions
-from pants.backend.python.tasks.pex_build_util import (build_req_libs_provided_by_setup_file,
-                                                        dump_requirements, is_local_python_dist)
+from pants.backend.python.tasks.pex_build_util import (build_req_lib_provided_by_setup_file,
+                                                        dump_requirements)
 from pants.invalidation.cache_manager import VersionedTargetSet
 from pants.task.task import Task
 from pants.util.dirutil import safe_concurrent_creation
@@ -33,13 +33,15 @@ class ResolveRequirementsTaskBase(Task):
     round_manager.require_data(PythonInterpreter)
     round_manager.require_data(BuildLocalPythonDistributions.PYTHON_DISTS)
 
-  def resolve_requirements(self, req_libs):
+  def resolve_requirements(self, req_libs, local_dist_targets=None):
     """Requirements resolution for PEX files.
 
     :param req_libs: A list of :class:`PythonRequirementLibrary` targets to resolve.
+    :param local_dist_targets: A list of :class:`PythonDistribution` targets to resolve.
     :returns: a PEX containing target requirements and any specified python dist targets.
     """
-    local_dist_targets = self.context.targets(is_local_python_dist)
+    if local_dist_targets is None:
+      local_dist_targets = []
     tgts = req_libs + local_dist_targets
     with self.invalidated(tgts) as invalidation_check:
       # If there are no relevant targets, we still go through the motions of resolving
@@ -58,12 +60,21 @@ class ResolveRequirementsTaskBase(Task):
       if not os.path.isdir(path):
         with safe_concurrent_creation(path) as safe_path:
           # Handle locally-built python distribution dependencies.
-          built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
-          local_dist_req_libs = build_req_libs_provided_by_setup_file(self.context,
-                                                                      built_dists,
-                                                                      self.__class__.__name__)
-          req_libs = local_dist_req_libs + req_libs
+          built_dists = self.context.products.get_data(
+            BuildLocalPythonDistributions.PYTHON_DISTS)
+
+          if built_dists is not None:
+            synthetic_address = ':'.join(2 * [binary_tgt.invalidation_has()])
+
+            local_dist_req_lib = build_req_lib_provided_by_setup_file(
+              self.context.build_graph,
+              built_dists,
+              synthetic_address)
+            if local_dist_req_lib is not None:
+              req_libs = [local_dist_req_lib] + req_libs
+
           self._build_requirements_pex(interpreter, safe_path, req_libs)
+
     return PEX(path, interpreter=interpreter)
 
   def _build_requirements_pex(self, interpreter, path, req_libs):
