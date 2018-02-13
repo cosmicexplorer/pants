@@ -52,7 +52,10 @@ class SandboxedInterpreter(PythonInterpreter):
   @memoized_method
   def sanitized_environment(self):
     pre_sanitized_env = super(SandboxedInterpreter, self).sanitized_environment()
-    pre_sanitized_env['PATH'] = os.path.join(self._llvm_toolchain_dir, 'bin')
+    pre_sanitized_env['PATH'] = ':'.join([
+      os.path.join(self._llvm_toolchain_dir, 'bin'),
+      '/usr/bin',
+    ])
 
     llvm_include = os.path.join(self._llvm_toolchain_dir, 'include')
     python_inc_stdout, _ = Executor.execute([self.binary], env=pre_sanitized_env, stdin_payload=INC_DIR_INPUT)

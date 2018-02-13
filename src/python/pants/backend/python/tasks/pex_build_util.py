@@ -179,8 +179,6 @@ def build_req_lib_provided_by_setup_file(build_graph, local_built_dists,
   :param synthetic_address: A generative address for addressing synthetic targets.
   :return: a :class: `PythonRequirementLibrary` with `requirements` that map to locally-built wheels.
   """
-  context.log.info('local_built_dists: {}'.format(repr(local_built_dists)))
-
   tgt_ids = None
   if in_tgts is not None:
     tgt_ids = frozenset([t.id for t in in_tgts])
@@ -202,7 +200,7 @@ def build_req_lib_provided_by_setup_file(build_graph, local_built_dists,
     if not should_create_req(whl_location):
       continue
     whl_req = python_requirement_from_wheel(whl_location)
-    local_whl_reqs.append(PythonRequirement(req_name, repository=whl_dir))
+    local_whl_reqs.append(whl_req)
 
   if len(local_whl_reqs) == 0:
     return None

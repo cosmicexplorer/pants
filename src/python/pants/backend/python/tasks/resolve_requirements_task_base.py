@@ -64,7 +64,7 @@ class ResolveRequirementsTaskBase(Task):
             BuildLocalPythonDistributions.PYTHON_DISTS)
 
           if built_dists is not None:
-            synthetic_address = ':'.join(2 * [binary_tgt.invalidation_has()])
+            synthetic_address = ':'.join(2 * [binary_tgt.invalidation_hash()])
 
             local_dist_req_lib = build_req_lib_provided_by_setup_file(
               self.context.build_graph,
