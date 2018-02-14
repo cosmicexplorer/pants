@@ -5,15 +5,10 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
-import os
-
 from pants.binaries.binary_tool import NativeTool
 
 
-class Protoc(NativeTool):
-  options_scope = 'protoc'
-  support_subdir = 'protobuf'
-  default_version = '2.4.1'
-
-  deprecated_option_scope = 'gen.protoc'
-  deprecated_option_name = 'version'
+class LD(NativeTool):
+  options_scope = 'ld'
+  # TODO: figure out how to express the "mutual" version for linux and osx ld
+  default_version = '???'

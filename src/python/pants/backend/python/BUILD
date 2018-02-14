@@ -28,6 +28,7 @@ python_library(
     ':python_chroot',
     ':python_requirement',
     ':python_requirements',
+    ':sandboxed_interpreter',
     ':sdist_builder',
     ':thrift_builder',
   ]
@@ -87,7 +88,6 @@ python_library(
   ]
 )
 
-
 python_library(
   name = 'python_artifact',
   sources = ['python_artifact.py'],
@@ -123,6 +123,11 @@ python_library(
 python_library(
   name = 'python_requirements',
   sources = ['python_requirements.py'],
+)
+
+python_library(
+  name = 'sandboxed_interpreter',
+  sources = ['sandboxed_interpreter.py'],
 )
 
 python_library(
