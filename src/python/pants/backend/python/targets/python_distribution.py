@@ -16,6 +16,10 @@ from pants.util.memo import memoized_property
 class PythonDistribution(PythonTarget):
   """A Python distribution target that accepts a user-defined setup.py."""
 
+  @classmethod
+  def alias(cls):
+    return 'python_dist'
+
   default_sources_globs = [
     '*.c',
     '*.h',
