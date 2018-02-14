@@ -120,13 +120,10 @@ def dump_requirements(builder, interpreter, req_libs, log, platforms=None):
 
   # Resolve the requirements into distributions.
   distributions = _resolve_multi(interpreter, reqs_to_build, platforms, find_links)
-  log.debug('distributions: {}'.format(repr(distributions)))
-
   locations = set()
   for platform, dists in distributions.items():
     for dist in dists:
       if dist.location not in locations:
-        log.debug('loc: {}'.format(dist.location))
         log.debug('  Dumping distribution: .../{}'.format(os.path.basename(dist.location)))
         builder.add_distribution(dist)
       locations.add(dist.location)
@@ -169,24 +166,24 @@ def _resolve_multi(interpreter, requirements, platforms, find_links):
   return distributions
 
 
-def build_req_lib_provided_by_setup_file(build_graph, local_built_dists,
-                                         synthetic_address, in_tgts=None):
-  """Build a requirements library from a local wheel.
+def inject_synthetic_dist_requirements(build_graph, local_built_dists, synthetic_address, binary_tgt=None):
+  """Inject a synthetic requirements library from a local wheel.
 
   :param build_graph: The build graph needed for injecting synthetic targets.
   :param local_built_dists: A list of paths to locally built wheels to package into
   requirements libraries.
   :param synthetic_address: A generative address for addressing synthetic targets.
-  :return: a :class: `PythonRequirementLibrary` with `requirements` that map to locally-built wheels.
+  :param binary_tgt: An optional parameter to be passed only when called by the `python_binary_create`
+  task. This is needed to ensure that only python_dist targets in a binary target's closure are included
+  in the binary for the case where a user specifies mulitple binary targets in a single invocation of
+  `./pants binary`.
+  :return: a :class: `PythonRequirementLibrary` containing a requirements that maps to a locally-built wheels.
   """
-  tgt_ids = None
-  if in_tgts is not None:
-    tgt_ids = frozenset([t.id for t in in_tgts])
-
-  def should_create_req(loc):
-    if tgt_ids is None:
+  def should_create_req(bin_tgt, loc):
+    if not bin_tgt:
       return True
-    return any([tid in loc for tid in tgt_ids])
+    # Ensure that a target is in a binary target's closure. See docstring for more detail.
+    return any([tgt.id in loc for tgt in bin_tgt.closure()])
 
   def python_requirement_from_wheel(path):
     base = os.path.basename(path)
@@ -195,18 +192,15 @@ def build_req_lib_provided_by_setup_file(build_graph, local_built_dists,
     req_name = '=='.join([whl_metadata[0], whl_metadata[1]])
     return PythonRequirement(req_name, repository=whl_dir)
 
-  local_whl_reqs = []
-  for whl_location in local_built_dists:
-    if not should_create_req(whl_location):
-      continue
-    whl_req = python_requirement_from_wheel(whl_location)
-    local_whl_reqs.append(whl_req)
+  local_whl_reqs = [
+    python_requirement_from_wheel(whl_location)
+    for whl_location in local_built_dists
+    if should_create_req(binary_tgt, whl_location)
+  ]
 
-  if len(local_whl_reqs) == 0:
-    return None
+  if not local_whl_reqs:
+    return []
 
-  syn_addr = Address.parse(synthetic_address)
-  build_graph.inject_synthetic_target(
-    syn_addr, PythonRequirementLibrary,
-    requirements=local_whl_reqs)
-  return build_graph.get_target(syn_addr)
+  addr = Address.parse(synthetic_address)
+  build_graph.inject_synthetic_target(addr, PythonRequirementLibrary, requirements=local_whl_reqs)
+  return [build_graph.get_target(addr)]

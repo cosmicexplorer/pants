@@ -14,10 +14,10 @@ from pex.pex_info import PexInfo
 from pants.backend.python.targets.python_binary import PythonBinary
 from pants.backend.python.tasks.build_local_python_distributions import \
   BuildLocalPythonDistributions
-from pants.backend.python.tasks.pex_build_util import (build_req_lib_provided_by_setup_file,
-                                                        dump_requirements, dump_sources,
-                                                        has_python_requirements, has_python_sources,
-                                                        has_resources)
+from pants.backend.python.tasks.pex_build_util import (dump_requirements, dump_sources,
+                                                       has_python_requirements, has_python_sources,
+                                                       has_resources,
+                                                       inject_synthetic_dist_requirements)
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.build_graph.target_scopes import Scopes
@@ -70,9 +70,7 @@ class PythonBinaryCreate(Task):
 
     with self.invalidated(binaries, invalidate_dependents=True) as invalidation_check:
       python_deployable_archive = self.context.products.get('deployable_archives')
-      self.context.log.debug('python_deployable_archive: {}'.format(repr(python_deployable_archive)))
       python_pex_product = self.context.products.get('pex_archives')
-      self.context.log.debug('python_pex_product: {}'.format(repr(python_pex_product)))
       for vt in invalidation_check.all_vts:
         pex_path = os.path.join(vt.results_dir, '{}.pex'.format(vt.target.name))
         if not vt.valid:
@@ -84,8 +82,6 @@ class PythonBinaryCreate(Task):
         basename = os.path.basename(pex_path)
         python_pex_product.add(vt.target, os.path.dirname(pex_path)).append(basename)
         python_deployable_archive.add(vt.target, os.path.dirname(pex_path)).append(basename)
-        self.context.log.debug('python_pex_product: {}'.format(repr(python_pex_product)))
-        self.context.log.debug('python_deployable_archive: {}'.format(repr(python_deployable_archive)))
         self.context.log.debug('created {}'.format(os.path.relpath(pex_path, get_buildroot())))
 
         # Create a copy for pex.
@@ -136,33 +132,14 @@ class PythonBinaryCreate(Task):
         dump_sources(builder, tgt, self.context.log)
 
       # Handle locally-built python distribution dependencies.
-      built_dists = self.context.products.get_data(
-        BuildLocalPythonDistributions.PYTHON_DISTS)
-
-      if built_dists is not None:
-        synthetic_address = ':'.join(2 * [binary_tgt.invalidation_hash()])
-
-        local_dist_req_lib = build_req_lib_provided_by_setup_file(
-          self.context.build_graph,
-          built_dists,
-          synthetic_address,
-          in_tgts=binary_tgt.closure())
-        if local_dist_req_lib is not None:
-          req_tgts = [local_dist_req_lib] + req_tgts
+      built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
+      if built_dists:
+        req_tgts = inject_synthetic_dist_requirements(self.context.build_graph,
+                                                      built_dists,
+                                                      ':'.join(2 * [binary_tgt.invalidation_hash()]),
+                                                      binary_tgt) + req_tgts
 
       dump_requirements(builder, interpreter, req_tgts, self.context.log, binary_tgt.platforms)
-
-      # Dump built python distributions, if any, into builder's chroot.
-      built_dists = self.context.products.get_data(
-        BuildLocalPythonDistributions.PYTHON_DISTS)
-      self.context.log.debug('built_dists: {}'.format(repr(built_dists)))
-      if built_dists:
-        for dist in built_dists:
-          # Ensure only python_dist dependencies of binary_tgt are added to the output pex.
-          # This protects against the case where a single `./pants binary` command builds two
-          # binary targets that each have their own unique python_dist depencency.
-          if any([tgt.id in dist for tgt in binary_tgt.closure(exclude_scopes=Scopes.COMPILE)]):
-            builder.add_dist_location(dist)
 
       # Build the .pex file.
       pex_path = os.path.join(results_dir, '{}.pex'.format(binary_tgt.name))

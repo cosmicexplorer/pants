@@ -7,9 +7,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 import glob
 import os
-import re
 import shutil
-from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 
@@ -68,18 +66,16 @@ class BuildLocalPythonDistributions(Task):
                             invalidate_dependents=True) as invalidation_check:
         for vt in invalidation_check.all_vts:
           if vt.valid:
-            self.context.log.debug('(valid) vt: {}'.format(repr(vt)))
             built_dists.add(self._get_whl_from_dir(os.path.join(vt.results_dir, 'dist')))
           else:
-            self.context.log.debug('(invalid) vt: {}'.format(repr(vt)))
-            if vt.target.dependencies :
+            if vt.target.dependencies:
               raise TargetDefinitionException(
                 vt.target, 'The `dependencies` field is disallowed on `python_dist` targets. List any 3rd '
                            'party requirements in the install_requirements argument of your setup function.'
               )
             built_dists.add(self._create_dist(vt.target, vt.results_dir))
 
-    self.context.log.info('built_dists: {}'.format(built_dists))
+    self.context.log.debug('built_dists: {}'.format(built_dists))
 
     self.context.products.register_data(self.PYTHON_DISTS, built_dists)
 
@@ -88,7 +84,7 @@ class BuildLocalPythonDistributions(Task):
     # NB: The directory structure of the destination directory needs to match 1:1
     # with the directory structure that setup.py expects.
     all_sources = list(dist_tgt.sources_relative_to_target_base())
-    self.context.log.info('all_sources: {}'.format(all_sources))
+    self.context.log.debug('all_sources: {}'.format(all_sources))
     for src_relative_to_target_base in all_sources:
       src_rel_to_results_dir = os.path.join(dist_target_dir, src_relative_to_target_base)
       safe_mkdir(os.path.dirname(src_rel_to_results_dir))
@@ -99,14 +95,13 @@ class BuildLocalPythonDistributions(Task):
 
   def _create_dist(self, dist_tgt, dist_target_dir):
     """Create a .whl file for the specified python_distribution target."""
-    self.context.log.info('dist_target_dir: {}'.format(dist_target_dir))
+    self.context.log.debug("dist_target_dir: '{}'".format(dist_target_dir))
     interpreter = self.context.products.get_data(PythonInterpreter)
     sandboxed_interpreter = SandboxedInterpreter(
       self.llvm_base_dir, interpreter)
     self._copy_sources(dist_tgt, dist_target_dir)
     # Build a whl using SetupPyRunner and return its absolute path.
     setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=sandboxed_interpreter)
-    # setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=interpreter)
     setup_runner.run()
     return self._get_whl_from_dir(os.path.join(dist_target_dir, 'dist'))
 

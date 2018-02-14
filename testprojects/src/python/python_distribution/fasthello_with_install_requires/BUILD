@@ -4,7 +4,12 @@
 
 python_dist(
   name='fasthello',
-  sources=rglobs('*.py', '*.c'),
+  sources=[
+    'super_greet.c',
+    'hello_package/hello.py',
+    'hello_package/__init__.py',
+    'setup.py'
+  ]
 )
 
 python_binary(
@@ -12,7 +17,7 @@ python_binary(
   source='main.py',
   dependencies=[
     ':fasthello',
-  ],
+  ]
 )
 
 python_binary(
@@ -20,18 +25,18 @@ python_binary(
   source='main.py',
   dependencies=[
     ':fasthello',
-    ':pycountry',
-  ],
+    ':pycountry'
+  ]
 )
 
 python_requirement_library(
   name='pycountry',
   requirements=[
     python_requirement('pycountry==17.9.23'),
-  ],
+  ]
 )
 
 python_binary(
   name='main_with_no_pycountry',
-  source='main.py',
+  source='main.py'
 )

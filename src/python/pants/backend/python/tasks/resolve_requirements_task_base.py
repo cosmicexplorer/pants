@@ -13,8 +13,8 @@ from pex.pex_builder import PEXBuilder
 
 from pants.backend.python.tasks.build_local_python_distributions import \
   BuildLocalPythonDistributions
-from pants.backend.python.tasks.pex_build_util import (build_req_lib_provided_by_setup_file,
-                                                        dump_requirements)
+from pants.backend.python.tasks.pex_build_util import (dump_requirements,
+                                                       inject_synthetic_dist_requirements)
 from pants.invalidation.cache_manager import VersionedTargetSet
 from pants.task.task import Task
 from pants.util.dirutil import safe_concurrent_creation
@@ -40,9 +40,9 @@ class ResolveRequirementsTaskBase(Task):
     :param local_dist_targets: A list of :class:`PythonDistribution` targets to resolve.
     :returns: a PEX containing target requirements and any specified python dist targets.
     """
-    if local_dist_targets is None:
-      local_dist_targets = []
-    tgts = req_libs + local_dist_targets
+    tgts = req_libs
+    if local_dist_targets:
+      tgts = req_libs + local_dist_targets
     with self.invalidated(tgts) as invalidation_check:
       # If there are no relevant targets, we still go through the motions of resolving
       # an empty set of requirements, to prevent downstream tasks from having to check
@@ -60,33 +60,15 @@ class ResolveRequirementsTaskBase(Task):
       if not os.path.isdir(path):
         with safe_concurrent_creation(path) as safe_path:
           # Handle locally-built python distribution dependencies.
-          built_dists = self.context.products.get_data(
-            BuildLocalPythonDistributions.PYTHON_DISTS)
-
-          if built_dists is not None:
-            synthetic_address = ':'.join(2 * [target_set_id])
-
-            local_dist_req_lib = build_req_lib_provided_by_setup_file(
-              self.context.build_graph,
-              built_dists,
-              synthetic_address)
-            if local_dist_req_lib is not None:
-              req_libs = [local_dist_req_lib] + req_libs
-
+          built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
+          if built_dists:
+            req_libs = inject_synthetic_dist_requirements(self.context.build_graph,
+                                                          built_dists,
+                                                          ':'.join(2 * [target_set_id])) + req_libs
           self._build_requirements_pex(interpreter, safe_path, req_libs)
-
     return PEX(path, interpreter=interpreter)
 
   def _build_requirements_pex(self, interpreter, path, req_libs):
     builder = PEXBuilder(path=path, interpreter=interpreter, copy=True)
     dump_requirements(builder, interpreter, req_libs, self.context.log)
-    # Dump built python distributions, if any, into the requirements pex.
-    # NB: If a python_dist depends on a requirement X and another target in play requires
-    # an incompatible version of X, this will cause the pex resolver to throw an incompatiblity
-    # error and Pants will abort the build.
-
-    built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
-    if built_dists:
-      for dist in built_dists:
-        builder.add_dist_location(dist)
     builder.freeze()

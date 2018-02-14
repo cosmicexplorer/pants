@@ -6,13 +6,14 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 from pants.backend.python.targets.python_library import PythonLibrary
+from pants.backend.python.targets.python_target import PythonTarget
 from pants.base.payload import Payload
 from pants.source.payload_fields import SourcesField
 from pants.source.wrapped_globs import FilesetWithSpec
 from pants.util.memo import memoized_property
 
 
-class PythonDistribution(PythonLibrary):
+class PythonDistribution(PythonTarget):
   """A Python distribution target that accepts a user-defined setup.py."""
 
   default_sources_globs = [
@@ -24,10 +25,6 @@ class PythonDistribution(PythonLibrary):
     '*.hxx',
     '*.cc',
   ] + list(PythonLibrary.default_sources_globs)
-
-  @classmethod
-  def alias(cls):
-    return 'python_dist'
 
   def __init__(self, sources=None, **kwargs):
     """

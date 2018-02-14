@@ -90,4 +90,3 @@ class PythonDistributionIntegrationTest(PantsRunIntegrationTest):
     # Cleanup
     os.remove(pex1)
     os.remove(pex2)
->>>>>>> master
