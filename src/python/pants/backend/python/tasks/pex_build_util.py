@@ -166,7 +166,8 @@ def _resolve_multi(interpreter, requirements, platforms, find_links):
   return distributions
 
 
-def inject_synthetic_dist_requirements(build_graph, local_built_dists, synthetic_address, binary_tgt=None):
+# TODO: fix docstring
+def inject_synthetic_dist_requirements(build_graph, local_built_dists, synthetic_address, in_tgts=None):
   """Inject a synthetic requirements library from a local wheel.
 
   :param build_graph: The build graph needed for injecting synthetic targets.
@@ -179,11 +180,16 @@ def inject_synthetic_dist_requirements(build_graph, local_built_dists, synthetic
   `./pants binary`.
   :return: a :class: `PythonRequirementLibrary` containing a requirements that maps to a locally-built wheels.
   """
-  def should_create_req(bin_tgt, loc):
-    if not bin_tgt:
+  if in_tgts is None:
+    tgt_ids = None
+  else:
+    tgt_ids = frozenset([t.id for t in in_tgts])
+
+  def should_create_req(loc):
+    if tgt_ids is None:
       return True
     # Ensure that a target is in a binary target's closure. See docstring for more detail.
-    return any([tgt.id in loc for tgt in bin_tgt.closure()])
+    return any([tid in loc for tid in tgt_ids])
 
   def python_requirement_from_wheel(path):
     base = os.path.basename(path)
@@ -195,10 +201,10 @@ def inject_synthetic_dist_requirements(build_graph, local_built_dists, synthetic
   local_whl_reqs = [
     python_requirement_from_wheel(whl_location)
     for whl_location in local_built_dists
-    if should_create_req(binary_tgt, whl_location)
+    if should_create_req(whl_location)
   ]
 
-  if not local_whl_reqs:
+  if len(local_whl_reqs) == 0:
     return []
 
   addr = Address.parse(synthetic_address)

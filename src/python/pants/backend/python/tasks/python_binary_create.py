@@ -132,12 +132,28 @@ class PythonBinaryCreate(Task):
         dump_sources(builder, tgt, self.context.log)
 
       # Handle locally-built python distribution dependencies.
-      built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
-      if built_dists:
-        req_tgts = inject_synthetic_dist_requirements(self.context.build_graph,
-                                                      built_dists,
-                                                      ':'.join(2 * [binary_tgt.invalidation_hash()]),
-                                                      binary_tgt) + req_tgts
+      built_dists = self.context.products.get_data(
+        BuildLocalPythonDistributions.PYTHON_DISTS)
+      self.context.log.debug("built_dists: {}".format(repr(built_dists)))
+
+      if built_dists is not None:
+        synthetic_address = ':'.join(2 * [binary_tgt.invalidation_hash()])
+
+        local_dist_req_libs = inject_synthetic_dist_requirements(
+          self.context.build_graph,
+          built_dists,
+          synthetic_address,
+          in_tgts=binary_tgt.closure())
+        if len(local_dist_req_libs) != 0:
+          req_tgts = local_dist_req_libs + req_tgts
+
+        for dist in built_dists:
+          # Ensure only python_dist dependencies of binary_tgt are added to the output pex.
+          # This protects against the case where a single `./pants binary` command builds two
+          # binary targets that each have their own unique python_dist depencency.
+          if any([tgt.id in dist for tgt in binary_tgt.closure(exclude_scopes=Scopes.COMPILE)]):
+            builder.add_dist_location(dist)
+
 
       dump_requirements(builder, interpreter, req_tgts, self.context.log, binary_tgt.platforms)
 
