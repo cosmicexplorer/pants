@@ -61,10 +61,13 @@ class ResolveRequirementsTaskBase(Task):
         with safe_concurrent_creation(path) as safe_path:
           # Handle locally-built python distribution dependencies.
           built_dists = self.context.products.get_data(BuildLocalPythonDistributions.PYTHON_DISTS)
-          if built_dists:
-            req_libs = inject_synthetic_dist_requirements(self.context.build_graph,
-                                                          built_dists,
-                                                          ':'.join(2 * [target_set_id])) + req_libs
+          if built_dists is not None:
+            synthetic_address = ':'.join(2 * [target_set_id])
+            local_dist_req_libs = inject_synthetic_dist_requirements(
+              self.context.build_graph,
+              built_dists,
+              synthetic_address)
+            req_libs = local_dist_req_libs + req_libs
           self._build_requirements_pex(interpreter, safe_path, req_libs)
     return PEX(path, interpreter=interpreter)
 

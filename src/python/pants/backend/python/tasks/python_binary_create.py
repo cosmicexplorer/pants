@@ -138,14 +138,12 @@ class PythonBinaryCreate(Task):
 
       if built_dists is not None:
         synthetic_address = ':'.join(2 * [binary_tgt.invalidation_hash()])
-
         local_dist_req_libs = inject_synthetic_dist_requirements(
           self.context.build_graph,
           built_dists,
           synthetic_address,
           in_tgts=binary_tgt.closure())
-        if len(local_dist_req_libs) != 0:
-          req_tgts = local_dist_req_libs + req_tgts
+        req_tgts = local_dist_req_libs + req_tgts
 
         for dist in built_dists:
           # Ensure only python_dist dependencies of binary_tgt are added to the output pex.
@@ -153,7 +151,6 @@ class PythonBinaryCreate(Task):
           # binary targets that each have their own unique python_dist depencency.
           if any([tgt.id in dist for tgt in binary_tgt.closure(exclude_scopes=Scopes.COMPILE)]):
             builder.add_dist_location(dist)
-
 
       dump_requirements(builder, interpreter, req_tgts, self.context.log, binary_tgt.platforms)
 
