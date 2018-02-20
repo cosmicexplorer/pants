@@ -51,7 +51,7 @@ class LegacySymbolTable(SymbolTable):
       self._table[alias] = JavaLibraryAdaptor
     for alias in ['scala_library', 'scalac_plugin']:
       self._table[alias] = ScalaLibraryAdaptor
-    for alias in ['python_library', 'pants_plugin', 'python_dist']:
+    for alias in ['python_library', 'pants_plugin']:
       self._table[alias] = PythonLibraryAdaptor
     for alias in ['go_library', 'go_binary']:
       self._table[alias] = GoTargetAdaptor

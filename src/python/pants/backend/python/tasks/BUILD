@@ -7,8 +7,6 @@ python_library(
     '3rdparty/python/twitter/commons:twitter.common.collections',
     '3rdparty/python/twitter/commons:twitter.common.dirutil',
     'src/python/pants/backend/native',
-    # FIXME: why does this still work?
-    # 'src/python/pants/backend/python:sandboxed_interpreter',
     'src/python/pants/backend/python:python_requirement',
     'src/python/pants/backend/python:python_requirements',
     'src/python/pants/backend/python:interpreter_cache',

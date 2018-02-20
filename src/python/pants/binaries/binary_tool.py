@@ -5,8 +5,6 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
-import os
-
 from pants.binaries.binary_util import BinaryUtil
 from pants.subsystem.subsystem import Subsystem
 from pants.util.memo import memoized_method, memoized_property
@@ -108,10 +106,6 @@ class NativeTool(BinaryToolBase):
   """
   platform_dependent = True
 
-  @classmethod
-  def support_dir_paths(cls):
-    return super(NativeTool, cls).support_dir_paths() + ['bin']
-
 
 class Script(BinaryToolBase):
   """A base class for platform-independent scripts.
@@ -119,7 +113,3 @@ class Script(BinaryToolBase):
   :API: public
   """
   platform_dependent = False
-
-  @classmethod
-  def support_dir_paths(cls):
-    return super(Script, cls).support_dir_paths() + ['scripts']

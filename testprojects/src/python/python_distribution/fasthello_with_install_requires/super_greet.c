@@ -1,7 +1,7 @@
 #include <Python.h>
 
 static PyObject * super_greet(PyObject *self, PyObject *args) {
-  return Py_BuildValue("s", "Super hello!");
+  return Py_BuildValue("s", "Super hello");
 }
 
 static PyMethodDef Methods[] = {

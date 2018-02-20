@@ -63,12 +63,14 @@ class BuildLocalPythonDistributions(Task):
 
   def execute(self):
     dist_targets = self.context.targets(is_local_python_dist)
-    build_graph = self.context.build_graph
 
     if dist_targets:
       with self.invalidated(dist_targets,
                             fingerprint_strategy=DefaultFingerprintStrategy(),
                             invalidate_dependents=True) as invalidation_check:
+        interpreter = self.context.products.get_data(PythonInterpreter)
+        sandboxed_interpreter = SandboxedInterpreter(self.llvm_base_dir, interpreter)
+
         for vt in invalidation_check.invalid_vts:
           if vt.target.dependencies:
             raise TargetDefinitionException(
@@ -76,7 +78,7 @@ class BuildLocalPythonDistributions(Task):
                          'List any 3rd party requirements in the install_requirements argument '
                          'of your setup function.'
             )
-          self._create_dist(vt.target, vt.results_dir)
+          self._create_dist(vt.target, vt.results_dir, sandboxed_interpreter)
 
         for vt in invalidation_check.all_vts:
           dist = self._get_whl_from_dir(os.path.join(vt.results_dir, 'dist'))
@@ -84,10 +86,8 @@ class BuildLocalPythonDistributions(Task):
           self._inject_synthetic_dist_requirements(dist, req_lib_addr)
           # Make any target that depends on the dist depend on the synthetic req_lib,
           # for downstream consumption.
-          for dependent in build_graph.dependents_of(vt.target.address):
-            build_graph.inject_dependency(dependent, req_lib_addr)
-
-    self.context.products.register_data(self.PYTHON_DISTS, built_dists)
+          for dependent in self.context.build_graph.dependents_of(vt.target.address):
+            self.context.build_graph.inject_dependency(dependent, req_lib_addr)
 
   def _copy_sources(self, dist_tgt, dist_target_dir):
     # Copy sources and setup.py over to vt results directory for packaging.
@@ -103,12 +103,9 @@ class BuildLocalPythonDistributions(Task):
                                   src_relative_to_target_base)
       shutil.copyfile(abs_src_path, src_rel_to_results_dir)
 
-  def _create_dist(self, dist_tgt, dist_target_dir):
+  def _create_dist(self, dist_tgt, dist_target_dir, sandboxed_interpreter):
     """Create a .whl file for the specified python_distribution target."""
     self.context.log.debug("dist_target_dir: '{}'".format(dist_target_dir))
-    interpreter = self.context.products.get_data(PythonInterpreter)
-    sandboxed_interpreter = SandboxedInterpreter(
-      self.llvm_base_dir, interpreter)
     self._copy_sources(dist_tgt, dist_target_dir)
     # Build a whl using SetupPyRunner and return its absolute path.
     setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=sandboxed_interpreter)
@@ -136,5 +133,5 @@ class BuildLocalPythonDistributions(Task):
     if len(dists) == 0:
       raise TaskError('No distributions were produced by python_create_distribution task.')
     if len(dists) > 1:
-      raise TaskError('Ambiguous local python distributions found: %s' % (' '.join(dists)))
+      raise TaskError('Ambiguous local python distributions found: {}'.format(dists))
     return dists[0]
