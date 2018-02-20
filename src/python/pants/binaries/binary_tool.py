@@ -20,11 +20,14 @@ class BinaryToolBase(Subsystem):
   :API: public
   """
   # Subclasses must set these to appropriate values for the tool they define.
-  # They must also set options_scope to the tool name as understood by BinaryUtil.
-  support_subdir = None
+  # They must also set options_scope appropriately.
   platform_dependent = None
   archive_type = None
   default_version = None
+
+  # Subclasses may set this to the tool name as understood by BinaryUtil.
+  # If unset, it defaults to the value of options_scope.
+  name = None
 
   # Subclasses may set these to effect migration from an old --version option to this one.
   # TODO(benjy): Remove these after migration to the mixin is complete.
@@ -36,9 +39,7 @@ class BinaryToolBase(Subsystem):
 
   @classmethod
   def subsystem_dependencies(cls):
-    return super(BinaryToolBase, cls).subsystem_dependencies() + (
-      BinaryUtil.Factory,
-    )
+    return super(BinaryToolBase, cls).subsystem_dependencies() + (BinaryUtil.Factory,)
 
   @classmethod
   def register_options(cls, register):
@@ -52,7 +53,7 @@ class BinaryToolBase(Subsystem):
       version_registration_kwargs.update(cls.extra_version_option_kwargs)
     version_registration_kwargs['help'] = (
       version_registration_kwargs.get('help') or
-      'Version of the {} {} to use'.format(cls.options_scope,
+      'Version of the {} {} to use'.format(cls._get_name(),
                                            'binary' if cls.platform_dependent else 'script')
     )
     # The default for fingerprint in register() is False, but we want to default to True.
@@ -74,7 +75,7 @@ class BinaryToolBase(Subsystem):
     if self.replaces_scope and self.replaces_name:
       # If the old option is provided explicitly, let it take precedence.
       old_opts = context.options.for_scope(self.replaces_scope)
-      if not old_opts.is_default(self.replaces_name):
+      if old_opts.get(self.replaces_name) and not old_opts.is_default(self.replaces_name):
         version = old_opts.get(self.replaces_name)
     return self._select_for_version(version)
 
@@ -82,29 +83,22 @@ class BinaryToolBase(Subsystem):
   def _binary_util(self):
     return BinaryUtil.Factory.create()
 
-  # can override this and call super() to compose
   @classmethod
-  def support_dir_paths(cls):
-    return []
-
-  @classmethod
-  def _support_dir(cls):
-    paths = cls.support_dir_paths()
-    if len(paths) == 0:
-      # TODO: raise subclassed exception here!
-      raise Exception('???')
-    subdir = cls.support_subdir or cls.options_scope
-    paths.append(subdir)
-    return os.path.join(*paths)
+  def get_support_dir(cls):
+    return 'bin/{}'.format(cls._get_name())
 
   @memoized_method
   def _select_for_version(self, version):
     return self._binary_util.select(
-      self._support_dir(),
-      version,
-      self.options_scope,
-      self.platform_dependent,
-      self.archive_type)
+      supportdir=self.get_support_dir(),
+      version=version,
+      name=self._get_name(),
+      platform_dependent=self.platform_dependent,
+      archive_type=self.archive_type)
+
+  @classmethod
+  def _get_name(cls):
+    return cls.name or cls.options_scope
 
 
 class NativeTool(BinaryToolBase):

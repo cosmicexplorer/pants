@@ -12,12 +12,10 @@ from pex.pex_builder import PEXBuilder
 from pex.pex_info import PexInfo
 
 from pants.backend.python.targets.python_binary import PythonBinary
-from pants.backend.python.tasks.build_local_python_distributions import \
-  BuildLocalPythonDistributions
-from pants.backend.python.tasks.pex_build_util import (dump_requirements, dump_sources,
+from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
+from pants.backend.python.tasks.pex_build_util import (dump_requirement_libs, dump_sources,
                                                        has_python_requirements, has_python_sources,
-                                                       has_resources,
-                                                       inject_synthetic_dist_requirements)
+                                                       has_resources)
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.build_graph.target_scopes import Scopes
@@ -46,7 +44,7 @@ class PythonBinaryCreate(Task):
   def prepare(cls, options, round_manager):
     round_manager.require_data(PythonInterpreter)
     round_manager.require_data('python')  # For codegen.
-    round_manager.require_data(BuildLocalPythonDistributions.PYTHON_DISTS)
+    round_manager.optional_product(PythonRequirementLibrary)  # For local dists.
 
   @staticmethod
   def is_binary(target):
@@ -130,29 +128,7 @@ class PythonBinaryCreate(Task):
       # Dump everything into the builder's chroot.
       for tgt in source_tgts:
         dump_sources(builder, tgt, self.context.log)
-
-      # Handle locally-built python distribution dependencies.
-      built_dists = self.context.products.get_data(
-        BuildLocalPythonDistributions.PYTHON_DISTS)
-      self.context.log.debug("built_dists: {}".format(repr(built_dists)))
-
-      if built_dists is not None:
-        synthetic_address = ':'.join(2 * [binary_tgt.invalidation_hash()])
-        local_dist_req_libs = inject_synthetic_dist_requirements(
-          self.context.build_graph,
-          built_dists,
-          synthetic_address,
-          in_tgts=binary_tgt.closure())
-        req_tgts = local_dist_req_libs + req_tgts
-
-        for dist in built_dists:
-          # Ensure only python_dist dependencies of binary_tgt are added to the output pex.
-          # This protects against the case where a single `./pants binary` command builds two
-          # binary targets that each have their own unique python_dist depencency.
-          if any([tgt.id in dist for tgt in binary_tgt.closure(exclude_scopes=Scopes.COMPILE)]):
-            builder.add_dist_location(dist)
-
-      dump_requirements(builder, interpreter, req_tgts, self.context.log, binary_tgt.platforms)
+      dump_requirement_libs(builder, interpreter, req_tgts, self.context.log, binary_tgt.platforms)
 
       # Build the .pex file.
       pex_path = os.path.join(results_dir, '{}.pex'.format(binary_tgt.name))
