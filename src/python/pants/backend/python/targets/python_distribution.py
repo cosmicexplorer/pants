@@ -7,6 +7,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 from pants.backend.python.targets.python_library import PythonLibrary
 from pants.backend.python.targets.python_target import PythonTarget
+from pants.base.exceptions import TargetDefinitionException
 from pants.base.payload import Payload
 from pants.source.payload_fields import SourcesField
 from pants.source.wrapped_globs import FilesetWithSpec
@@ -30,14 +31,19 @@ class PythonDistribution(PythonTarget):
     '*.cc',
   ] + list(PythonLibrary.default_sources_globs)
 
-  def __init__(self, sources=None, **kwargs):
+  def __init__(self, sources=None, provides=None, **kwargs):
     """
     :param sources: Files to "include". Paths are relative to the
       BUILD file's directory.
     :type sources: ``Fileset`` or list of strings. Must include setup.py.
     """
+    if provides is not None:
+      raise TargetDefinitionException(
+        self, "A PythonDistribution may not have a provides parameter "
+              "(parameter was: '{}').".format(repr(provides)))
+
     super(PythonDistribution, self).__init__(
-      sources=sources, **kwargs)
+      sources=sources, provides=provides, **kwargs)
 
     if not 'setup.py' in sources:
       raise TargetDefinitionException(

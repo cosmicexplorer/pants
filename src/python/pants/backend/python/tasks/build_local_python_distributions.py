@@ -49,9 +49,7 @@ class BuildLocalPythonDistributions(Task):
 
   @classmethod
   def subsystem_dependencies(cls):
-    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (
-      LLVM.scoped(cls),
-    )
+    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (LLVM.scoped(cls),)
 
   @memoized_property
   def llvm_base_dir(self):
@@ -94,7 +92,6 @@ class BuildLocalPythonDistributions(Task):
     # NB: The directory structure of the destination directory needs to match 1:1
     # with the directory structure that setup.py expects.
     all_sources = list(dist_tgt.sources_relative_to_target_base())
-    self.context.log.debug('all_sources: {}'.format(all_sources))
     for src_relative_to_target_base in all_sources:
       src_rel_to_results_dir = os.path.join(dist_target_dir, src_relative_to_target_base)
       safe_mkdir(os.path.dirname(src_rel_to_results_dir))
