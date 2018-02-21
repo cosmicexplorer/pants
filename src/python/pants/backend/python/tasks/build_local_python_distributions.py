@@ -8,12 +8,12 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 import glob
 import os
 import shutil
+from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 
 from pants.backend.native.subsystems.llvm import LLVM
 from pants.backend.python.python_requirement import PythonRequirement
-from pants.backend.python.sandboxed_interpreter import SandboxedInterpreter
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
 from pants.backend.python.tasks.pex_build_util import is_local_python_dist
 from pants.backend.python.tasks.setup_py import SetupPyRunner
@@ -67,7 +67,6 @@ class BuildLocalPythonDistributions(Task):
                             fingerprint_strategy=DefaultFingerprintStrategy(),
                             invalidate_dependents=True) as invalidation_check:
         interpreter = self.context.products.get_data(PythonInterpreter)
-        sandboxed_interpreter = SandboxedInterpreter(self.llvm_base_dir, interpreter)
 
         for vt in invalidation_check.invalid_vts:
           if vt.target.dependencies:
@@ -76,7 +75,7 @@ class BuildLocalPythonDistributions(Task):
                          'List any 3rd party requirements in the install_requirements argument '
                          'of your setup function.'
             )
-          self._create_dist(vt.target, vt.results_dir, sandboxed_interpreter)
+          self._create_dist(vt.target, vt.results_dir, interpreter)
 
         for vt in invalidation_check.all_vts:
           dist = self._get_whl_from_dir(os.path.join(vt.results_dir, 'dist'))
@@ -100,13 +99,40 @@ class BuildLocalPythonDistributions(Task):
                                   src_relative_to_target_base)
       shutil.copyfile(abs_src_path, src_rel_to_results_dir)
 
-  def _create_dist(self, dist_tgt, dist_target_dir, sandboxed_interpreter):
+  @contextmanager
+  def _sandboxed_setuppy(self):
+    sanitized_env = os.environ.copy()
+
+    # use our compiler at the front of the path
+    # TODO: when we provide ld and stdlib headers, don't add the original path
+    sanitized_env['PATH'] = ':'.join([
+      os.path.join(self.llvm_base_dir, 'bin'),
+      sanitized_env.get('PATH'),
+    ])
+
+    # TODO: figure out whether we actually should be compiling fat binaries.
+    # this line tells distutils to only compile for 64-bit archs -- if not, it
+    # will attempt to build a fat binary for 32- and 64-bit archs, which makes
+    # clang invoke "lipo", an osx command which does not appear to be open
+    # source. see Lib/distutils/sysconfig.py and Lib/_osx_support.py in CPython.
+    sanitized_env['ARCHFLAGS'] = '-arch x86_64'
+
+    env_vars_to_scrub = ['CC', 'CXX']
+    for env_var in env_vars_to_scrub:
+      sanitized_env.pop(env_var, None)
+
+    with environment_as(**sanitized_env):
+      yield
+
+
+  def _create_dist(self, dist_tgt, dist_target_dir, interpreter):
     """Create a .whl file for the specified python_distribution target."""
     self.context.log.debug("dist_target_dir: '{}'".format(dist_target_dir))
     self._copy_sources(dist_tgt, dist_target_dir)
-    # Build a whl using SetupPyRunner and return its absolute path.
-    setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=sandboxed_interpreter)
-    setup_runner.run()
+    with self._sandboxed_setuppy():
+      # Build a whl using SetupPyRunner and return its absolute path.
+      setup_runner = SetupPyRunner(dist_target_dir, 'bdist_wheel', interpreter=interpreter)
+      setup_runner.run()
 
   def _inject_synthetic_dist_requirements(self, dist, req_lib_addr):
     """Inject a synthetic requirements library that references a local wheel.
