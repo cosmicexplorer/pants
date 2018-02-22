@@ -12,7 +12,8 @@ from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 
-from pants.backend.native.subsystems.llvm import LLVM
+from pants.backend.native.subsystems.compiler import Compiler
+from pants.backend.native.subsystems.linker import Linker
 from pants.backend.python.python_requirement import PythonRequirement
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
 from pants.backend.python.tasks.pex_build_util import is_local_python_dist
@@ -49,11 +50,18 @@ class BuildLocalPythonDistributions(Task):
 
   @classmethod
   def subsystem_dependencies(cls):
-    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (LLVM.scoped(cls),)
+    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (
+      Compiler.scoped(cls),
+      Linker.scoped(cls),
+    )
 
   @memoized_property
-  def llvm_base_dir(self):
-    return LLVM.scoped_instance(self).select()
+  def compiler_base_dir(self):
+    return Compiler.scoped_instance(self).select()
+
+  @memoized_property
+  def linker_base_dir(self):
+    return Linker.scoped_instance(self).select()
 
   @property
   def cache_target_dirs(self):
@@ -106,9 +114,11 @@ class BuildLocalPythonDistributions(Task):
     # use our compiler at the front of the path
     # TODO: when we provide ld and stdlib headers, don't add the original path
     sanitized_env['PATH'] = ':'.join([
-      os.path.join(self.llvm_base_dir, 'bin'),
-      sanitized_env.get('PATH'),
+      os.path.join(self.compiler_base_dir, 'bin'),
+      os.path.join(self.linker_base_dir, 'bin'),
     ])
+
+    sanitized_env['C_INCLUDE_PATH'] = os.path.join(self.compiler_base_dir, 'include')
 
     # TODO: figure out whether we actually should be compiling fat binaries.
     # this line tells distutils to only compile for 64-bit archs -- if not, it
