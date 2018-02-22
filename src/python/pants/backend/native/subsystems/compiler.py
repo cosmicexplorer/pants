@@ -8,7 +8,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 from pants.binaries.binary_tool import NativeTool
 
 
-class LLVM(NativeTool):
-  options_scope = 'llvm'
+class Compiler(NativeTool):
+  options_scope = 'compiler'
   default_version = '5.0.1'
   archive_type = 'tgz'
