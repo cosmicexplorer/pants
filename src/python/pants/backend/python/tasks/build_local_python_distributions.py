@@ -111,8 +111,7 @@ class BuildLocalPythonDistributions(Task):
   def _sandboxed_setuppy(self):
     sanitized_env = os.environ.copy()
 
-    # use our compiler at the front of the path
-    # TODO: when we provide ld and stdlib headers, don't add the original path
+    # use our compiler and linker, and nothing else
     sanitized_env['PATH'] = ':'.join([
       os.path.join(self.compiler_base_dir, 'bin'),
       os.path.join(self.linker_base_dir, 'bin'),
