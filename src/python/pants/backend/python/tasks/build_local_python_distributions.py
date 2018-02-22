@@ -23,7 +23,7 @@ from pants.base.exceptions import TargetDefinitionException, TaskError
 from pants.base.fingerprint_strategy import DefaultFingerprintStrategy
 from pants.build_graph.address import Address
 from pants.task.task import Task
-from pants.util.contextutil import environment_as, temporary_dir
+from pants.util.contextutil import environment_as
 from pants.util.dirutil import safe_mkdir
 from pants.util.memo import memoized_property
 
@@ -132,7 +132,6 @@ class BuildLocalPythonDistributions(Task):
 
     with environment_as(**sanitized_env):
       yield
-
 
   def _create_dist(self, dist_tgt, dist_target_dir, interpreter):
     """Create a .whl file for the specified python_distribution target."""
