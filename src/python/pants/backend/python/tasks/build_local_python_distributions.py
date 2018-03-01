@@ -12,7 +12,7 @@ from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 
-from pants.backend.native.subsystems.compiler import Compiler
+from pants.backend.native.subsystems.clang import Clang
 from pants.backend.python.python_requirement import PythonRequirement
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
 from pants.backend.python.tasks.pex_build_util import is_local_python_dist
@@ -49,11 +49,11 @@ class BuildLocalPythonDistributions(Task):
 
   @classmethod
   def subsystem_dependencies(cls):
-    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (Compiler.scoped(cls),)
+    return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (Clang.scoped(cls),)
 
   @memoized_property
-  def compiler_base_dir(self):
-    return Compiler.scoped_instance(self).select()
+  def clang_base_dir(self):
+    return Clang.scoped_instance(self).select()
 
   @property
   def cache_target_dirs(self):
@@ -103,18 +103,18 @@ class BuildLocalPythonDistributions(Task):
   def _sandboxed_setuppy(self):
     sanitized_env = os.environ.copy()
 
-    # use our compiler at the front of the path
+    # Use our compiler at the front of the path.
     # TODO: when we provide ld and stdlib headers, don't add the original path
     sanitized_env['PATH'] = ':'.join([
-      os.path.join(self.compiler_base_dir, 'bin'),
+      os.path.join(self.clang_base_dir, 'bin'),
       sanitized_env.get('PATH'),
     ])
 
     # TODO: figure out whether we actually should be compiling fat binaries.
-    # this line tells distutils to only compile for 64-bit archs -- if not, it
+    # This line tells distutils to only compile for 64-bit archs -- if not, it
     # will attempt to build a fat binary for 32- and 64-bit archs, which makes
     # clang invoke "lipo", an osx command which does not appear to be open
-    # source. see Lib/distutils/sysconfig.py and Lib/_osx_support.py in CPython.
+    # source. See Lib/distutils/sysconfig.py and Lib/_osx_support.py in CPython.
     sanitized_env['ARCHFLAGS'] = '-arch x86_64'
 
     env_vars_to_scrub = ['CC', 'CXX']
