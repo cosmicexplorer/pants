@@ -5,17 +5,14 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
-from pants.binaries.binary_tool import NativeTool
+from pants.binaries.binary_tool import Script
 
 
-class Protoc(NativeTool):
-  options_scope = 'protoc'
-  default_version = '2.4.1'
+class ClocBinary(Script):
+  # Note: Not in scope 'cloc' because that's the name of the singleton task that runs cloc.
+  options_scope = 'cloc-binary'
+  name = 'cloc'
+  default_version = '1.66'
 
-  replaces_scope = 'gen.protoc'
+  replaces_scope = 'cloc'
   replaces_name = 'version'
-
-  # 'protoc' is also the binary's filename.
-  @classmethod
-  def get_support_dir(cls):
-    return 'bin/protobuf'

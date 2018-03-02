@@ -1,6 +1,9 @@
 // Copyright 2017 Pants project contributors (see CONTRIBUTORS.md).
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+extern crate bazel_protos;
+extern crate tempdir;
+
 use std::error::Error;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt;
@@ -9,12 +12,13 @@ use std::path::{Path, PathBuf};
 
 use futures::future::{self, Future};
 use ordermap::OrderMap;
+use tempdir::TempDir;
 
 use boxfuture::{Boxable, BoxFuture};
 use context::Context;
 use core::{Failure, Key, Noop, TypeConstraint, Value, Variants, throw};
 use externs;
-use fs::{self, Dir, File, FileContent, Link, PathGlobs, PathStat, VFS};
+use fs::{self, Dir, File, FileContent, Link, PathGlobs, PathStat, StoreFileByDigest, VFS};
 use process_execution as process_executor;
 use hashing;
 use rule_graph;
@@ -43,7 +47,7 @@ fn was_required(failure: Failure) -> Failure {
   }
 }
 
-trait GetNode {
+pub trait GetNode {
   fn get<N: Node>(&self, node: N) -> NodeFuture<N::Output>;
 }
 
@@ -65,6 +69,12 @@ impl VFS<Failure> for Context {
       externs::create_exception(msg),
       "<pants native internals>".to_string(),
     )
+  }
+}
+
+impl StoreFileByDigest<Failure> for Context {
+  fn store_by_digest(&self, file: &File) -> BoxFuture<hashing::Digest, Failure> {
+    self.get(DigestFile(file.clone()))
   }
 }
 
@@ -282,17 +292,17 @@ impl Select {
       vec![
         self
           .get_snapshot(&context)
-          .and_then(move |snapshot|
+          .and_then(
+            move |snapshot|
             // Request the file contents of the Snapshot, and then store them.
-            context.core.snapshots.contents_for(&context.core.vfs, snapshot)
-              .then(move |files_content_res| match files_content_res {
-                Ok(files_content) => Ok(Snapshot::store_files_content(&context, &files_content)),
-                Err(e) => Err(throw(&e)),
-              }))
+            snapshot.contents(context.core.store.clone()).map_err(|e| throw(&e))
+              .map(move |files_content| Snapshot::store_files_content(&context, &files_content))
+          )
           .to_boxed(),
       ]
     } else if self.product() == &context.core.types.process_result {
-      let value = externs::val_for_id(self.subject.id());
+      let value = externs::val_for(&self.subject);
+
       let mut env: BTreeMap<String, String> = BTreeMap::new();
       let env_var_parts = externs::project_multi_strs(&value, "env");
       // TODO: Error if env_var_parts.len() % 2 != 0
@@ -302,17 +312,37 @@ impl Select {
           env_var_parts[2 * i + 1].clone(),
         );
       }
+
+      // TODO: Make this much less unwrap-happy with https://github.com/pantsbuild/pants/issues/5502
+
+      let fingerprint = externs::project_str(&value, "input_files_digest");
+      let digest_length = externs::project_str(&value, "digest_length");
+      let digest_length_as_usize = digest_length.parse::<usize>().unwrap();
+      let digest = hashing::Digest(
+        hashing::Fingerprint::from_hex_string(&fingerprint).unwrap(),
+        digest_length_as_usize,
+      );
+
       let request = process_executor::ExecuteProcessRequest {
         argv: externs::project_multi_strs(&value, "argv"),
         env: env,
+        input_files: digest,
       };
+      let tmpdir = TempDir::new("process-execution").unwrap();
+
+      context
+        .core
+        .store
+        .materialize_directory(tmpdir.path().to_owned(), digest)
+        .wait()
+        .unwrap();
       // TODO: this should run off-thread, and asynchronously
       // TODO: request the Node that invokes the process, rather than invoke directly
-      let result = process_executor::local::run_command_locally(request).unwrap();
+      let result = process_executor::local::run_command_locally(request, tmpdir.path()).unwrap();
       vec![
         future::ok(externs::unsafe_call(
           &context.core.types.construct_process_result,
-          &vec![
+          &[
             externs::store_bytes(&result.stdout),
             externs::store_bytes(&result.stderr),
             externs::store_i32(result.exit_code),
@@ -446,7 +476,7 @@ impl SelectDependencies {
     }
   }
 
-  fn get_dep(&self, context: &Context, dep_subject: &Value) -> NodeFuture<Value> {
+  fn get_dep(&self, context: &Context, dep_subject: Value) -> NodeFuture<Value> {
     // TODO: This method needs to consider whether the `dep_subject` is an Address,
     // and if so, attempt to parse Variants there. See:
     //   https://github.com/pantsbuild/pants/issues/4020
@@ -485,8 +515,8 @@ impl SelectDependencies {
             // The product and its dependency list are available: project them.
             let deps = future::join_all(
               externs::project_multi(&dep_product, &self.selector.field)
-                .iter()
-                .map(|dep_subject| self.get_dep(&context, &dep_subject))
+                .into_iter()
+                .map(|dep_subject| self.get_dep(&context, dep_subject))
                 .collect::<Vec<_>>(),
             );
             deps
@@ -611,8 +641,8 @@ impl SelectTransitive {
         match dep_product_res {
           Ok(dep_product) => {
             let subject_keys = externs::project_multi(&dep_product, &self.selector.field)
-              .iter()
-              .map(|subject| externs::key_for(&subject))
+              .into_iter()
+              .map(|subject| externs::key_for(subject))
               .collect();
 
             let init = TransitiveExpansion {
@@ -642,7 +672,7 @@ impl SelectTransitive {
                   expansion.todo.extend(
                     todo_candidates
                       .into_iter()
-                      .map(|dep| externs::key_for(&dep))
+                      .map(|dep| externs::key_for(dep))
                       .filter(|dep_key| !outputs.contains_key(dep_key))
                       .collect::<Vec<_>>(),
                   );
@@ -728,7 +758,7 @@ impl SelectProjection {
             );
             Select {
               selector: selectors::Select::without_variant(self.selector.product),
-              subject: externs::key_for(&projected_subject),
+              subject: externs::key_for(projected_subject),
               variants: self.variants.clone(),
               // NB: Unlike SelectDependencies and SelectTransitive, we don't need to filter by
               // subject here, because there is only one projected type.
@@ -762,12 +792,24 @@ pub struct ProcessResult(process_executor::ExecuteProcessResult);
 impl Node for ExecuteProcess {
   type Output = ProcessResult;
 
-  fn run(self, _: Context) -> NodeFuture<ProcessResult> {
+  fn run(self, context: Context) -> NodeFuture<ProcessResult> {
     let request = self.0.clone();
+
+    // TODO: Make this much less unwrap-happy with https://github.com/pantsbuild/pants/issues/5502
+
+    let tmpdir = TempDir::new("process-execution").unwrap();
+    context
+      .core
+      .store
+      .materialize_directory(tmpdir.path().to_owned(), request.input_files)
+      .wait()
+      .unwrap();
     // TODO: this should run off-thread, and asynchronously
     future::ok(ProcessResult(
-      process_executor::local::run_command_locally(request)
-        .unwrap(),
+      process_executor::local::run_command_locally(
+        request,
+        tmpdir.path(),
+      ).unwrap(),
     )).to_boxed()
   }
 }
@@ -814,7 +856,7 @@ impl From<ReadLink> for NodeKey {
 /// A Node that represents reading a file and fingerprinting its contents.
 ///
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct DigestFile(File);
+pub struct DigestFile(pub File);
 
 impl Node for DigestFile {
   type Output = hashing::Digest;
@@ -846,31 +888,6 @@ impl Node for DigestFile {
 impl From<DigestFile> for NodeKey {
   fn from(n: DigestFile) -> Self {
     NodeKey::DigestFile(n)
-  }
-}
-
-///
-/// A Node that represents consuming the stat for some path.
-///
-/// NB: Because the `Scandir` operation gets the stats for a parent directory in a single syscall,
-/// this operation results in no data, and is simply a placeholder for `Snapshot` Nodes to use to
-/// declare a dependency on the existence/content of a particular path. This makes them more error
-/// prone, unfortunately.
-///
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct Stat(PathBuf);
-
-impl Node for Stat {
-  type Output = ();
-
-  fn run(self, _: Context) -> NodeFuture<()> {
-    future::ok(()).to_boxed()
-  }
-}
-
-impl From<Stat> for NodeKey {
-  fn from(n: Stat) -> Self {
-    NodeKey::Stat(n)
   }
 }
 
@@ -923,33 +940,17 @@ pub struct Snapshot {
 
 impl Snapshot {
   fn create(context: Context, path_globs: PathGlobs) -> NodeFuture<fs::Snapshot> {
-    // Recursively expand PathGlobs into PathStats while tracking their dependencies.
+    // Recursively expand PathGlobs into PathStats.
+    // We rely on Context::expand tracking dependencies for scandirs,
+    // and fs::Snapshot::from_path_stats tracking dependencies for file digests.
     context
       .expand(path_globs)
-      .then(move |path_stats_res| match path_stats_res {
-        Ok(path_stats) => {
-          // Declare dependencies on the relevant Stats, and then create a Snapshot.
-          let stats = future::join_all(
-            path_stats
-              .iter()
-              .map(
-                |path_stat| context.get(Stat(path_stat.path().to_owned())), // for recording only
-              )
-              .collect::<Vec<_>>(),
-          );
-          // And then create a Snapshot.
-          stats
-            .and_then(move |_| {
-              context
-                .core
-                .snapshots
-                .create(&context.core.vfs, path_stats)
-                .map_err(move |e| throw(&format!("Snapshot failed: {}", e)))
-            })
-            .to_boxed()
-        }
-        Err(e) => err(throw(&format!("PathGlobs expansion failed: {:?}", e))),
+      .map_err(|e| format!("PlatGlobs expansion failed: {:?}", e))
+      .and_then(move |path_stats| {
+        fs::Snapshot::from_path_stats(context.core.store.clone(), context.clone(), path_stats)
+          .map_err(move |e| format!("Snapshot failed: {}", e))
       })
+      .map_err(|e| throw(&e))
       .to_boxed()
   }
 
@@ -974,8 +975,9 @@ impl Snapshot {
       .collect();
     externs::unsafe_call(
       &context.core.types.construct_snapshot,
-      &vec![
-        externs::store_bytes(&item.fingerprint.0),
+      &[
+        externs::store_bytes(&(item.digest.0).to_hex().as_bytes()),
+        externs::store_i32((item.digest.1 as i32)),
         externs::store_list(path_stats.iter().collect(), false),
       ],
     )
@@ -986,12 +988,12 @@ impl Snapshot {
   }
 
   fn store_dir(context: &Context, item: &Dir) -> Value {
-    let args = vec![Self::store_path(item.0.as_path())];
+    let args = [Self::store_path(item.0.as_path())];
     externs::unsafe_call(&context.core.types.construct_dir, &args)
   }
 
   fn store_file(context: &Context, item: &File) -> Value {
-    let args = vec![Self::store_path(item.path.as_path())];
+    let args = [Self::store_path(item.path.as_path())];
     externs::unsafe_call(&context.core.types.construct_file, &args)
   }
 
@@ -1010,7 +1012,7 @@ impl Snapshot {
   fn store_file_content(context: &Context, item: &FileContent) -> Value {
     externs::unsafe_call(
       &context.core.types.construct_file_content,
-      &vec![
+      &[
         Self::store_path(&item.path),
         externs::store_bytes(&item.content),
       ],
@@ -1024,7 +1026,7 @@ impl Snapshot {
       .collect();
     externs::unsafe_call(
       &context.core.types.construct_files_content,
-      &vec![externs::store_list(entries.iter().collect(), false)],
+      &[externs::store_list(entries.iter().collect(), false)],
     )
   }
 }
@@ -1117,7 +1119,7 @@ impl Node for Task {
     let task = self.task.clone();
     deps
       .then(move |deps_result| match deps_result {
-        Ok(deps) => externs::call(&externs::val_for_id(task.func.0), &deps),
+        Ok(deps) => externs::call(&externs::val_for(&task.func.0), &deps),
         Err(err) => Err(err),
       })
       .to_boxed()
@@ -1136,7 +1138,6 @@ pub enum NodeKey {
   ExecuteProcess(ExecuteProcess),
   ReadLink(ReadLink),
   Scandir(Scandir),
-  Stat(Stat),
   Select(Select),
   Snapshot(Snapshot),
   Task(Task),
@@ -1145,17 +1146,16 @@ pub enum NodeKey {
 impl NodeKey {
   pub fn format(&self) -> String {
     fn keystr(key: &Key) -> String {
-      externs::id_to_str(key.id())
+      externs::key_to_str(&key)
     }
     fn typstr(tc: &TypeConstraint) -> String {
-      externs::id_to_str(tc.0)
+      externs::key_to_str(&tc.0)
     }
     match self {
       &NodeKey::DigestFile(ref s) => format!("DigestFile({:?})", s.0),
       &NodeKey::ExecuteProcess(ref s) => format!("ExecuteProcess({:?}", s.0),
       &NodeKey::ReadLink(ref s) => format!("ReadLink({:?})", s.0),
       &NodeKey::Scandir(ref s) => format!("Scandir({:?})", s.0),
-      &NodeKey::Stat(ref s) => format!("Stat({:?})", s.0),
       &NodeKey::Select(ref s) => {
         format!(
           "Select({}, {})",
@@ -1166,7 +1166,7 @@ impl NodeKey {
       &NodeKey::Task(ref s) => {
         format!(
           "Task({}, {}, {})",
-          externs::id_to_str(s.task.func.0),
+          externs::key_to_str(&s.task.func.0),
           keystr(&s.subject),
           typstr(&s.product)
         )
@@ -1177,7 +1177,7 @@ impl NodeKey {
 
   pub fn product_str(&self) -> String {
     fn typstr(tc: &TypeConstraint) -> String {
-      externs::id_to_str(tc.0)
+      externs::key_to_str(&tc.0)
     }
     match self {
       &NodeKey::ExecuteProcess(..) => "ProcessResult".to_string(),
@@ -1187,7 +1187,6 @@ impl NodeKey {
       &NodeKey::DigestFile(..) => "DigestFile".to_string(),
       &NodeKey::ReadLink(..) => "LinkDest".to_string(),
       &NodeKey::Scandir(..) => "DirectoryListing".to_string(),
-      &NodeKey::Stat(..) => "Stat".to_string(),
     }
   }
 
@@ -1196,10 +1195,18 @@ impl NodeKey {
   ///
   pub fn fs_subject(&self) -> Option<&Path> {
     match self {
+      &NodeKey::DigestFile(ref s) => Some(s.0.path.as_path()),
       &NodeKey::ReadLink(ref s) => Some((s.0).0.as_path()),
       &NodeKey::Scandir(ref s) => Some((s.0).0.as_path()),
-      &NodeKey::Stat(ref s) => Some(s.0.as_path()),
-      _ => None,
+
+      // Not FS operations:
+      // Explicitly listed so that if people add new NodeKeys they need to consider whether their
+      // NodeKey represents an FS operation, and accordingly whether they need to add it to the
+      // above list or the below list.
+      &NodeKey::ExecuteProcess { .. } |
+      &NodeKey::Select { .. } |
+      &NodeKey::Snapshot { .. } |
+      &NodeKey::Task { .. } => None,
     }
   }
 }
@@ -1212,7 +1219,6 @@ impl Node for NodeKey {
       NodeKey::DigestFile(n) => n.run(context).map(|v| v.into()).to_boxed(),
       NodeKey::ExecuteProcess(n) => n.run(context).map(|v| v.into()).to_boxed(),
       NodeKey::ReadLink(n) => n.run(context).map(|v| v.into()).to_boxed(),
-      NodeKey::Stat(n) => n.run(context).map(|v| v.into()).to_boxed(),
       NodeKey::Scandir(n) => n.run(context).map(|v| v.into()).to_boxed(),
       NodeKey::Select(n) => n.run(context).map(|v| v.into()).to_boxed(),
       NodeKey::Snapshot(n) => n.run(context).map(|v| v.into()).to_boxed(),

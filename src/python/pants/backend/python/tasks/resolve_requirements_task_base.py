@@ -6,6 +6,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 import os
+from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 from pex.pex import PEX
@@ -33,9 +34,10 @@ class ResolveRequirementsTaskBase(Task):
     round_manager.require_data(PythonInterpreter)
     round_manager.optional_product(PythonRequirementLibrary)  # For local dists.
 
-  def resolve_requirements(self, req_libs):
+  def resolve_requirements(self, interpreter, req_libs):
     """Requirements resolution for PEX files.
 
+    :param interpreter: Resolve against this :class:`PythonInterpreter`.
     :param req_libs: A list of :class:`PythonRequirementLibrary` targets to resolve.
     :returns: a PEX containing target requirements and any specified python dist targets.
     """
@@ -49,7 +51,6 @@ class ResolveRequirementsTaskBase(Task):
       else:
         target_set_id = 'no_targets'
 
-      interpreter = self.context.products.get_data(PythonInterpreter)
       path = os.path.realpath(os.path.join(self.workdir, str(interpreter.identity), target_set_id))
       # Note that we check for the existence of the directory, instead of for invalid_vts,
       # to cover the empty case.
@@ -80,8 +81,12 @@ class ResolveRequirementsTaskBase(Task):
     return PEX(path, interpreter=interpreter)
 
   @classmethod
-  def merge_pexes(cls, path, pex_info, interpreter, pexes, interpeter_constraints=None):
-    """Generates a merged pex at path."""
+  @contextmanager
+  def merged_pex(cls, path, pex_info, interpreter, pexes, interpeter_constraints=None):
+    """Yields a pex builder at path with the given pexes already merged.
+
+    :rtype: :class:`pex.pex_builder.PEXBuilder`
+    """
     pex_paths = [pex.path() for pex in pexes if pex]
     if pex_paths:
       pex_info = pex_info.copy()
@@ -92,4 +97,10 @@ class ResolveRequirementsTaskBase(Task):
       if interpeter_constraints:
         for constraint in interpeter_constraints:
           builder.add_interpreter_constraint(constraint)
+      yield builder
+
+  @classmethod
+  def merge_pexes(cls, path, pex_info, interpreter, pexes, interpeter_constraints=None):
+    """Generates a merged pex at path."""
+    with cls.merged_pex(path, pex_info, interpreter, pexes, interpeter_constraints) as builder:
       builder.freeze()

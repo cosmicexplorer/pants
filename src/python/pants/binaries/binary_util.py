@@ -5,20 +5,23 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
+import hashlib
 import logging
 import os
 import posixpath
+from collections import namedtuple
 from contextlib import contextmanager
 
 from twitter.common.collections import OrderedSet
 
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
-from pants.fs.archive import archiver
+from pants.base.hash_utils import hash_file
+from pants.fs.archive import archiver as create_archiver
 from pants.net.http.fetcher import Fetcher
 from pants.subsystem.subsystem import Subsystem
 from pants.util.contextutil import temporary_file
-from pants.util.dirutil import chmod_plus_x, safe_delete, safe_open
+from pants.util.dirutil import chmod_plus_x, safe_concurrent_creation, safe_open
 from pants.util.osutil import get_os_id
 
 
@@ -86,6 +89,10 @@ class BinaryUtil(object):
     """Indicates that no urls were specified in pants.ini."""
     pass
 
+  class BinaryFileSpec(namedtuple('BinaryFileSpec', ['filename', 'checksum', 'digest'])):
+    def __new__(cls, filename, checksum=None, digest=hashlib.sha1()):
+      return super(BinaryUtil.BinaryFileSpec, cls).__new__(cls, filename, checksum, digest)
+
   def _select_binary_base_path(self, supportdir, version, name, uname_func=None):
     """Calculate the base path.
 
@@ -136,8 +143,8 @@ class BinaryUtil(object):
     """Fetches a file, unpacking it if necessary."""
     if archive_type is None:
       return self._select_file(supportdir, version, name, platform_dependent)
-    selected_archiver = archiver(archive_type)
-    return self._select_archive(supportdir, version, name, platform_dependent, selected_archiver)
+    archiver = create_archiver(archive_type)
+    return self._select_archive(supportdir, version, name, platform_dependent, archiver)
 
   def _select_file(self, supportdir, version, name, platform_dependent):
     """Generates a path to request a file and fetches the file located at that path.
@@ -169,9 +176,10 @@ class BinaryUtil(object):
     """
     full_name = '{}.{}'.format(name, archiver.extension)
     downloaded_file = self._select_file(supportdir, version, full_name, platform_dependent)
-    # use filename without extension as the directory name
+    # Use filename without rightmost extension as the directory name.
     unpacked_dirname, _ = os.path.splitext(downloaded_file)
-    archiver.extract(downloaded_file, unpacked_dirname)
+    if not os.path.exists(unpacked_dirname):
+      archiver.extract(downloaded_file, unpacked_dirname)
     return unpacked_dirname
 
   def _binary_path_to_fetch(self, supportdir, version, name, platform_dependent):
@@ -230,16 +238,38 @@ class BinaryUtil(object):
     bootstrap_dir = os.path.realpath(os.path.expanduser(self._pants_bootstrapdir))
     bootstrapped_binary_path = os.path.join(bootstrap_dir, binary_path)
     if not os.path.exists(bootstrapped_binary_path):
-      downloadpath = bootstrapped_binary_path + '~'
-      try:
+      with safe_concurrent_creation(bootstrapped_binary_path) as downloadpath:
         with self._select_binary_stream(name, binary_path) as stream:
           with safe_open(downloadpath, 'wb') as bootstrapped_binary:
             bootstrapped_binary.write(stream())
           os.rename(downloadpath, bootstrapped_binary_path)
           chmod_plus_x(bootstrapped_binary_path)
-      finally:
-        safe_delete(downloadpath)
 
     logger.debug('Selected {binary} binary bootstrapped to: {path}'
                  .format(binary=name, path=bootstrapped_binary_path))
     return bootstrapped_binary_path
+
+  @staticmethod
+  def _compare_file_checksums(filepath, checksum=None, digest=None):
+    digest = digest or hashlib.sha1()
+
+    if os.path.isfile(filepath) and checksum:
+      return hash_file(filepath, digest=digest) == checksum
+
+    return os.path.isfile(filepath)
+
+  def is_bin_valid(self, basepath, binary_file_specs=()):
+    """Check if this bin path is valid.
+
+    :param string basepath: The absolute path where the binaries are stored under.
+    :param BinaryFileSpec[] binary_file_specs: List of filenames and checksum for validation.
+    """
+    if not os.path.isdir(basepath):
+      return False
+
+    for f in binary_file_specs:
+      filepath = os.path.join(basepath, f.filename)
+      if not self._compare_file_checksums(filepath, f.checksum, f.digest):
+        return False
+
+    return True

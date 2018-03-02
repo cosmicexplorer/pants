@@ -6,6 +6,7 @@ mod core;
 mod externs;
 mod graph;
 mod handles;
+mod interning;
 mod nodes;
 mod rule_graph;
 mod scheduler;
@@ -20,9 +21,12 @@ extern crate futures;
 extern crate hashing;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate log;
 extern crate ordermap;
 extern crate petgraph;
 extern crate process_execution;
+extern crate tempdir;
 
 use std::ffi::CStr;
 use std::fs::File;
@@ -36,10 +40,10 @@ use std::path::{Path, PathBuf};
 use context::Core;
 use core::{Failure, Function, Key, TypeConstraint, TypeId, Value};
 use externs::{Buffer, BufferBuffer, CloneValExtern, DropHandlesExtern, CreateExceptionExtern,
-              ExternContext, Externs, IdToStrExtern, CallExtern, EvalExtern, LogExtern,
-              KeyForExtern, ProjectExtern, ProjectMultiExtern, ProjectIgnoringTypeExtern,
+              ExternContext, Externs, TypeToStrExtern, CallExtern, EvalExtern, LogExtern,
+              IdentifyExtern, ProjectExtern, ProjectMultiExtern, ProjectIgnoringTypeExtern,
               PyResult, SatisfiedByExtern, StoreI32Extern, SatisfiedByTypeExtern, StoreListExtern,
-              StoreBytesExtern, TypeIdBuffer, ValForExtern, ValToStrExtern};
+              StoreBytesExtern, TypeIdBuffer, EqualsExtern, ValToStrExtern};
 use rule_graph::{GraphMaker, RuleGraph};
 use scheduler::{ExecutionRequest, RootResult, Scheduler};
 use tasks::Tasks;
@@ -121,11 +125,11 @@ pub extern "C" fn externs_set(
   log: LogExtern,
   call: CallExtern,
   eval: EvalExtern,
-  key_for: KeyForExtern,
-  val_for: ValForExtern,
+  identify: IdentifyExtern,
+  equals: EqualsExtern,
   clone_val: CloneValExtern,
   drop_handles: DropHandlesExtern,
-  id_to_str: IdToStrExtern,
+  type_to_str: TypeToStrExtern,
   val_to_str: ValToStrExtern,
   satisfied_by: SatisfiedByExtern,
   satisfied_by_type: SatisfiedByTypeExtern,
@@ -143,11 +147,11 @@ pub extern "C" fn externs_set(
     log,
     call,
     eval,
-    key_for,
-    val_for,
+    identify,
+    equals,
     clone_val,
     drop_handles,
-    id_to_str,
+    type_to_str,
     val_to_str,
     satisfied_by,
     satisfied_by_type,
@@ -160,6 +164,16 @@ pub extern "C" fn externs_set(
     create_exception,
     py_str_type,
   ));
+}
+
+#[no_mangle]
+pub extern "C" fn externs_key_for(value: Value) -> Key {
+  externs::key_for(value)
+}
+
+#[no_mangle]
+pub extern "C" fn externs_val_for(key: Key) -> Value {
+  externs::val_for(&key)
 }
 
 ///
@@ -519,10 +533,10 @@ pub extern "C" fn set_panic_handler() {
       panic_str.push_str(&panic_location_str);
     }
 
-    externs::log(externs::LogLevel::Critical, &panic_str);
+    error!("{}", panic_str);
 
     let panic_file_bug_str = "Please file a bug at https://github.com/pantsbuild/pants/issues.";
-    externs::log(externs::LogLevel::Critical, &panic_file_bug_str);
+    error!("{}", panic_file_bug_str);
   }));
 }
 
@@ -533,7 +547,7 @@ pub extern "C" fn garbage_collect_store(scheduler_ptr: *mut Scheduler) {
     .store
     .garbage_collect() {
     Ok(_) => {}
-    Err(err) => externs::log(externs::LogLevel::Critical, &err),
+    Err(err) => error!("{}", err),
   });
 }
 
@@ -543,7 +557,7 @@ pub extern "C" fn lease_files_in_graph(scheduler_ptr: *mut Scheduler) {
     let digests = scheduler.core.graph.all_digests();
     match scheduler.core.store.lease_all(digests.iter()) {
       Ok(_) => {}
-      Err(err) => externs::log(externs::LogLevel::Critical, &err),
+      Err(err) => error!("{}", &err),
     }
   });
 }
