@@ -99,6 +99,8 @@ class BuildLocalPythonDistributions(Task):
                                   src_relative_to_target_base)
       shutil.copyfile(abs_src_path, src_rel_to_results_dir)
 
+  # FIXME: remove as much of the environment manipulation as possible and
+  # replace with other modifications to the setup.py invocation (e.g. cli args!)
   @contextmanager
   def _sandboxed_setuppy(self):
     sanitized_env = os.environ.copy()
