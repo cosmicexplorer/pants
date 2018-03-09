@@ -8,15 +8,13 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 import hashlib
 import os
 import re
+from abc import abstractmethod
 
 from pants.binaries.binary_tool import BinaryToolBase
 from pants.engine.rules import rule
 from pants.subsystem.subsystem import Subsystem
 from pants.util.memo import memoized_method, memoized_property
 from pants.util.objects import datatype
-
-
-class HostInstalledToolBootstrapError(Exception): pass
 
 
 # TODO: convert this to v2 when #??? is fixed
@@ -37,8 +35,7 @@ class HostInstalledToolBase(BinaryToolBase):
   default_tool_path = None
 
   # If the toolchain is unavailable on the current host, display these simple,
-  # complete instructions to obtain the toolchain.
-  # TODO: briefly note how to file an issue on github if the instructions fail!
+  # complete instructions to obtain the toolchain. Must be a string.
   complete_install_instructions = None
 
   @classmethod
@@ -54,19 +51,50 @@ class HostInstalledToolBase(BinaryToolBase):
   def digest(self):
     return hashlib.sha1()
 
+  class BootstrapError(Exception): pass
+
+  # Subclasses should override this and call super() beforehand. This validation
+  # is memoized, so the validation may contain e.g. filesystem calls.
   def validate_host_tool(self, host_path):
     if os.path.isfile(host_path) and os.access(host_path, os.X_OK):
       return host_path
-    raise HostInstalledToolBootstrapError(
-      "Path '{}' must be an executable file on the host filesystem"
+    raise self.BootstrapError(
+      "Path '{}' must be an executable file on the host filesystem."
       .format(host_path))
 
   def host_tool_path(self):
     return self.get_options().host_filesystem_path
 
+  INSTALL_ERR_WITH_INSTRUCTIONS_BOILERPLATE = """Bootstrap of tool '{name}' failed: {error_desc}
+
+The Pants '{name}' tool requires performing a separate installation process
+(described below) before it can be used on this platform. If the below
+instructions fail, please determine which project owns the '{name}' tool and
+file an issue!
+
+<tell them to use pants github new issue link (provide that) if it's ours!>
+
+{install_instrs}
+"""
+
+  def _make_install_instructions(self):
+    return self.complete_install_instructions
+
+  def _installation_required_err_msg(self, name, error_desc)
+    return self.INSTALL_ERR_WITH_INSTRUCTIONS_BOILERPLATE.format(
+      name=name,
+      error_desc=error_desc,
+      install_instrs=self._make_install_instructions())
+
+  class UserFriendlyBootstrapError(Exception): pass
+
   @memoized_method
   def _get_host_tool(self):
-    return self.validate_host_tool(self.host_tool_path())
+    try:
+      return self.validate_host_tool(self.host_tool_path())
+    except self.BootstrapError as e:
+      msg = self._installation_required_err_msg(self._get_name(), e.message)
+      raise self.UserFriendlyBootstrapError(msg, e)
 
   @memoized_method
   def version(self, context=None):
