@@ -5,6 +5,8 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
+from abc import abstractmethod
+
 from pants.binaries.binary_util import BinaryUtil
 from pants.subsystem.subsystem import Subsystem
 from pants.util.memo import memoized_method, memoized_property
@@ -17,15 +19,51 @@ class BinaryToolBase(Subsystem):
 
   :API: public
   """
+  # Subclasses may set this to the tool name as understood by BinaryUtil.
+  # If unset, it defaults to the value of options_scope.
+  name = None
+
+  @classmethod
+  def subsystem_dependencies(cls):
+    return super(BinaryToolBase, cls).subsystem_dependencies() + (BinaryUtil.Factory,)
+
+  @memoized_property
+  def _binary_util(self):
+    return BinaryUtil.Factory.create()
+
+  @abstractmethod
+  def version(self, context=None):
+    """blah blah description context arg whatever"""
+
+  @abstractmethod
+  def select_for_version(self, version):
+    """???"""
+
+  @memoized_method
+  def select(self, context=None):
+    """Returns the path to the specified binary tool.
+
+    # TODO: Once we're migrated, get rid of the context arg.
+
+    :API: public
+    """
+    return self.select_for_version(self.version(context))
+
+  @classmethod
+  def get_support_dir(cls):
+    return 'bin/{}'.format(cls._get_name())
+
+  @classmethod
+  def _get_name(cls):
+    return cls.name or cls.options_scope
+
+
+class ProvidedBinaryTool(BinaryToolBase):
   # Subclasses must set these to appropriate values for the tool they define.
   # They must also set options_scope appropriately.
   platform_dependent = None
   archive_type = None  # See pants.fs.archive.archive for valid string values.
   default_version = None
-
-  # Subclasses may set this to the tool name as understood by BinaryUtil.
-  # If unset, it defaults to the value of options_scope.
-  name = None
 
   # Subclasses may set this to a suffix (e.g., '.pex') to add to the computed remote path.
   # Note that setting archive_type will add an appropriate archive suffix after this suffix.
@@ -40,12 +78,8 @@ class BinaryToolBase(Subsystem):
   extra_version_option_kwargs = None
 
   @classmethod
-  def subsystem_dependencies(cls):
-    return super(BinaryToolBase, cls).subsystem_dependencies() + (BinaryUtil.Factory,)
-
-  @classmethod
   def register_options(cls, register):
-    super(BinaryToolBase, cls).register_options(register)
+    super(ProvidedBinaryTool, cls).register_options(register)
 
     version_registration_kwargs = {
       'type': str,
@@ -62,19 +96,6 @@ class BinaryToolBase(Subsystem):
     if 'fingerprint' not in version_registration_kwargs:
       version_registration_kwargs['fingerprint'] = True
     register('--version', **version_registration_kwargs)
-
-  @memoized_method
-  def select(self, context=None):
-    """Returns the path to the specified binary tool.
-
-    If replaces_scope and replaces_name are defined, then the caller must pass in
-    a context, otherwise no context should be passed.
-
-    # TODO: Once we're migrated, get rid of the context arg.
-
-    :API: public
-    """
-    return self._select_for_version(self.version(context))
 
   @memoized_method
   def version(self, context=None):
@@ -94,16 +115,8 @@ class BinaryToolBase(Subsystem):
         return old_opts.get(self.replaces_name)
     return self.get_options().version
 
-  @memoized_property
-  def _binary_util(self):
-    return BinaryUtil.Factory.create()
-
-  @classmethod
-  def get_support_dir(cls):
-    return 'bin/{}'.format(cls._get_name())
-
   @memoized_method
-  def _select_for_version(self, version):
+  def select_for_version(self, version):
     return self._binary_util.select(
       supportdir=self.get_support_dir(),
       version=version,
@@ -111,12 +124,8 @@ class BinaryToolBase(Subsystem):
       platform_dependent=self.platform_dependent,
       archive_type=self.archive_type)
 
-  @classmethod
-  def _get_name(cls):
-    return cls.name or cls.options_scope
 
-
-class NativeTool(BinaryToolBase):
+class NativeTool(ProvidedBinaryTool):
   """A base class for native-code tools.
 
   :API: public
@@ -124,7 +133,7 @@ class NativeTool(BinaryToolBase):
   platform_dependent = True
 
 
-class Script(BinaryToolBase):
+class Script(ProvidedBinaryTool):
   """A base class for platform-independent scripts.
 
   :API: public

@@ -147,11 +147,8 @@ class BinaryUtil(object):
     archiver = create_archiver(archive_type)
     return self._select_archive(supportdir, version, name, platform_dependent, archiver)
 
-  def select_host_installed(self, supportdir, name, host_binary_path, digest=None):
-    digest = digest or hashlib.sha1()
-    host_binary_fingerprint = hash_file(host_binary_fingerprint, digest=digest)
-    link_path = self._select_binary_base_path(
-      supportdir, host_binary_fingerprint, name)
+  def select_host_installed(self, supportdir, name, version, host_binary_path):
+    link_path = self._select_binary_base_path(supportdir, version, name)
     self._link_host_binary(name, link_path, host_binary_path)
 
   def _select_file(self, supportdir, version, name, platform_dependent):
