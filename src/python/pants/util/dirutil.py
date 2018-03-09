@@ -342,6 +342,30 @@ def chmod_plus_x(path):
   os.chmod(path, path_mode)
 
 
+def absolute_symlink_executable_idempotent(source_path, link_path):
+  if not os.path.isabs(source_path):
+    raise ValueError("Path for source : {} must be absolute".format(source_path))
+  if not os.path.isabs(link_path):
+    raise ValueError("Path for link : {} must be absolute".format(link_path))
+
+  if not os.path.isfile(source_path):
+    raise ValueError("Path for source : {} must name an existing file".format(source_path))
+  if not os.access(source_path, os.X_OK):
+    raise ValueError("Path for source : {} must name an executable file".format(source_path))
+
+  if os.path.exists(link_path):
+    if not os.path.islink(link_path):
+      raise ValueError("Path for link already exists and is not a link: {}".format(link_path))
+    dest_path = os.readlink(link_path)
+    if dest_path != source_path:
+      raise ValueError("Path for link already exists and points elsewhere: "
+                       "{} -> {}".format(link_path, dest_path))
+
+  safe_mkdir_for(link_path)
+  os.symlink(source_path, link_path)
+  return link_path
+
+
 def absolute_symlink(source_path, target_path):
   """Create a symlink at target pointing to source using the absolute path.
 

@@ -21,7 +21,8 @@ from pants.fs.archive import archiver as create_archiver
 from pants.net.http.fetcher import Fetcher
 from pants.subsystem.subsystem import Subsystem
 from pants.util.contextutil import temporary_file
-from pants.util.dirutil import chmod_plus_x, safe_concurrent_creation, safe_open
+from pants.util.dirutil import absolute_symlink_executable_idempotent, chmod_plus_x, safe_concurrent_creation, safe_open
+from pants.util.memo import memoized_property
 from pants.util.osutil import get_os_id
 
 
@@ -146,6 +147,13 @@ class BinaryUtil(object):
     archiver = create_archiver(archive_type)
     return self._select_archive(supportdir, version, name, platform_dependent, archiver)
 
+  def select_host_installed(self, supportdir, name, host_binary_path, digest=None):
+    digest = digest or hashlib.sha1()
+    host_binary_fingerprint = hash_file(host_binary_fingerprint, digest=digest)
+    link_path = self._select_binary_base_path(
+      supportdir, host_binary_fingerprint, name)
+    self._link_host_binary(name, link_path, host_binary_path)
+
   def _select_file(self, supportdir, version, name, platform_dependent):
     """Generates a path to request a file and fetches the file located at that path.
 
@@ -234,9 +242,20 @@ class BinaryUtil(object):
     if not downloaded_successfully:
       raise self.BinaryNotFound(binary_path, accumulated_errors)
 
+  @memoized_property
+  def _real_bootstrap_dir(self):
+    return os.path.realpath(os.path.expanduser(self._pants_bootstrapdir))
+
+  def _link_host_binary(self, name, link_path, host_binary_path):
+    bootstrapped_link_path = os.path.join(self._real_bootstrap_dir, binary_path)
+    absolute_symlink_executable_idempotent(host_binary_path, bootstrapped_link_path)
+
+    logger.debug("Selected '{}' binary from host-installed path '{}'"
+                 .format(name, host_binary_path))
+    return bootstrapped_link_path
+
   def _fetch_binary(self, name, binary_path):
-    bootstrap_dir = os.path.realpath(os.path.expanduser(self._pants_bootstrapdir))
-    bootstrapped_binary_path = os.path.join(bootstrap_dir, binary_path)
+    bootstrapped_binary_path = os.path.join(self._real_bootstrap_dir, binary_path)
     if not os.path.exists(bootstrapped_binary_path):
       with safe_concurrent_creation(bootstrapped_binary_path) as downloadpath:
         with self._select_binary_stream(name, binary_path) as stream:
