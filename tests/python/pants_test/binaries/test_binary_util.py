@@ -12,13 +12,14 @@ import mock
 
 from pants.binaries.binary_util import BinaryUtilPrivate
 from pants.net.http.fetcher import Fetcher
+from pants.option.scope import GLOBAL_SCOPE
 from pants.util.contextutil import temporary_dir
 from pants.util.dirutil import safe_open
 from pants_test.base_test import BaseTest
 
 
 class BinaryUtilTest(BaseTest):
-  """Tests binary_util's pants_support_baseurls handling."""
+  """Tests binary_util's binaries_baseurls handling."""
 
   class MapFetcher(object):
     """Class which pretends to be a pants.net.http.Fetcher, but is actually a dictionary."""
@@ -76,6 +77,17 @@ class BinaryUtilTest(BaseTest):
                                                          name='protoc')
       with binary_util._select_binary_stream(name='protoc', binary_path=binary_path):
         self.fail('Expected acquisition of the stream to raise.')
+
+  def test_factory_create_with_no_bases(self):
+    """Tests exception handling  if build support urls are improperly specified."""
+    self.context(for_subsystems=[BinaryUtilPrivate.Factory], options={
+      GLOBAL_SCOPE: {
+        'binaries_baseurls': [],
+      },
+    })
+    with self.assertRaises(BinaryUtilPrivate.NoBaseUrlsError):
+      binary_util = BinaryUtilPrivate.Factory.create()
+      self.fail('Expected creation of BinaryUtil to raise.')
 
   def test_support_url_multi(self):
     """Tests to make sure existing base urls function as expected."""

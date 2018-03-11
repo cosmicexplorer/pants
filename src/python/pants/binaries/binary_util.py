@@ -63,12 +63,15 @@ class BinaryUtilPrivate(object):
     def _create_for_cls(cls, binary_util_cls):
       # NB: create is a class method to ~force binary fetch location to be global.
       options = cls.global_instance().get_options()
+      baseurls = options.binaries_baseurls
+      if not baseurls:
+        raise binary_util_cls.NoBaseUrlsError(
+          'No urls are defined for the --binaries-baseurls option.')
       return binary_util_cls(
-        options.binaries_baseurls,
+        baseurls,
         options.binaries_fetch_timeout_secs,
         options.pants_bootstrapdir,
-        options.binaries_path_by_id
-      )
+        options.binaries_path_by_id)
 
   class MissingMachineInfo(TaskError):
     """Indicates that pants was unable to map this machine's OS to a binary path prefix."""
@@ -200,9 +203,6 @@ class BinaryUtilPrivate(object):
       and name could be found for the current platform.
     """
 
-    if not self._baseurls:
-      raise self.NoBaseUrlsError(
-          'No urls are defined for the --pants-support-baseurls option.')
     downloaded_successfully = False
     accumulated_errors = []
     for baseurl in OrderedSet(self._baseurls):  # De-dup URLS: we only want to try each URL once.
