@@ -352,6 +352,7 @@ class Options(object):
         # Note that we read the value from scope, even if the registration was on an enclosing
         # scope, to get the right value for recursive options (and because this mirrors what
         # option-using code does).
+        # TODO: may need to fix this option fingerprinting code too?
         val = self.for_scope(bottom_scope)[kwargs['dest']]
         # If we have a list then we delegate to the fingerprinting implementation of the members.
         if is_list_option(kwargs):

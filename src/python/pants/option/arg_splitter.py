@@ -236,12 +236,17 @@ class ArgSplitter(object):
     return flags
 
   def _descope_flag(self, flag, default_scope):
-    """If the flag is prefixed by its scope, in the old style, extract the scope.
+    """If a flag is prefixed by one or more scopes, extract them.
 
-    Otherwise assume it belongs to default_scope.
+    Uses `default_scope` if no prefix scopes could be parsed.
 
-    returns a pair (scope, flag).
+    Returns a pair (scope, flag).
+
+    For example: flag='--<scope1>-<scope2>-<flag>' returns
+    ('<scope1>.<scope2>','<flag>').
     """
+    # TODO: deprecate `options_scope`s with any '.' or '-' characters (or maybe
+    # just '.'s to start?)
     for scope_prefix, scope_info in self._known_scoping_prefixes:
       for flag_prefix in ['--', '--no-']:
         prefix = flag_prefix + scope_prefix

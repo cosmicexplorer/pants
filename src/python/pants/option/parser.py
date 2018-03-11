@@ -13,7 +13,7 @@ from collections import defaultdict
 
 import six
 
-from pants.base.deprecated import validate_removal_semver, warn_or_error
+from pants.base.deprecated import deprecated_conditional, validate_removal_semver, warn_or_error
 from pants.option.arg_splitter import GLOBAL_SCOPE, GLOBAL_SCOPE_CONFIG_SECTION
 from pants.option.config import Config
 from pants.option.custom_types import (DictValueComponent, ListValueComponent, UnsetBool,
@@ -176,8 +176,17 @@ class Parser(object):
           flag_vals.append(v)
 
       for arg in args:
-        # If the user specified --no-foo on the cmd line, treat it as if the user specified
-        # --foo, but with the inverse value.
+        # For boolean options, if the user specified --no-foo on the cmd line,
+        # treat it as if the user specified --foo, but with the inverse value.
+        # FIXME(cosmicexplorer): when deprecation period is complete, throw an
+        # error here, then simplify ArgSplitter#_descope_flag()! can/should also
+        # do the --no-* checking when options are *registered*, not when they're
+        # about to be applied to cli flags!
+        deprecated_conditional(
+          lambda: arg.startswith('--no-'),
+          '1.7.0.dev0',
+          "Option names beginning with '--no-'",
+          "Option '{}' should not begin with '--no-'".format(arg))
         if kwargs.get('type') == bool:
           inverse_arg = self._inverse_arg(arg)
           if inverse_arg in flag_value_map:

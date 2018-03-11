@@ -158,7 +158,8 @@ class GlobalOptionsRegistrar(SubsystemClientMixin, Optionable):
                   'searched in order until the requested path is found.')
     # TODO(cosmicexplorer): Should options reference other options in their help
     # text at all? If so, should there be some way to ensure that the referenced
-    # option names are up to date/correct?
+    # option names are up to date/correct? (either generate refs from marks in
+    # the help, or parse the help for flags)
     register('--binaries-fetch-timeout-secs', type=int, default=30, advanced=True, daemon=False,
              help='Timeout in seconds for URL reads when fetching binary tools from the '
                   'repos specified by --binaries-baseurls.')
