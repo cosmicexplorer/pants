@@ -272,7 +272,7 @@ class NodeDistribution(NativeTool):
 
   def eslint_supportdir(self, task_workdir):
     """ Returns the path where the ESLint is bootstrapped.
-    
+
     :param string task_workdir: The task's working directory
     :returns: The path where ESLint is bootstrapped and whether or not it is configured
     :rtype: (string, bool)

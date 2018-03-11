@@ -44,7 +44,7 @@ class ProtobufGen(SimpleCodegenTask):
              removal_version='1.7.0.dev0',
              removal_hint='Use --version in scope protoc instead.',
              help='Version of protoc.  Used to create the default --javadeps and as part of '
-                  'the path to lookup the tool with --pants-support-baseurls and '
+                  'the path to lookup the tool with --binaries-baseurls and '
                   '--pants-bootstrapdir.  When changing this parameter you may also need to '
                   'update --javadeps.',
              default='2.4.1')

@@ -28,7 +28,7 @@ class GoDistribution(NativeTool):
     register('--supportdir', advanced=True, default='bin/go',
              removal_version='1.7.0.dev0', removal_hint='No longer supported.',
              help='Find the go distributions under this dir.  Used as part of the path to lookup '
-                  'the distribution with --binary-util-baseurls and --pants-bootstrapdir')
+                  'the distribution with --binaries-baseurls and --pants-bootstrapdir')
 
   @memoized_property
   def goroot(self):

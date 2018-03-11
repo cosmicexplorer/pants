@@ -156,9 +156,12 @@ class GlobalOptionsRegistrar(SubsystemClientMixin, Optionable):
              default=['https://binaries.pantsbuild.org'],
              help='List of URLs from which binary tools are downloaded. URLs are '
                   'searched in order until the requested path is found.')
+    # TODO(cosmicexplorer): Should options reference other options in their help
+    # text at all? If so, should there be some way to ensure that the referenced
+    # option names are up to date/correct?
     register('--binaries-fetch-timeout-secs', type=int, default=30, advanced=True, daemon=False,
              help='Timeout in seconds for URL reads when fetching binary tools from the '
-                  'repos specified by --baseurls.')
+                  'repos specified by --binaries-baseurls.')
     register('--binaries-path-by-id', type=dict, advanced=True,
              help=('Maps output of uname for a machine to a binary search path. e.g. '
                    '{("darwin", "15"): ["mac", "10.11"]), ("linux", "arm32"): ["linux"'
@@ -180,7 +183,7 @@ class GlobalOptionsRegistrar(SubsystemClientMixin, Optionable):
     register('--watchman-version', advanced=True, default='4.9.0-pants1', help='Watchman version.')
     register('--watchman-supportdir', advanced=True, default='bin/watchman',
              help='Find watchman binaries under this dir. Used as part of the path to lookup '
-                  'the binary with --binary-util-baseurls and --pants-bootstrapdir.')
+                  'the binary with --binaries-baseurls and --pants-bootstrapdir.')
     register('--watchman-startup-timeout', type=float, advanced=True, default=30.0,
              help='The watchman socket timeout (in seconds) for the initial `watch-project` command. '
                   'This may need to be set higher for larger repos due to watchman startup cost.')

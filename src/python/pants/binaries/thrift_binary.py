@@ -34,12 +34,12 @@ class ThriftBinary(object):
                removal_version='1.7.0.dev0',
                removal_hint='Use pants.backend.codegen.thrift.lib.thrift instead.',
                help='Find thrift binaries under this dir.   Used as part of the path to lookup the'
-                    'tool with --binary-util-baseurls and --pants-bootstrapdir')
+                    'tool with --binaries-baseurls and --pants-bootstrapdir')
       register('--version', advanced=True, default='0.9.2', fingerprint=True,
                removal_version='1.7.0.dev0',
                removal_hint='Use pants.backend.codegen.thrift.lib.thrift instead.',
                help='Thrift compiler version.   Used as part of the path to lookup the'
-                    'tool with --binary-util-baseurls and --pants-bootstrapdir')
+                    'tool with --binaries-baseurls and --pants-bootstrapdir')
 
     @deprecated(removal_version='1.7.0.dev0',
                 hint_message='Use pants.backend.codegen.thrift.lib.thrift instead.')
