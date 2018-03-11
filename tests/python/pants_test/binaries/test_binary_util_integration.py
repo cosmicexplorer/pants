@@ -44,13 +44,10 @@ class TestBinaryUtilIntegration(PantsRunIntegrationTest):
                   pants_run.stdout_data)
 
   def test_no_baseurls_config(self):
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
-        [GLOBAL]
-        binaries_baseurls: []
-        """))
+    with self.gen_config_ini("""
+    [GLOBAL]
+    binaries_baseurls: []
+    """) as config_path:
       pants_run = self.run_pants([
         '--pants-config-files={}'.format(config_path),
         'gen.protoc',

@@ -9,7 +9,6 @@ import json
 import os
 from textwrap import dedent
 
-from pants.util.contextutil import temporary_dir
 from pants_test.pants_run_integration_test import PantsRunIntegrationTest
 
 
@@ -92,26 +91,20 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
     self.assertIn('overrode False (from HARDCODED', pants_run.stdout_data)
 
   def test_from_config(self):
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
-          [options]
-          colors: False
-          scope: options
-          only_overridden: True
-          show_history: True
-        """))
+    with self.gen_config_ini("""
+    [options]
+    colors: False
+    scope: options
+    only_overridden: True
+    show_history: True
+    """) as config_path:
       pants_run = self.run_pants(['--pants-config-files={}'.format(config_path), 'options'])
       self.assert_success(pants_run)
       self.assertIn('options.only_overridden = True', pants_run.stdout_data)
       self.assertIn('(from CONFIG in {})'.format(config_path), pants_run.stdout_data)
 
   def test_options_deprecation_from_config(self):
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
+    with self.gen_config_ini("""
           [GLOBAL]
           verify_config: False
           pythonpath: [
@@ -124,7 +117,7 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
 
           [options]
           colors: False
-        """))
+        """) as config_path:
       pants_run = self.run_pants(['--pants-config-files={}'.format(config_path), 'options'])
       self.assert_success(pants_run)
 
@@ -135,21 +128,18 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
       self.assertNotIn('dummy-options.dummy_crufty_expired', pants_run.stdout_data)
 
   def test_from_config_invalid_section(self):
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
-          [DEFAULT]
-          some_crazy_thing: 123
+    with self.gen_config_ini("""
+    [DEFAULT]
+    some_crazy_thing: 123
 
-          [invalid_scope]
-          colors: False
-          scope: options
+    [invalid_scope]
+    colors: False
+    scope: options
 
-          [another_invalid_scope]
-          colors: False
-          scope: options
-        """))
+    [another_invalid_scope]
+    colors: False
+    scope: options
+    """) as config_path:
       pants_run = self.run_pants(['--pants-config-files={}'.format(config_path),
                                   'goals'])
       self.assert_failure(pants_run)
@@ -157,17 +147,14 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
       self.assertIn('ERROR] Invalid scope [another_invalid_scope]', pants_run.stderr_data)
 
   def test_from_config_invalid_option(self):
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
-          [DEFAULT]
-          some_crazy_thing: 123
+    with self.gen_config_ini("""
+    [DEFAULT]
+    some_crazy_thing: 123
 
-          [test.junit]
-          fail_fast: True
-          invalid_option: True
-        """))
+    [test.junit]
+    fail_fast: True
+    invalid_option: True
+    """) as config_path:
       pants_run = self.run_pants(['--pants-config-files={}'.format(config_path),
                                   'goals'])
       self.assert_failure(pants_run)
@@ -180,20 +167,17 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
       1. An invalid global option `invalid_global` will be caught.
       2. Variable `invalid_global` is not allowed in [GLOBAL].
     """
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
-          [DEFAULT]
-          some_crazy_thing: 123
+    with self.gen_config_ini("""
+    [DEFAULT]
+    some_crazy_thing: 123
 
-          [GLOBAL]
-          invalid_global: True
-          another_invalid_global: False
+    [GLOBAL]
+    invalid_global: True
+    another_invalid_global: False
 
-          [test.junit]
-          fail_fast: True
-        """))
+    [test.junit]
+    fail_fast: True
+    """) as config_path:
       pants_run = self.run_pants(['--pants-config-files={}'.format(config_path),
                                   'goals'])
       self.assert_failure(pants_run)
@@ -205,17 +189,13 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
     """
     Make sure invalid command line error will be thrown and exits.
     """
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
-          [test.junit]
-          bad_option: True
+    with self.gen_config_ini("""
+    [test.junit]
+    bad_option: True
 
-          [invalid_scope]
-          abc: 123
-        """))
-
+    [invalid_scope]
+    abc: 123
+    """) as config_path:
       # Run with invalid config and invalid command line option.
       # Should error out with invalid command line option only.
       pants_run = self.run_pants(['--pants-config-files={}'.format(config_path),
@@ -260,13 +240,10 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
     self.assertNotIn('resolve.ivy.colors = False', lines)
 
   def test_pants_ignore_option(self):
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
-          [GLOBAL]
-          pants_ignore: +['some/random/dir']
-        """))
+    with self.gen_config_ini("""
+    [GLOBAL]
+    pants_ignore: +['some/random/dir']
+    """) as config_path:
       pants_run = self.run_pants(['--pants-config-files={}'.format(config_path),
                                   '--no-colors',
                                   'options'])
@@ -276,19 +253,16 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
                     pants_run.stdout_data)
 
   def test_subsumed_options_scope_config(self):
-    with temporary_dir(root_dir=os.path.abspath('.')) as tempdir:
-      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
-      with open(config_path, 'w+') as f:
-        f.write(dedent("""
-          [binaries]
-          fetch_timeout_secs: 30
+    with self.gen_config_ini("""
+    [binaries]
+    fetch_timeout_secs: 30
 
-          [pantsd]
-          log_dir: /tmp/logs
+    [pantsd]
+    log_dir: /tmp/logs
 
-          [watchman]
-          socket_path: /tmp/test.sock
-        """))
+    [watchman]
+    socket_path: /tmp/test.sock
+    """) as config_path:
 
       pants_run = self.run_pants(['--pants-config-files={}'.format(config_path), 'options'])
       self.assert_success(pants_run)

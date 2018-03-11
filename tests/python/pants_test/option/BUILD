@@ -20,7 +20,6 @@ python_tests(
     'test_options_integration.py',
   ],
   dependencies=[
-    'src/python/pants/util:contextutil',
     'tests/python/pants_test:int-test',
   ],
   tags = {'integration'},

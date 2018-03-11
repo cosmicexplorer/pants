@@ -13,6 +13,7 @@ import unittest
 from collections import namedtuple
 from contextlib import contextmanager
 from operator import eq, ne
+from textwrap import dedent
 from threading import Lock
 
 from colors import strip_color
@@ -154,6 +155,17 @@ class PantsRunIntegrationTest(unittest.TestCase):
 
   def temporary_sourcedir(self):
     return temporary_dir(root_dir=get_buildroot())
+
+  @contextmanager
+  def gen_config_ini(self, content, apply_dedent=True):
+    with self.temporary_sourcedir() as tempdir:
+      config_path = os.path.relpath(os.path.join(tempdir, 'config.ini'))
+      with open(config_path, 'w+') as f:
+        if apply_dedent:
+          content = dedent(content)
+        f.write(content)
+
+      yield config_path
 
   @contextmanager
   def source_clone(self, source_dir):
