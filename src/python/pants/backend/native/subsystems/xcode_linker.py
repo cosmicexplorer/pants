@@ -8,12 +8,12 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 import os
 
 from pants.backend.native.clang import Clang
-from pants.binaries.host_installed_tool_base import HostInstalledBinaryTool
+from pants.binaries.host_installed_tool_base import HostInstalledToolBase
 from pants.util.contextutil import environment_as, temporary_dir
 from pants.util.memo import memoized_property
 
 
-class XCodeLinker(HostInstalledBinaryTool):
+class XCodeLinker(HostInstalledToolBase):
   options_scope = 'xcode-linker'
   name = 'ld'
   default_tool_path = '/usr/bin/ld'

@@ -36,8 +36,7 @@ class BinaryToolBase(Subsystem):
     """blah blah description context arg whatever"""
 
   @abstractmethod
-  def select_for_version(self, version):
-    """???"""
+  def select_for_version(self, version): pass
 
   @memoized_method
   def select(self, context=None):
