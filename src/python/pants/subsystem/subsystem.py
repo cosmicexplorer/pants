@@ -59,17 +59,10 @@ class Subsystem(SubsystemClientMixin, Optionable):
     return SubsystemDependency(cls, optionable.options_scope)
 
   @classmethod
-  def get_scope_info(cls, subscope=None):
-    cls.validate_scope_name_component(cls.options_scope)
-    if subscope is None:
-      return super(Subsystem, cls).get_scope_info()
-    else:
-      return ScopeInfo(cls.subscope(subscope), ScopeInfo.SUBSYSTEM, cls)
-
-  @classmethod
   def subscope(cls, scope):
     """Create a subscope under this Subsystem's scope."""
-    return '{0}.{1}'.format(cls.options_scope, scope)
+    cur_scope = cls.get_validate_optionable_scope()
+    return '{0}.{1}'.format(cur_scope, scope)
 
   # The full Options object for this pants run.  Will be set after options are parsed.
   # TODO: A less clunky way to make option values available?

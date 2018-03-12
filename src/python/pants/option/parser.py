@@ -141,14 +141,13 @@ class Parser(object):
       flag_value_map[key].append(flag_val)
     return flag_value_map
 
-  def parse_args(self, flags, namespace):
-    """Set values for this parser's options on the namespace object."""
-    flag_value_map = self._create_flag_value_map(flags)
-
-    mutex_map = defaultdict(list)
-    for args, kwargs in self._unnormalized_option_registrations_iter():
-      self._validate(args, kwargs)
+  def _prepare_option_registrations(self):
+    info_by_arg = {}
+    for args, orig_kwargs in self._unnormalized_option_registrations_iter():
+      kwargs = copy.copy(orig_kwargs)
+      self._validate(self, args, kwargs)
       dest = self.parse_dest(*args, **kwargs)
+      kwargs['dest'] = dest
 
       # Compute the values provided on the command line for this option.  Note that there may be
       # multiple values, for any combination of the following reasons:
@@ -162,6 +161,43 @@ class Parser(object):
       implicit_value = kwargs.get('implicit_value')
       if implicit_value is None and kwargs.get('type') == bool:
         implicit_value = True  # Allows --foo to mean --foo=true.
+      kwargs['implicit_value'] = implicit_value
+
+      for arg in args:
+        # FIXME(cosmicexplorer): when deprecation period is complete, throw an
+        # error here, then simplify ArgSplitter#_descope_flag()! can/should also
+        # do the --no-* checking when options are *registered*, not when they're
+        # about to be applied to cli flags!
+        deprecated_conditional(
+          lambda: arg.startswith('--no-'),
+          '1.7.0.dev0',
+          "Option names beginning with '--no-'",
+          "Option '{}' should not begin with '--no-'".format(arg))
+
+        if arg in info_by_arg:
+          raise Exception('')
+          # TODO: raise
+        info_by_arg[arg] = kwargs
+
+    return info_by_arg
+
+  def _parse_flag(self, flag):
+    flag_name, has_equals_sign, flag_val = flag.partition('=')
+    if not has_equals_sign:
+      if re.match(''):
+        raise Exception('')
+      if not flag.startswith('--'): # '-xfoo' style.
+        flag_name = flag_name[0:2]
+        # TODO: the rest!!
+
+  def parse_args(self, flags, namespace):
+    """Set values for this parser's options on the namespace object."""
+    flag_value_map = self._create_flag_value_map(flags)
+
+    mutex_map = defaultdict(list)
+    for args, kwargs in self._unnormalized_option_registrations_iter():
+      self._validate(args, kwargs)
+      dest = self.parse_dest(*args, **kwargs)
 
       flag_vals = []
 
@@ -178,15 +214,7 @@ class Parser(object):
       for arg in args:
         # For boolean options, if the user specified --no-foo on the cmd line,
         # treat it as if the user specified --foo, but with the inverse value.
-        # FIXME(cosmicexplorer): when deprecation period is complete, throw an
-        # error here, then simplify ArgSplitter#_descope_flag()! can/should also
-        # do the --no-* checking when options are *registered*, not when they're
-        # about to be applied to cli flags!
-        deprecated_conditional(
-          lambda: arg.startswith('--no-'),
-          '1.7.0.dev0',
-          "Option names beginning with '--no-'",
-          "Option '{}' should not begin with '--no-'".format(arg))
+
         if kwargs.get('type') == bool:
           inverse_arg = self._inverse_arg(arg)
           if inverse_arg in flag_value_map:
@@ -398,6 +426,9 @@ class Parser(object):
     removal_version = kwargs.get('removal_version')
     if removal_version is not None:
       validate_removal_semver(removal_version)
+
+  def has_arg(self, arg):
+    return arg in self._known_args
 
   def _existing_scope(self, arg):
     if arg in self._known_args:

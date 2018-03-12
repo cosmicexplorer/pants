@@ -128,9 +128,13 @@ class Options(object):
     values_by_scope = {}  # Arg values, parsed per-scope on demand.
     bootstrap_option_values = bootstrap_option_values
     known_scope_to_info = {s.scope: s for s in complete_known_scope_infos}
-    return cls(goals, scope_to_flags, target_specs, passthru, passthru_owner, help_request,
-               parser_hierarchy, values_by_scope, bootstrap_option_values, known_scope_to_info,
-               option_tracker)
+    constructed = cls(goals, scope_to_flags, target_specs, passthru, passthru_owner, help_request,
+                      parser_hierarchy, values_by_scope, bootstrap_option_values, known_scope_to_info,
+                      option_tracker)
+
+
+
+    return constructed
 
   def __init__(self, goals, scope_to_flags, target_specs, passthru, passthru_owner, help_request,
                parser_hierarchy, values_by_scope, bootstrap_option_values, known_scope_to_info,
@@ -213,7 +217,7 @@ class Options(object):
 
     :API: public
     """
-    return scope in self._known_scope_to_info
+    return scope in self.known_scope_to_info
 
   def passthru_args_for_scope(self, scope):
     # Passthru args "belong" to the last scope mentioned on the command-line.
@@ -276,14 +280,17 @@ class Options(object):
       return self._values_by_scope[scope]
 
     # First get enclosing scope's option values, if any.
-    if scope == GLOBAL_SCOPE or not inherit_from_enclosing_scope:
-      values = OptionValueContainer()
-    else:
-      values = copy.copy(self.for_scope(enclosing_scope(scope)))
+    def get_enclosing_values(cur_scope):
+      if cur_scope == GLOBAL_SCOPE or not inherit_from_enclosing_scope:
+        return OptionValueContainer()
+      else:
+        return copy.copy(self.for_scope(enclosing_scope(cur_scope)))
+
+    values = get_enclosing_values(scope)
 
     # Now add our values.
-    flags_in_scope = self._scope_to_flags.get(scope, [])
-    self._parser_hierarchy.get_parser_by_scope(scope).parse_args(flags_in_scope, values)
+    flags_in_scope = self.scope_to_flags.get(scope, [])
+    self._parser_hierarchy.parse_args_recursive_scoping(scope, flags_in_scope, get_enclosing_values)
 
     # If we're the new name of a deprecated scope, also get values from that scope.
     deprecated_scope = self.known_scope_to_info[scope].deprecated_scope

@@ -6,6 +6,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 import re
+from collections import defaultdict
 
 from pants.option.arg_splitter import GLOBAL_SCOPE
 from pants.option.config import Config
@@ -78,3 +79,43 @@ class ParserHierarchy(object):
   def walk(self, callback):
     """Invoke callback on each parser, in pre-order depth-first order."""
     self._parser_by_scope[GLOBAL_SCOPE].walk(callback)
+
+  def parse_args_recursive_scoping(self, scope, cur_scoped_flags, get_enclosing_values):
+    cur_parser = self.get_parser_by_scope(scope)
+
+    correct_depth_flags = defaultdict(list)
+    for flag in cur_scoped_flags:
+      if not flag.startswith('--'):
+        correct_depth_flags[scope].append(flag)
+        continue
+
+      cur_flag, _, flag_value = flag.partition('=')
+      if cur_parser.has_arg(cur_flag):
+        correct_depth_flags[scope].append(flag)
+        continue
+
+      flag_base = re.sub(r'\A\-\-', '', cur_flag)
+      flag_split = flag_base.split('-')
+
+      cur_scope = scope
+      cur_component = None
+
+      for idx, word in enumerate(flag_split[:-1]):
+        if word == '':
+          raise Exception('')
+          # TODO: raise
+
+        cur_component = word if cur_component is None else '{}-{}'.format(cur_component, word)
+        new_scope = cur_component if cur_scope == GLOBAL_SCOPE else '{}.{}'.format(cur_scope, cur_component)
+        new_parser = self._parser_by_scope.get(new_scope)
+        if new_parser:
+          cur_parser = new_parser
+          cur_scope = new_scope
+          cur_component = None
+          cur_flag = '--{}'.format(flag_split[(idx + 1):].join('-'))
+
+          if cur_parser.has_arg(cur_flag):
+            correct_depth_flags[cur_scope].append('{}={}'.format(cur_flag, flag_value))
+
+    for scope, flags in correct_depth_flags.items():
+      self._parser_by_scope[scope].parse_args(flags, )

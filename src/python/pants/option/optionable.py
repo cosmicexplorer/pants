@@ -14,6 +14,14 @@ from pants.option.scope import ScopeInfo
 from pants.util.meta import AbstractClass
 
 
+def validate_optionable_scope(s):
+  if _scope_matcher.match(s) is None:
+    raise OptionsError("""Options scope "{}" is not valid:
+    Replace in code with a new scope name consisting of dash-separated-words,
+    with words consisting only of lower-case letters and digits.
+    """.format(s))
+
+
 class Optionable(AbstractClass):
   """A mixin for classes that can register options on some scope."""
 
@@ -28,26 +36,33 @@ class Optionable(AbstractClass):
   deprecated_options_scope = None
   deprecated_options_scope_removal_version = None
 
-  _scope_name_component_re = re.compile(r'^(?:[a-z0-9])+(?:-(?:[a-z0-9])+)*$')
+  _scope_matcher = re.compile('\A[a-z0-9]+(?:-[a-z0-9]+)*\Z')
+
+  # NB: this default implementation does not allow an empty options_scope!
+  # Subclasses (such as GlobalOptionsRegistrar) should override this as
+  # necessary.
+  @classmethod
+  def validate_scope_name_component(cls, scope):
+    scope_str = str(scope)
+    if cls._scope_matcher.match(scope_str) is None:
+      raise OptionsError("""Options scope {} must be a string matching the
+      regular expression '{}'.
+      """.format(repr(scope_str), cls._scope_matcher.pattern))
+    return scope_str
 
   @classmethod
-  def is_valid_scope_name_component(cls, s):
-    return cls._scope_name_component_re.match(s) is not None
-
-  @classmethod
-  def validate_scope_name_component(cls, s):
-    if not cls.is_valid_scope_name_component(s):
-      raise OptionsError('Options scope "{}" is not valid:\n'
-                         'Replace in code with a new scope name consisting of dash-separated-words, '
-                         'with words consisting only of lower-case letters and digits.'.format(s))
+  def get_validate_optionable_scope(cls):
+    scope_str = cls.options_scope
+    if scope_str is None or cls.options_scope_category is None:
+      raise OptionsError(
+        "Class '{}' must set options_scope and options_scope_category."
+        .format(cls.__name__))
+    return cls.validate_scope_name_component(scope_str)
 
   @classmethod
   def get_scope_info(cls):
     """Returns a ScopeInfo instance representing this Optionable's options scope."""
-    if cls.options_scope is None or cls.options_scope_category is None:
-      raise OptionsError(
-        '{} must set options_scope and options_scope_category.'.format(cls.__name__))
-    return ScopeInfo(cls.options_scope, cls.options_scope_category, cls)
+    return ScopeInfo(cls.get_validate_optionable_scope(), cls.options_scope_category, cls)
 
   @classmethod
   def known_scope_infos(cls):

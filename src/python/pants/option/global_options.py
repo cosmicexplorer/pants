@@ -22,6 +22,12 @@ class GlobalOptionsRegistrar(SubsystemClientMixin, Optionable):
   options_scope = GLOBAL_SCOPE
   options_scope_category = ScopeInfo.GLOBAL
 
+  # Optionable doesn't allow an empty option_scope unless we override this
+  # method.
+  @classmethod
+  def validate_scope_name_component(cls, scope_str):
+    return scope_str
+
   @classmethod
   def register_bootstrap_options(cls, register):
     """Register bootstrap options.

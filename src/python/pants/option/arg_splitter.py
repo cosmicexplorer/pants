@@ -6,6 +6,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 import os
+import re
 import sys
 from collections import namedtuple
 
@@ -103,17 +104,6 @@ class ArgSplitter(object):
     self._unconsumed_args = []  # In reverse order, for efficient popping off the end.
     self._help_request = None  # Will be set if we encounter any help flags.
 
-    # For convenience, and for historical reasons, we allow --scope-flag-name anywhere on the
-    # cmd line, as an alternative to ... scope --flag-name.
-
-    # We check for prefixes in reverse order, so we match the longest prefix first.
-    sorted_scope_infos = sorted(filter(lambda si: si.scope, self._known_scope_infos),
-                                key=lambda si: si.scope, reverse=True)
-
-    # List of pairs (prefix, ScopeInfo).
-    self._known_scoping_prefixes = [('{0}-'.format(si.scope.replace('.', '-')), si)
-                                    for si in sorted_scope_infos]
-
   @property
   def help_request(self):
     return self._help_request
@@ -164,11 +154,10 @@ class ArgSplitter(object):
             file=sys.stderr)
       self._unconsumed_args.pop()
 
-    def assign_flag_to_scope(flag, default_scope):
-      flag_scope, descoped_flag = self._descope_flag(flag, default_scope=default_scope)
+    def assign_flag_to_scope(flag, flag_scope):
       if flag_scope not in scope_to_flags:
         scope_to_flags[flag_scope] = []
-      scope_to_flags[flag_scope].append(descoped_flag)
+      scope_to_flags[flag_scope].append(flag)
 
     global_flags = self._consume_flags()
 
@@ -238,6 +227,9 @@ class ArgSplitter(object):
   def _descope_flag(self, flag, default_scope):
     """If a flag is prefixed by one or more scopes, extract them.
 
+    For convenience, and for historical reasons, we allow --scope-flag-name
+    anywhere on the cmd line, as an alternative to ... scope --flag-name.
+
     Uses `default_scope` if no prefix scopes could be parsed.
 
     Returns a pair (scope, flag).
@@ -245,24 +237,43 @@ class ArgSplitter(object):
     For example: flag='--<scope1>-<scope2>-<flag>' returns
     ('<scope1>.<scope2>','<flag>').
     """
-    # TODO: deprecate `options_scope`s with any '.' or '-' characters (or maybe
-    # just '.'s to start?)
-    for scope_prefix, scope_info in self._known_scoping_prefixes:
-      for flag_prefix in ['--', '--no-']:
-        prefix = flag_prefix + scope_prefix
-        if flag.startswith(prefix):
-          scope = scope_info.scope
-          if scope_info.category == ScopeInfo.SUBSYSTEM and default_scope != GLOBAL_SCOPE:
-            # We allow goal.task --subsystem-foo to refer to the task-level subsystem instance,
-            # i.e., as if qualified by --subsystem-goal-task-foo.
-            # Note that this means that we can't set a task option on the cmd-line if its
-            # name happens to start with a subsystem scope.
-            # TODO: Either fix this or at least detect such options and warn.
-            task_subsystem_scope = '{}.{}'.format(scope_info.scope, default_scope)
-            if task_subsystem_scope in self._known_scopes:  # Such a task subsystem actually exists.
-              scope = task_subsystem_scope
-          return scope, flag_prefix + flag[len(prefix):]
-    return default_scope, flag
+    # Single-dash flags are always global.
+    if not flag.startswith('--'):
+      return default_scope, flag
+
+    flag_base, _, flag_value = re.sub(r'\A\-\-', '', flag).partition('=')
+
+    cur_scope = default_scope
+    cur_flag = '--{}'.format(flag_base)
+
+    if cur_parser.has_arg(cur_flag):
+      return default_scope, flag
+
+    cur_scope = default_scope
+    cur_component = None
+
+    flag_split = flag_base.split('-')
+
+    for idx, word in enumerate(flag_split[:-1]):
+      if word == '':
+        raise ArgSplitterError(
+          "Unknown command-line flag received: '{}'. Options may not be named "
+          "with multiple dashes in a row."
+          .format(flag))
+
+      cur_component = word if cur_component is None else '{}-{}'.format(cur_component, word)
+      new_scope = cur_component if cur_scope == GLOBAL_SCOPE else '{}.{}'.format(cur_scope, cur_component)
+      new_parser = self._parser_hierarchy.try_parser_for_scope(new_scope)
+      if new_parser:
+        cur_parser = new_parser
+        cur_scope = new_scope
+        cur_component = None
+        cur_flag = '--{}'.format(flag_split[(idx + 1):].join('-'))
+        if cur_parser.has_arg(cur_flag):
+          return cur_scope, '{}={}'.format(rest_joined, flag_value)
+
+    raise ArgSplitterError(
+      "Unknown command-line flag received: '{}' (not found).".format(flag))
 
   def _at_flag(self):
     return (self._unconsumed_args and

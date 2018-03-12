@@ -75,7 +75,10 @@ class Goal(object):
 
     :API: public
     """
-    return goal_name if goal_name == task_name else '{0}.{1}'.format(goal_name, task_name)
+    if goal_name == task_name:
+      return goal_name
+    task_name_validated = Optionable.validate_scope_name_component(task_name)
+    return '{0}.{1}'.format(goal_name, task_name_validated)
 
   @staticmethod
   def all():
@@ -111,8 +114,7 @@ class _Goal(object):
 
     Create goals only through the Goal.by_name() factory.
     """
-    Optionable.validate_scope_name_component(name)
-    self.name = name
+    self.name = Optionable.validate_scope_name_component(name)
     self._description = ''
     self._options_registrar_cls = None
     self.serialize = False
@@ -166,7 +168,6 @@ class _Goal(object):
         'Can only specify a task name once per goal, saw multiple values for {} in goal {}'.format(
           task_name,
           self.name))
-    Optionable.validate_scope_name_component(task_name)
     options_scope = Goal.scope(self.name, task_name)
 
     # Currently we need to support registering the same task type multiple times in different
