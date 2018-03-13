@@ -21,6 +21,16 @@ python_library(
 )
 
 python_library(
+  name='host_installed_tool',
+  sources=['host_installed_tool_base.py'],
+  dependencies=[
+    ':binary_util',
+    'src/python/pants/engine',
+    'src/python/pants/util:objects',
+  ],
+)
+
+python_library(
   name='thrift_util',
   sources=['thrift_binary.py'],
   dependencies=[
