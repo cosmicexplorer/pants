@@ -10,8 +10,6 @@ import os
 import re
 from abc import abstractmethod
 
-from pants.binaries.binary_tool import BinaryToolBase
-from pants.engine.rules import rule
 from pants.subsystem.subsystem import Subsystem
 from pants.util.memo import memoized_method, memoized_property
 from pants.util.objects import datatype
@@ -19,7 +17,7 @@ from pants.util.objects import datatype
 
 # TODO: convert this to v2 when #??? is fixed
 # FIXME: merge this with BinaryTool into a common base class
-class HostInstalledToolBase(BinaryToolBase):
+class HostInstalledToolBase(Subsystem):
   """Depend on tools located on the host filesystem and verify that they work.
 
   Attempt at a structured, autoconf-esque way to depend on tools provided by the
