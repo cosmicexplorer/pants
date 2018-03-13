@@ -4,5 +4,7 @@
 python_library(
   dependencies=[
     'src/python/pants/binaries:binary_util',
+    'src/python/pants/util:memo',
+    'src/python/pants/util:process_handler',
   ],
 )
