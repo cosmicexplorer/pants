@@ -47,6 +47,15 @@ class BuildLocalPythonDistributions(Task):
   def cache_target_dirs(self):
     return True
 
+  def _stitch_whl_into_build_graph(self, source_tgt_addr, req_lib_addr, whl_path):
+    self._inject_synthetic_dist_requirements(whl_path, req_lib_addr)
+    # Make any target that depends on the dist depend on the synthetic req_lib,
+    # for downstream consumption.
+    for dependent in self.context.build_graph.dependents_of(source_tgt_addr):
+      self.context.log.debug('src: {}, req: {}, depd: {}'
+                             .format(source_tgt_addr, req_lib_addr, whl_path))
+      self.context.build_graph.inject_dependency(dependent, req_lib_addr)
+
   def execute(self):
     dist_targets = self.context.targets(is_local_python_dist)
 
@@ -66,13 +75,10 @@ class BuildLocalPythonDistributions(Task):
           self._create_dist(vt.target, vt.results_dir, interpreter)
 
         for vt in invalidation_check.all_vts:
-          dist = self._get_whl_from_dir(os.path.join(vt.results_dir, 'dist'))
+          source_target_address = vt.target.address
           req_lib_addr = Address.parse('{}__req_lib'.format(vt.target.address.spec))
-          self._inject_synthetic_dist_requirements(dist, req_lib_addr)
-          # Make any target that depends on the dist depend on the synthetic req_lib,
-          # for downstream consumption.
-          for dependent in self.context.build_graph.dependents_of(vt.target.address):
-            self.context.build_graph.inject_dependency(dependent, req_lib_addr)
+          built_dist_path = self._get_whl_from_dir(os.path.join(vt.results_dir, 'dist'))
+          self._stitch_whl_into_build_graph(source_target_address, req_lib_addr, built_dist_path)
 
   def _copy_sources(self, dist_tgt, dist_target_dir):
     # Copy sources and setup.py over to vt results directory for packaging.
