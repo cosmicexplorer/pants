@@ -203,6 +203,9 @@ class BinaryUtilPrivate(object):
       and name could be found for the current platform.
     """
 
+    if not self._baseurls:
+      raise self.NoBaseUrlsError(
+        'No urls are defined for the --binaries-baseurls option.')
     downloaded_successfully = False
     accumulated_errors = []
     for baseurl in OrderedSet(self._baseurls):  # De-dup URLS: we only want to try each URL once.
