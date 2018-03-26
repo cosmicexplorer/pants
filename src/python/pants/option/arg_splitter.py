@@ -160,12 +160,11 @@ class ArgSplitter(object):
     if not self._at_flag() and self._unconsumed_args:
       self._unconsumed_args.pop()
     if self._unconsumed_args and self._unconsumed_args[-1] == 'goal':
-      # TODO: Temporary warning. Eventually specifying 'goal' will be an error.
       deprecated_conditional(
         lambda: True,
         '1.8.0.dev0',
-        "Specifying 'goal' explicitly",
-        "Argument 'goal' should be removed.")
+        "Specifying 'goal' explicitly on the command line",
+        "Command-line argument 'goal' should be removed.")
       self._unconsumed_args.pop()
 
     def assign_flag_to_scope(flag, default_scope):
