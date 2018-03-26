@@ -178,15 +178,6 @@ class Parser(object):
       for arg in args:
         # For boolean options, if the user specified --no-foo on the cmd line,
         # treat it as if the user specified --foo, but with the inverse value.
-        # FIXME(cosmicexplorer): when deprecation period is complete, throw an
-        # error here, then simplify ArgSplitter#_descope_flag()! can/should also
-        # do the --no-* checking when options are *registered*, not when they're
-        # about to be applied to cli flags!
-        deprecated_conditional(
-          lambda: arg.startswith('--no-'),
-          '1.8.0.dev0',
-          "Option names beginning with '--no-'",
-          "Option '{}' should not begin with '--no-'.".format(arg))
         if kwargs.get('type') == bool:
           inverse_arg = self._inverse_arg(arg)
           if inverse_arg in flag_value_map:
@@ -335,6 +326,13 @@ class Parser(object):
     for arg in args:
       if arg in self._known_args:
         raise OptionAlreadyRegistered(self.scope, arg)
+      # FIXME(cosmicexplorer): when deprecation period is complete, throw an
+      # error here, then simplify ArgSplitter#_descope_flag()!
+      deprecated_conditional(
+        lambda: arg.startswith('--no-'),
+        '1.8.0.dev0',
+        "Option names beginning with '--no-'",
+        "Option '{}' should not begin with '--no-'.".format(arg))
     self._known_args.update(args)
 
   def _check_deprecated(self, dest, kwargs):
