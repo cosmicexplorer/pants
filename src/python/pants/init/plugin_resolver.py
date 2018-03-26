@@ -133,17 +133,12 @@ class PluginResolver(object):
     # Subsystem facility is wired up.  As a result PluginResolver is not itself a Subsystem with
     # PythonRepos as a dependency.  Instead it does the minimum possible work to hand-roll
     # bootstrapping of the Subsystems it needs.
-    known_scope_infos = PythonRepos.known_scope_infos()
-    options = self._options_bootstrapper.get_full_options(known_scope_infos)
+    top_level_optionables = {PythonRepos}
 
     # Ignore command line flags since we'd blow up on any we don't understand (most of them).
     # If someone wants to bootstrap plugins in a one-off custom way they'll need to use env vars
     # or a --pants-config-files pointing to a custom pants.ini snippet.
-    defaulted_only_options = options.drop_flag_values()
+    defaulted_only_options = self._options_bootstrapper.get_full_options_from_optionables(
+      top_level_optionables, drop_flag_values=True)
 
-    GlobalOptionsRegistrar.register_options_on_scope(defaulted_only_options)
-    distinct_optionable_classes = sorted({si.optionable_cls for si in known_scope_infos},
-                                         key=lambda o: o.options_scope)
-    for optionable_cls in distinct_optionable_classes:
-      optionable_cls.register_options_on_scope(defaulted_only_options)
     return defaulted_only_options

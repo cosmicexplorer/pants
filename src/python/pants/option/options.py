@@ -192,27 +192,9 @@ class Options(object):
   def scope_to_flags(self):
     return self._scope_to_flags
 
-  def drop_flag_values(self):
-    """Returns a copy of these options that ignores values specified via flags.
-
-    Any pre-cached option values are cleared and only option values that come from option defaults,
-    the config or the environment are used.
-    """
-    # An empty scope_to_flags to force all values to come via the config -> env hierarchy alone
-    # and empty values in case we already cached some from flags.
-    no_flags = {}
-    no_values = {}
-    return Options(self._goals,
-                   no_flags,
-                   self._target_specs,
-                   self._passthru,
-                   self._passthru_owner,
-                   self._help_request,
-                   self._parser_hierarchy,
-                   no_values,
-                   self._bootstrap_option_values,
-                   self._known_scope_to_info,
-                   self._option_tracker)
+  def kill_flag_values(self):
+    self._scope_to_flags = {}
+    self._values_by_scope = {}
 
   def is_known_scope(self, scope):
     """Whether the given scope is known by this instance.
@@ -268,6 +250,10 @@ class Options(object):
 
   def walk_parsers(self, callback):
     self._parser_hierarchy.walk(callback)
+
+  def fully_parse_scoped_flags(self):
+    self._scope_to_flags = self._parser_hierarchy.fully_parse_scoped_flags(
+      self.scope_to_flags, self.known_scope_to_info)
 
   def for_scope(self, scope, inherit_from_enclosing_scope=True):
     """Return the option values for the given scope.

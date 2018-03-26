@@ -99,19 +99,10 @@ class OptionsInitializer(object):
                              build_configuration.subsystems() |
                              set(Goal.get_optionables()))
 
-    known_scope_infos = sorted({
-      si for optionable in top_level_optionables for si in optionable.known_scope_infos()
-    })
-
     # Now that we have the known scopes we can get the full options.
-    options = options_bootstrapper.get_full_options(known_scope_infos)
+    options = options_bootstrapper.get_full_options_from_optionables(top_level_optionables)
 
-    distinct_optionable_classes = sorted({si.optionable_cls for si in known_scope_infos},
-                                         key=lambda o: o.options_scope)
-    for optionable_cls in distinct_optionable_classes:
-      optionable_cls.register_options_on_scope(options)
-
-    # Make the options values available to all subsystems.
+    # Make the options object available to all subsystems.
     Subsystem.set_options(options)
 
     return options

@@ -80,8 +80,8 @@ class ArgSplitterTest(unittest.TestCase):
                 'src/java/org/pantsbuild/foo src/java/org/pantsbuild/bar:baz',
                 ['compile', 'test'],
                 {
-                  '': ['-f'],
-                  'compile.java': ['--long-flag', '-x'],
+                  '': ['--compile-java-long-flag', '-f'],
+                  'compile.java': ['-x'],
                   'compile': ['-g'],
                   'test.junit': ['-i']
                 },
@@ -92,8 +92,11 @@ class ArgSplitterTest(unittest.TestCase):
                 {
                   '': ['-farg', '--fff=arg'],
                   'compile': ['--gg-gg=arg-arg', '-g'],
-                  'test.junit': ['--iii'],
-                  'compile.java': ['--long-flag'],
+                  # FIXME: NOT in here, but in parser hierarchy, should ensure
+                  # we test not just within scopes here, but also enclosing
+                  # scopes, so we can get to the global value!! this means we
+                  # probably need to turn this into an integration test
+                  'test.junit': ['--iii', '--compile-java-long-flag'],
                 },
                 ['src/java/org/pantsbuild/foo', 'src/java/org/pantsbuild/bar:baz'])
 

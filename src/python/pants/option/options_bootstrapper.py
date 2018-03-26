@@ -130,7 +130,13 @@ class OptionsBootstrapper(object):
       self._bootstrap_options = bootstrap_options_from_config(self._post_bootstrap_config)
     return self._bootstrap_options
 
-  def get_full_options(self, known_scope_infos):
+  def get_full_options_from_optionables(self, top_level_optionables, drop_flag_values=False):
+    all_known_scope_infos = sorted({
+      si for optionable in top_level_optionables for si in optionable.known_scope_infos()
+    })
+    return self.get_full_options(all_known_scope_infos, drop_flag_values=drop_flag_values)
+
+  def get_full_options(self, known_scope_infos, drop_flag_values=False):
     """Get the full Options instance bootstrapped by this object for the given known scopes.
 
     :param known_scope_infos: ScopeInfos for all scopes that may be encountered.
@@ -143,12 +149,28 @@ class OptionsBootstrapper(object):
       # Note: Don't inline this into the Options() call, as this populates
       # self._post_bootstrap_config, which is another argument to that call.
       bootstrap_option_values = self.get_bootstrap_options().for_global_scope()
-      self._full_options[key] = Options.create(self._env,
-                                               self._post_bootstrap_config,
-                                               known_scope_infos,
-                                               args=self._args,
-                                               bootstrap_option_values=bootstrap_option_values,
-                                               option_tracker=self._option_tracker)
+      resulting_options = Options.create(self._env,
+                                         self._post_bootstrap_config,
+                                         known_scope_infos,
+                                         args=self._args,
+                                         bootstrap_option_values=bootstrap_option_values,
+                                         option_tracker=self._option_tracker)
+
+      optionable_classes = filter(lambda x: x is not None, {
+        si.optionable_cls for si in known_scope_infos
+      })
+      distinct_optionable_classes = sorted(optionable_classes, key=lambda o: o.options_scope)
+
+      for optionable_cls in distinct_optionable_classes:
+        optionable_cls.register_options_on_scope(resulting_options)
+
+      if drop_flag_values:
+        resulting_options.kill_flag_values()
+      else:
+        resulting_options.fully_parse_scoped_flags()
+
+      self._full_options[key] = resulting_options
+
     return self._full_options[key]
 
   def verify_configs_against_options(self, options):

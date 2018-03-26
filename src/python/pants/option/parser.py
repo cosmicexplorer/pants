@@ -24,7 +24,7 @@ from pants.option.errors import (BooleanOptionNameWithNo, FrozenRegistration, Im
                                  MemberTypeNotAllowed, NoOptionNames, OptionAlreadyRegistered,
                                  OptionNameDash, OptionNameDoubleDash, ParseError,
                                  RecursiveSubsystemOption, Shadowing)
-from pants.option.option_util import is_dict_option, is_list_option
+from pants.option.option_util import create_flag_value_map, is_dict_option, is_list_option
 from pants.option.ranked_value import RankedValue
 from pants.option.scope import ScopeInfo
 
@@ -119,31 +119,9 @@ class Parser(object):
     for child in self._child_parsers:
       child.walk(callback)
 
-  def _create_flag_value_map(self, flags):
-    """Returns a map of flag -> list of values, based on the given flag strings.
-
-    None signals no value given (e.g., -x, --foo).
-    The value is a list because the user may specify the same flag multiple times, and that's
-    sometimes OK (e.g., when appending to list-valued options).
-    """
-    flag_value_map = defaultdict(list)
-    for flag in flags:
-      key, has_equals_sign, flag_val = flag.partition('=')
-      if not has_equals_sign:
-        if not flag.startswith('--'):  # '-xfoo' style.
-          key = flag[0:2]
-          flag_val = flag[2:]
-        if not flag_val:
-          # Either a short option with no value or a long option with no equals sign.
-          # Important so we can distinguish between no value ('--foo') and setting to an empty
-          # string ('--foo='), for options with an implicit_value.
-          flag_val = None
-      flag_value_map[key].append(flag_val)
-    return flag_value_map
-
   def parse_args(self, flags, namespace):
     """Set values for this parser's options on the namespace object."""
-    flag_value_map = self._create_flag_value_map(flags)
+    flag_value_map = create_flag_value_map(flags)
 
     mutex_map = defaultdict(list)
     for args, kwargs in self._unnormalized_option_registrations_iter():
@@ -615,3 +593,6 @@ class Parser(object):
 
   def __str__(self):
     return 'Parser({})'.format(self._scope)
+
+  def has_known_arg(self, arg):
+    return arg in self._known_args

@@ -767,23 +767,27 @@ class OptionsTest(unittest.TestCase):
     options = self._parse('./pants --bar-baz=fred -n33 --pants-foo=red simple -n1',
                           env={'PANTS_FOO': 'BAR'},
                           config={'simple': {'num': 42}})
-    defaulted_only_options = options.drop_flag_values()
 
+    # FIXME: make the comment text clearly correspond here
     # No option value supplied in any form.
     self.assertEqual('fred', options.for_global_scope().bar_baz)
-    self.assertIsNone(defaulted_only_options.for_global_scope().bar_baz)
-
     # A defaulted option value.
     self.assertEqual(33, options.for_global_scope().num)
-    self.assertEqual(99, defaulted_only_options.for_global_scope().num)
-
     # A config specified option value.
     self.assertEqual(1, options.for_scope('simple').num)
-    self.assertEqual(42, defaulted_only_options.for_scope('simple').num)
-
     # An env var specified option value.
     self.assertEqual('red', options.for_global_scope().pants_foo)
-    self.assertEqual('BAR', defaulted_only_options.for_global_scope().pants_foo)
+
+    options.kill_flag_values()
+
+    # No option value supplied in any form.
+    self.assertIsNone(options.for_global_scope().bar_baz)
+    # A defaulted option value.
+    self.assertEqual(99, options.for_global_scope().num)
+    # A config specified option value.
+    self.assertEqual(42, options.for_scope('simple').num)
+    # An env var specified option value.
+    self.assertEqual('BAR', options.for_global_scope().pants_foo)
 
   def test_deprecated_option_past_removal(self):
     """Ensure that expired options raise CodeRemovedError on attempted use."""
