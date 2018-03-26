@@ -110,33 +110,34 @@ class Options(object):
     complete_known_scope_infos = cls.complete_scopes(known_scope_infos)
     splitter = ArgSplitter(complete_known_scope_infos)
     args = sys.argv if args is None else args
+    goals, scope_to_flags, cli_target_specs, passthru, passthru_owner = splitter.split_args(args)
 
     if not option_tracker:
       raise cls.OptionTrackerRequiredError()
 
     bootstrap_target_specs = []
-
     if bootstrap_option_values:
       target_spec_files = bootstrap_option_values.target_spec_files
       if target_spec_files:
         for spec in target_spec_files:
           with open(spec) as f:
-            target_specs.extend(filter(None, [line.strip() for line in f]))
-
-    parser_hierarchy = ParserHierarchy(env, config, complete_known_scope_infos, option_tracker)
-    values_by_scope = {}  # Arg values, parsed per-scope on demand.
-
-    known_scope_to_info = {s.scope: s for s in complete_known_scope_infos}
-
-    goals, scope_to_flags, cli_target_specs, passthru, passthru_owner = splitter.split_args(parser_hierarchy, args)
+            bootstrap_target_specs.extend(filter(None, [line.strip() for line in f]))
 
     target_specs = cli_target_specs + bootstrap_target_specs
 
     help_request = splitter.help_request
 
-    return cls(goals, scope_to_flags, target_specs, passthru, passthru_owner, help_request,
-               parser_hierarchy, values_by_scope, bootstrap_option_values, known_scope_to_info,
-               option_tracker)
+    parser_hierarchy = ParserHierarchy(env, config, complete_known_scope_infos, option_tracker)
+    values_by_scope = {}  # Arg values, parsed per-scope on demand.
+    bootstrap_option_values = bootstrap_option_values
+    known_scope_to_info = {s.scope: s for s in complete_known_scope_infos}
+    constructed = cls(goals, scope_to_flags, target_specs, passthru, passthru_owner, help_request,
+                      parser_hierarchy, values_by_scope, bootstrap_option_values, known_scope_to_info,
+                      option_tracker)
+
+
+
+    return constructed
 
   def __init__(self, goals, scope_to_flags, target_specs, passthru, passthru_owner, help_request,
                parser_hierarchy, values_by_scope, bootstrap_option_values, known_scope_to_info,

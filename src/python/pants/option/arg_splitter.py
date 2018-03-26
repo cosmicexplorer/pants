@@ -135,7 +135,7 @@ class ArgSplitter(object):
         self._help_request = OptionsHelp(advanced=advanced, all_scopes=all_scopes)
     return True
 
-  def split_args(self, parser_hierarchy, args):
+  def split_args(self, args):
     """Split the specified arg list.
 
     args[0] is ignored.
@@ -157,6 +157,7 @@ class ArgSplitter(object):
     self._unconsumed_args = list(reversed(args))
     # In regular use the first token is the binary name, so skip it. However tests may
     # pass just a list of flags, so don't skip it in that case.
+    # FIXME(cosmicexplorer): the above sounds super sketchy
     if not self._at_flag() and self._unconsumed_args:
       self._unconsumed_args.pop()
     if self._unconsumed_args and self._unconsumed_args[-1] == 'goal':
