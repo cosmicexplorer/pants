@@ -1186,7 +1186,7 @@ class OptionsTest(unittest.TestCase):
 
   def test_option_tracker_required(self):
     with self.assertRaises(Options.OptionTrackerRequiredError):
-      Options.create(None, None, [])
+      Options.create(None, None, [], [])
 
   def test_pants_global_designdoc_example(self):
     # The example from the design doc.

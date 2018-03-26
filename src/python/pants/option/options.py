@@ -92,14 +92,14 @@ class Options(object):
     return ret
 
   @classmethod
-  def create(cls, env, config, known_scope_infos, args=None, bootstrap_option_values=None,
+  def create(cls, env, config, known_scope_infos, args, bootstrap_option_values=None,
              option_tracker=None):
     """Create an Options instance.
 
     :param env: a dict of environment variables.
     :param :class:`pants.option.config.Config` config: data from a config file.
     :param known_scope_infos: ScopeInfos for all scopes that may be encountered.
-    :param args: a list of cmd-line args; defaults to `sys.argv` if None is supplied.
+    :param args: a list of cmd-line args.
     :param bootstrap_option_values: An optional namespace containing the values of bootstrap
            options. We can use these values when registering other options.
     :param :class:`pants.option.option_tracker.OptionTracker` option_tracker: option tracker
@@ -109,7 +109,6 @@ class Options(object):
     # can propagate through them.
     complete_known_scope_infos = cls.complete_scopes(known_scope_infos)
     splitter = ArgSplitter(complete_known_scope_infos)
-    args = sys.argv if args is None else args
     goals, scope_to_flags, cli_target_specs, passthru, passthru_owner = splitter.split_args(args)
 
     if not option_tracker:
