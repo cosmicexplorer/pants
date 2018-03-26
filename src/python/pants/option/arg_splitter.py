@@ -11,6 +11,7 @@ from collections import namedtuple
 
 from twitter.common.collections import OrderedSet
 
+from pants.base.deprecated import deprecated_conditional
 from pants.option.scope import GLOBAL_SCOPE, GLOBAL_SCOPE_CONFIG_SECTION, ScopeInfo
 from pants.util.meta import AbstractClass
 
@@ -134,8 +135,8 @@ class ArgSplitter(object):
         self._help_request = OptionsHelp(advanced=advanced, all_scopes=all_scopes)
     return True
 
-  def split_args(self, args=None):
-    """Split the specified arg list (or sys.argv if unspecified).
+  def split_args(self, parser_hierarchy, args):
+    """Split the specified arg list.
 
     args[0] is ignored.
 
@@ -153,15 +154,18 @@ class ArgSplitter(object):
     passthru = []
     passthru_owner = None
 
-    self._unconsumed_args = list(reversed(sys.argv if args is None else args))
+    self._unconsumed_args = list(reversed(args))
     # In regular use the first token is the binary name, so skip it. However tests may
     # pass just a list of flags, so don't skip it in that case.
     if not self._at_flag() and self._unconsumed_args:
       self._unconsumed_args.pop()
     if self._unconsumed_args and self._unconsumed_args[-1] == 'goal':
       # TODO: Temporary warning. Eventually specifying 'goal' will be an error.
-      print("WARNING: Specifying 'goal' explicitly is no longer necessary, and deprecated.",
-            file=sys.stderr)
+      deprecated_conditional(
+        lambda: True,
+        '1.8.0.dev0',
+        "Specifying 'goal' explicitly",
+        "Argument 'goal' should be removed.")
       self._unconsumed_args.pop()
 
     def assign_flag_to_scope(flag, default_scope):

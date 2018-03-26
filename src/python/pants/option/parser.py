@@ -184,9 +184,9 @@ class Parser(object):
         # about to be applied to cli flags!
         deprecated_conditional(
           lambda: arg.startswith('--no-'),
-          '1.7.0.dev0',
+          '1.8.0.dev0',
           "Option names beginning with '--no-'",
-          "Option '{}' should not begin with '--no-'".format(arg))
+          "Option '{}' should not begin with '--no-'.".format(arg))
         if kwargs.get('type') == bool:
           inverse_arg = self._inverse_arg(arg)
           if inverse_arg in flag_value_map:
