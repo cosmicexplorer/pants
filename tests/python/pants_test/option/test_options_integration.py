@@ -252,33 +252,6 @@ class TestOptionsIntegration(PantsRunIntegrationTest):
                     .format(config_path),
                     pants_run.stdout_data)
 
-  def test_subsumed_options_scope_config(self):
-    with self.gen_config_ini("""
-    [binaries]
-    fetch_timeout_secs: 30
-
-    [pantsd]
-    log_dir: /tmp/logs
-
-    [watchman]
-    socket_path: /tmp/test.sock
-    """) as config_path:
-
-      pants_run = self.run_pants(['--pants-config-files={}'.format(config_path), 'options'])
-      self.assert_success(pants_run)
-
-      template = (
-        'DEPRECATED: The pants.ini options scope `[{}]` is deprecated. Please '
-        'migrate options in this scope to `[GLOBAL]`. will be removed in version'
-      )
-      for scope in ('binaries', 'pantsd', 'watchman'):
-        self.assertIn(template.format(scope), pants_run.stderr_data)
-
-      for option in ('binaries_baseurls', 'pantsd_log_dir', 'watchman_socket_path'):
-        for line in pants_run.stdout_data:
-          if line.startswith(option):
-            self.assertIn('from CONFIG', line)
-
   def test_no_baseurls_options_only(self):
     pants_run = self.run_pants(['options'], extra_env={
       'PANTS_BINARIES_BASEURLS': '[]',
