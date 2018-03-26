@@ -114,7 +114,7 @@ class Options(object):
     if not option_tracker:
       raise cls.OptionTrackerRequiredError()
 
-    target_specs = []
+    bootstrap_target_specs = []
 
     if bootstrap_option_values:
       target_spec_files = bootstrap_option_values.target_spec_files
@@ -126,12 +126,12 @@ class Options(object):
     parser_hierarchy = ParserHierarchy(env, config, complete_known_scope_infos, option_tracker)
     values_by_scope = {}  # Arg values, parsed per-scope on demand.
 
-    bootstrap_option_values = bootstrap_option_values
     known_scope_to_info = {s.scope: s for s in complete_known_scope_infos}
 
-    goals, scope_to_flags, split_target_specs, passthru, passthru_owner = splitter.split_args(
-      parser_hierarchy, args)
-    target_specs = split_target_specs + target_specs
+    goals, scope_to_flags, cli_target_specs, passthru, passthru_owner = splitter.split_args(parser_hierarchy, args)
+
+    target_specs = cli_target_specs + bootstrap_target_specs
+
     help_request = splitter.help_request
 
     return cls(goals, scope_to_flags, target_specs, passthru, passthru_owner, help_request,
