@@ -5,17 +5,20 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
+from pants.backend.native.config.native_build_environment import NativeBuildEnvironment
+from pants.backend.native.config.native_toolchain_component_mixin import NativeToolchainComponentMixin
 from pants.backend.native.subsystems.clang import Clang
 from pants.backend.native.subsystems.gcc import GCC
 from pants.backend.native.subsystems.platform_specific.darwin.xcode_cli_tools import XCodeCLITools
 from pants.backend.native.subsystems.platform_specific.linux.binutils import Binutils
-from pants.binaries.binary_tool import ExecutablePathProvider
 from pants.subsystem.subsystem import Subsystem
-from pants.util.memo import memoized_method
+from pants.util.contextutil import environment_as, get_joined_path
+from pants.util.memo import memoized_method, memoized_property
 from pants.util.osutil import get_os_name, normalize_os_name
+from pants.util.process_handler import subprocess
 
 
-class NativeToolchain(Subsystem, ExecutablePathProvider):
+class NativeToolchain(Subsystem, NativeToolchainComponentMixin):
   """Abstraction over platform-specific tools to compile and link native code.
 
   This "native toolchain" subsystem is an abstraction that exposes directories
@@ -61,7 +64,7 @@ class NativeToolchain(Subsystem, ExecutablePathProvider):
 
   @classmethod
   @memoized_method
-  def _get_platform_specific_subsystems(cls):
+  def _get_dependent_subsystem_classes(cls):
     """Return the subsystems used by the native toolchain for this platform."""
     os_name = get_os_name()
     normed_os_name = normalize_os_name(os_name)
@@ -82,20 +85,18 @@ class NativeToolchain(Subsystem, ExecutablePathProvider):
   @classmethod
   def subsystem_dependencies(cls):
     prev = super(NativeToolchain, cls).subsystem_dependencies()
-    cur_platform_subsystems = cls._get_platform_specific_subsystems()
+    cur_platform_subsystems = cls._get_dependent_subsystem_classes()
     return prev + tuple(sub.scoped(cls) for sub in cur_platform_subsystems)
 
   @memoized_method
-  def _subsystem_instances(self):
-    cur_platform_subsystems = self._get_platform_specific_subsystems()
+  def _dependent_subsystem_instances(self):
+    cur_platform_subsystems = self._get_dependent_subsystem_classes()
     return [sub.scoped_instance(self) for sub in cur_platform_subsystems]
 
   # TODO(cosmicexplorer): We might want to run a very small test suite verifying
   # the toolchain can compile and link native code before returning, especially
-  # since we don't provide the tools on OSX.
-  def path_entries(self):
-    combined_path_entries = []
-    for subsystem in self._subsystem_instances():
-      combined_path_entries.extend(subsystem.path_entries())
-
-    return combined_path_entries
+  # since we don't provide the tools on OSX. This might best be performed in
+  # NativeBuildEnvironment, since it already verifies that e.g. dirs exist.
+  def get_config(self):
+    configs = [inst.config for inst in self._dependent_subsystem_instances()]
+    return NativeBuildEnvironment.compose_all(configs)

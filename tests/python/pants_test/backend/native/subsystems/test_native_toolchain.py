@@ -27,7 +27,7 @@ class TestNativeToolchain(BaseTest):
     if cwd is None:
       cwd = self.build_root
 
-    toolchain_dirs = self.toolchain.path_entries()
+    toolchain_dirs = self.toolchain.config.program_dirs
     isolated_toolchain_path = get_joined_path(toolchain_dirs)
     try:
       with environment_as(PATH=isolated_toolchain_path):
@@ -52,6 +52,10 @@ int main() {
     c_output = self._invoke_capturing_output(['./hello_clang'])
     self.assertEqual(c_output, 'hello, world!\n')
 
+    self._invoke_capturing_output(['gcc', 'hello.c', '-o', 'hello_clang'])
+    c_output = self._invoke_capturing_output(['./hello_clang'])
+    self.assertEqual(c_output, 'hello, world!\n')
+
   def test_hello_cpp(self):
     self.create_file('hello.cpp', contents="""
 #include <iostream>
@@ -62,5 +66,9 @@ int main() {
 """)
 
     self._invoke_capturing_output(['clang++', 'hello.cpp', '-o', 'hello_clang++'])
+    cpp_output = self._invoke_capturing_output(['./hello_clang++'])
+    self.assertEqual(cpp_output, 'hello, world!\n')
+
+    self._invoke_capturing_output(['g++', 'hello.cpp', '-o', 'hello_clang++'])
     cpp_output = self._invoke_capturing_output(['./hello_clang++'])
     self.assertEqual(cpp_output, 'hello, world!\n')

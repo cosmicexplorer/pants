@@ -171,6 +171,8 @@ class BinaryUtilPrivate(object):
     # Use filename without rightmost extension as the directory name.
     unpacked_dirname, _ = os.path.splitext(downloaded_file)
     if not os.path.exists(unpacked_dirname):
+      logger.info('extracting {dl_path} into {unpacked_dirname} ...'
+                  .format(dl_path=downloaded_file, unpacked_dirname=unpacked_dirname))
       archiver.extract(downloaded_file, unpacked_dirname, concurrency_safe=True)
     return unpacked_dirname
 

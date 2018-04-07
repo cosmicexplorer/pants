@@ -7,13 +7,20 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 import os
 
-from pants.binaries.binary_tool import ExecutablePathProvider, NativeTool
+from pants.backend.native.config.native_build_environment import NativeBuildEnvironment
+from pants.backend.native.config.native_toolchain_component_mixin import NativeToolchainComponentMixin
+from pants.binaries.binary_tool import NativeTool
 
 
-class Binutils(NativeTool, ExecutablePathProvider):
+class Binutils(NativeTool, NativeToolchainComponentMixin):
   options_scope = 'binutils'
   default_version = '2.30'
   archive_type = 'tgz'
 
-  def path_entries(self):
-    return [os.path.join(self.select(), 'bin')]
+  def get_config(self):
+    bin_path = os.path.join(self.select(), 'bin')
+    return NativeBuildEnvironment(
+      program_dirs=[bin_path],
+      lib_dirs=[],
+      include_dirs=[],
+    )

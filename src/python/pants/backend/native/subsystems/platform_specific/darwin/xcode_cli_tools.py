@@ -7,12 +7,14 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 import os
 
-from pants.binaries.binary_tool import ExecutablePathProvider
+from pants.backend.native.config.native_build_environment import NativeBuildEnvironment
+from pants.backend.native.config.native_toolchain_component_mixin import NativeToolchainComponentMixin
 from pants.subsystem.subsystem import Subsystem
 from pants.util.dirutil import is_executable
 
 
-class XCodeCLITools(Subsystem, ExecutablePathProvider):
+# FIXME(cosmicexplorer): remove this and provide lld to replace it: see #5663
+class XCodeCLITools(Subsystem, NativeToolchainComponentMixin):
   """Subsystem to detect and provide the XCode command line developer tools.
 
   This subsystem exists to give a useful error message if the tools aren't
@@ -21,10 +23,9 @@ class XCodeCLITools(Subsystem, ExecutablePathProvider):
 
   options_scope = 'xcode-cli-tools'
 
-  # TODO(cosmicexplorer): make this an option?
   _INSTALL_LOCATION = '/usr/bin'
 
-  _REQUIRED_TOOLS = frozenset(['cc', 'c++', 'ld', 'lipo'])
+  _REQUIRED_TOOLS = frozenset(['clang', 'clang++', 'ld', 'lipo'])
 
   class XCodeToolsUnavailable(Exception):
     """Thrown if the XCode CLI tools could not be located."""
@@ -39,6 +40,6 @@ class XCodeCLITools(Subsystem, ExecutablePathProvider):
           "command line developer tools."
           .format(executable_path))
 
-  def path_entries(self):
-    self._check_executables_exist()
-    return [self._INSTALL_LOCATION]
+  def get_config(self):
+    xcode_clang_exe = os.path.join(self._INSTALL_LOCATION, 'clang')
+    return NativeBuildEnvironment.create_from_compiler_invocation(xcode_clang_exe)
