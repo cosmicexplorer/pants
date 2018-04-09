@@ -5,11 +5,15 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
+import logging
 import os
 import re
 
 from pants.util.objects import datatype
 from pants.util.process_handler import subprocess
+
+
+logger = logging.getLogger(__name__)
 
 
 class NativeBuildConfigurationError(Exception): pass
@@ -38,8 +42,9 @@ class NativeBuildEnvironment(datatype('NativeBuildEnvironment', [
 
     for entry in dir_set:
       if not os.path.isdir(entry):
-        raise TypeError("'{}' in {} is not an existing directory!"
-                        .format(repr(entry), name))
+        logger.debug("nonexistent directory '{}' deselected for {}"
+                     .format(entry, name))
+        continue
       real_dir = os.path.realpath(entry)
       real_dir_paths.add(real_dir)
 

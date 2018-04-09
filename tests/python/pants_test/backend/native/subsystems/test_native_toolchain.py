@@ -27,10 +27,13 @@ class TestNativeToolchain(BaseTest):
     if cwd is None:
       cwd = self.build_root
 
-    toolchain_dirs = self.toolchain.config.program_dirs
-    isolated_toolchain_path = get_joined_path(toolchain_dirs)
+    cfg = self.toolchain.config
     try:
-      with environment_as(PATH=isolated_toolchain_path):
+      with environment_as(
+          PATH=get_joined_path(cfg.program_dirs),
+          LIBRARY_PATH=get_joined_path(cfg.lib_dirs),
+          CPATH=get_joined_path(cfg.include_dirs),
+      ):
         return subprocess.check_output(cmd, cwd=cwd, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
       raise Exception(
