@@ -9,6 +9,10 @@ import logging
 import os
 import re
 
+from abc import abstractmethod
+from twitter.common.collections import OrderedSet
+
+from pants.util.memo import memoized_property
 from pants.util.objects import datatype
 from pants.util.process_handler import subprocess
 
@@ -30,32 +34,66 @@ def _invoke_capturing_output(cmd):
       e)
 
 
-class NativeBuildEnvironment(datatype('NativeBuildEnvironment', [
-    'program_dirs',
-    'lib_dirs',
-    'include_dirs',
-])):
+class DirectoryPathEntries(datatype('DirectoryPathEntries', ['name', 'dirs'])):
 
   @classmethod
-  def _normalize_dir_set(cls, dir_set, name):
-    real_dir_paths = set()
+  def _check_name(cls, name):
+    if not isinstance(name, str):
+      raise TypeError("'name' argument must be a string! was: {}"
+                      .format(repr(name)))
 
-    for entry in dir_set:
+    if len(name) == 0:
+      raise TypeError("'name' argument must be non-empty!".format(name))
+
+    return name
+
+  @classmethod
+  def _normalize_dir_set(cls, dir_paths, checked_name):
+    real_dir_paths = OrderedSet()
+
+    if not dir_set:
+      return real_dir_paths
+
+    for entry in dir_paths:
       if not os.path.isdir(entry):
         logger.debug("nonexistent directory '{}' deselected for {}"
-                     .format(entry, name))
+                     .format(entry, checked_name))
         continue
       real_dir = os.path.realpath(entry)
       real_dir_paths.add(real_dir)
 
     return real_dir_paths
 
+  @classmethod
+  def create(cls, name, iterable=None):
+    checked_name = cls._check_name(name)
+    return cls(
+      name=checked_name,
+      dirs=cls._normalize_dir_set(iterable, checked_name),
+    )
+
+
+# TODO(cosmicexplorer): fingerprint the bootstrap options?
+class NativeBuildBootstrapEnvironment(datatype('NativeBuildBootstrapEnvironment', [
+    'program_dirs',
+    'lib_dirs',
+    'include_dirs',
+])):
+
+  @classmethod
+  def create(cls, program_dirs=None, lib_dirs=None, include_dirs=None):
+    return cls(
+      program_dirs=DirectoryPathEntries.create('program_dirs', program_dirs),
+      lib_dirs=DirectoryPathEntries.create('lib_dirs', lib_dirs),
+      include_dirs=DirectoryPathEntries.create('include_dirs', include_dirs),
+    )
+
   def __new__(cls, program_dirs, lib_dirs, include_dirs):
-    return super(NativeBuildEnvironment, cls).__new__(
+    return super(NativeBuildBootstrapEnvironment, cls).__new__(
       cls,
-      cls._normalize_dir_set(program_dirs, 'program_dirs'),
-      cls._normalize_dir_set(lib_dirs, 'lib_dirs'),
-      cls._normalize_dir_set(include_dirs, 'include_dirs'),
+      program_dirs=OrderedSet(program_dirs),
+      lib_dirs=OrderedSet(lib_dirs),
+      include_dirs=OrderedSet(include_dirs),
     )
 
   @classmethod
@@ -63,9 +101,9 @@ class NativeBuildEnvironment(datatype('NativeBuildEnvironment', [
     search_dirs_cmd = [compiler_exe, '-print-search-dirs']
     search_dirs_output = _invoke_capturing_output(search_dirs_cmd)
 
-    program_dirs = set()
-    lib_dirs = set()
-    include_dirs = set()
+    program_dirs = OrderedSet()
+    lib_dirs = OrderedSet()
+    include_dirs = OrderedSet()
 
     for out_line in search_dirs_output.splitlines():
       programs_match = re.match(r'^programs: =(.*$)', out_line)
@@ -86,7 +124,7 @@ class NativeBuildEnvironment(datatype('NativeBuildEnvironment', [
 
         continue
 
-    return cls(program_dirs, lib_dirs, include_dirs)
+    return cls.create(program_dirs, lib_dirs, include_dirs)
 
   @classmethod
   def empty(cls):
@@ -98,7 +136,7 @@ class NativeBuildEnvironment(datatype('NativeBuildEnvironment', [
 
   def compose(self, rhs):
     # NB: runs all the validation in __new__ again
-    return NativeBuildEnvironment(
+    return NativeBuildBootstrapEnvironment(
       self.program_dirs | rhs.program_dirs,
       self.lib_dirs | rhs.lib_dirs,
       self.include_dirs | rhs.include_dirs,
@@ -112,3 +150,16 @@ class NativeBuildEnvironment(datatype('NativeBuildEnvironment', [
       cur = cur.compose(build_env)
 
     return cur
+
+
+class NativeCompilerMixin(object):
+
+  @abstractmethod
+  def invoke(self, )
+
+  @memoized_property
+  def config(self):
+    return self.get_config()
+
+  @abstractmethod
+  def get_config(self): pass

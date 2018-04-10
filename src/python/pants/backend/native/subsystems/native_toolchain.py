@@ -5,10 +5,9 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
-from pants.backend.native.config.native_build_environment import NativeBuildEnvironment
-from pants.backend.native.config.native_toolchain_component_mixin import NativeToolchainComponentMixin
-from pants.backend.native.subsystems.clang import Clang
-from pants.backend.native.subsystems.gcc import GCC
+from pants.backend.native.config.native_build_environment import NativeBuildEnvironment, NativeToolchainComponentMixin
+from pants.backend.native.subsystems.binaries.clang import Clang
+from pants.backend.native.subsystems.binaries.gcc import GCC
 from pants.backend.native.subsystems.platform_specific.darwin.xcode_cli_tools import XCodeCLITools
 from pants.backend.native.subsystems.platform_specific.linux.binutils import Binutils
 from pants.subsystem.subsystem import Subsystem

@@ -5,11 +5,16 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
+import logging
+
 from pants.backend.native.subsystems.native_toolchain import NativeToolchain
 from pants.util.contextutil import environment_as, get_joined_path
 from pants.util.process_handler import subprocess
 from pants_test.base_test import BaseTest
 from pants_test.subsystem.subsystem_util import global_subsystem_instance
+
+
+logger = logging.getLogger(__name__)
 
 
 # TODO(cosmicexplorer): Can we have some form of this run in an OSX shard on
@@ -28,6 +33,7 @@ class TestNativeToolchain(BaseTest):
       cwd = self.build_root
 
     cfg = self.toolchain.config
+    logger.debug("config: '{}'".format(repr(cfg)))
     try:
       with environment_as(
           PATH=get_joined_path(cfg.program_dirs),
@@ -38,8 +44,10 @@ class TestNativeToolchain(BaseTest):
     except subprocess.CalledProcessError as e:
       raise Exception(
         "Command failed while invoking the native toolchain "
-        "with code '{code}', cwd='{cwd}', cmd='{cmd}'. Combined stdout and stderr:\n{out}"
-        .format(code=e.returncode, cwd=cwd, cmd=' '.join(cmd), out=e.output),
+        "with code '{code}', cwd='{cwd}', cmd='{cmd}', cfg='{cfg}'. "
+        "Combined stdout and stderr:\n{out}"
+        .format(code=e.returncode, cwd=cwd, cmd=' '.join(cmd), cfg=repr(cfg),
+                out=e.output),
         e)
 
   def test_hello_c(self):

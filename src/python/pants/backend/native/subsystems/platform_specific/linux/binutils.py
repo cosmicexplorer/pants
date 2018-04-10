@@ -7,8 +7,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 import os
 
-from pants.backend.native.config.native_build_environment import NativeBuildEnvironment
-from pants.backend.native.config.native_toolchain_component_mixin import NativeToolchainComponentMixin
+from pants.backend.native.config.native_build_environment import NativeBuildEnvironment, NativeToolchainComponentMixin
 from pants.binaries.binary_tool import NativeTool
 
 
