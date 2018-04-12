@@ -11,6 +11,7 @@ from pants.backend.native.config.native_build_environment import NativeBuildEnvi
 from pants.binaries.binary_tool import NativeTool
 
 
+# TODO(cosmicexplorer): rename this to "LLVM"
 class Clang(NativeTool, NativeToolchainComponentMixin):
   options_scope = 'clang'
   default_version = '6.0.0'
