@@ -477,6 +477,7 @@ class LocalScheduler(object):
     # TODO: See https://github.com/pantsbuild/pants/issues/3912
     throw_root_states = tuple(state for root, state in result.root_products if type(state) is Throw)
     if throw_root_states:
+      raise ExecutionError("lol: '{}'".format(repr(throw_root_states)))
       if self._include_trace_on_error:
         cumulative_trace = '\n'.join(self.trace(request))
         raise ExecutionError('Received unexpected Throw state(s):\n{}'.format(cumulative_trace))
