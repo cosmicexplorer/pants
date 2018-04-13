@@ -8,7 +8,6 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 import logging
 from collections import namedtuple
 
-from pants.backend.native.rules.cpp_rules import create_cpp_rules
 from pants.base.build_environment import get_buildroot, get_scm
 from pants.base.file_system_project_tree import FileSystemProjectTree
 from pants.base.specs import Specs
@@ -174,8 +173,7 @@ class EngineInitializer(object):
       create_legacy_graph_tasks(symbol_table) +
       create_fs_rules() +
       create_graph_rules(address_mapper, symbol_table) +
-      create_process_rules() +
-      create_cpp_rules()
+      create_process_rules()
     )
 
     scheduler = LocalScheduler(workdir, dict(), tasks, project_tree, native, include_trace_on_error=include_trace_on_error)

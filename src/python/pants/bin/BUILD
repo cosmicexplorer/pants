@@ -6,7 +6,6 @@ python_library(
     '3rdparty/python/twitter/commons:twitter.common.collections',
     '3rdparty/python:setproctitle',
     'src/python/pants/backend/jvm/tasks:nailgun_task',
-    'src/python/pants/backend/native/rules',
     'src/python/pants/base:build_environment',
     'src/python/pants/base:build_file',
     'src/python/pants/base:cmd_line_spec_parser',

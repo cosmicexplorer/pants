@@ -5,10 +5,18 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
-from pants.backend.native.subsystems.native_toolchain import NativeToolchain
+import os
+from tempfile import mkdtemp
+
+from pants.engine.fs import create_fs_rules
+from pants.engine.rules import SingletonRule
+from pants.backend.native.subsystems.clang import Clang
+from pants.backend.native.rules.cpp_rules import Compiler, CppSources, CppObjOutputDir, CppObjects, create_cpp_rules
 from pants.util.contextutil import environment_as, get_joined_path
+from pants.util.dirutil import safe_mkdir, safe_open, safe_rmtree
 from pants.util.process_handler import subprocess
 from pants_test.base_test import BaseTest
+from pants_test.engine.scheduler_test_base import SchedulerTestBase
 from pants_test.subsystem.subsystem_util import global_subsystem_instance
 
 
@@ -17,36 +25,37 @@ from pants_test.subsystem.subsystem_util import global_subsystem_instance
 # FIXME(cosmicexplorer): We need to test gcc as well, but the gcc driver can't
 # find the right include directories for system headers in Travis. We need to
 # use the clang driver to find library paths, then use those when invoking gcc.
-class TestNativeToolchain(BaseTest):
+class TestNativeToolchain(BaseTest, SchedulerTestBase):
 
   def setUp(self):
     super(TestNativeToolchain, self).setUp()
-    self.toolchain = global_subsystem_instance(NativeToolchain)
 
-  def _invoke_capturing_output(self, cmd, cwd=None):
-    if cwd is None:
-      cwd = self.build_root
+    rules = create_fs_rules() + create_cpp_rules()
 
-    toolchain_dirs = self.toolchain.path_entries()
-    isolated_toolchain_path = get_joined_path(toolchain_dirs)
-    try:
-      with environment_as(PATH=isolated_toolchain_path):
-        return subprocess.check_output(cmd, cwd=cwd, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-      raise Exception(
-        "Command failed while invoking the native toolchain "
-        "with code '{code}', cwd='{cwd}', cmd='{cmd}'. Combined stdout and stderr:\n{out}"
-        .format(code=e.returncode, cwd=cwd, cmd=' '.join(cmd), out=e.output),
-        e)
+    self.clang = global_subsystem_instance(Clang)
+
+    self.scheduler = self.mk_scheduler(rules=rules, work_dir=self.build_root)
 
   def test_hello_c(self):
-    self.create_file('hello.c', contents="""
+    c_src = self.create_file('hello.c', contents="""
 #include "stdio.h"
 
 int main() {
   printf("%s\\n", "hello, world!");
 }
 """)
+
+    c_dir = os.path.dirname(c_src)
+
+    hello_objs = self.scheduler.product_request(
+      CppObjects, [
+        self.clang,
+        CppSources(root_dir=c_dir,
+                   file_paths=['hello.c']),
+        CppObjOutputDir(dir_path=c_dir),
+      ])
+
+    raise Exception(repr(os.listdir(c_dir)))
 
     self._invoke_capturing_output(['clang', 'hello.c', '-o', 'hello_clang'])
     c_output = self._invoke_capturing_output(['./hello_clang'])
