@@ -39,6 +39,7 @@ class CppFiles(datatype('CppFiles', [
 
     return super(CppFiles, cls).__new__(cls, root_dir, file_paths)
 
+
 class CppFileProvider(object):
 
   @abstractmethod
@@ -181,30 +182,29 @@ class CppDylibRequest(datatype('CppDylibRequest', [
 ])): pass
 
 
-# @rule(CppDylib, [Select(Linker), Select(CppDylibRequest)])
-# def link_objects_into_dylib(linker, cpp_dylib_request):
-#   obj_snapshot = yield Get(CppObjectSnapshot, CppObjects, cpp_dylib_request.cpp_objects)
+@rule(CppDylib, [Select(Clang), Select(CppDylibRequest)])
+def link_objects_into_dylib(clang, cpp_dylib_request):
+  obj_snapshot = yield Get(CppObjectSnapshot, CppObjects, cpp_dylib_request.cpp_objects)
 
-#   obj_rel_paths = obj_snapshot.get_relative_file_paths()
+  obj_rel_paths = obj_snapshot.get_relative_file_paths()
 
-#   outdir = cpp_dylib_output_dir.dir_path
+  outdir = cpp_dylib_output_dir.dir_path
 
-#   output_filename = cpp_link_request.output_filename
+  output_filename = cpp_link_request.output_filename
 
-#   linker.link_cpp(outdir, obj_snapshot.relative_to, output_filename, obj_rel_paths)
+  clang.link_cpp(outdir, obj_snapshot.relative_to, output_filename, obj_rel_paths)
 
-#   yield CppDylib(relative_to=outdir, rel_path=output_filename)
+  yield CppDylib(relative_to=outdir, rel_path=output_filename)
 
 
 def create_cpp_rules(clang_inst):
   return [
     SingletonRule(Clang, clang_inst),
     RootRule(CppObjectsRequest),
-    # SingletonRule(Linker, linker_inst),
     RootRule(CppDylibRequest),
     collect_cpp_sources,
     collect_cpp_objects,
     compile_cpp_sources_to_objects,
-    # collect_cpp_dylib,
-    # link_objects_into_dylib,
+    collect_cpp_dylib,
+    link_objects_into_dylib,
   ]
