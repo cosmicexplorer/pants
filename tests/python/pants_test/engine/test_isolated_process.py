@@ -70,12 +70,7 @@ def cat_files_process_request_input_snapshot(cat_exe_req):
 
 @rule(Concatted, [Select(CatExecutionRequest)])
 def cat_files_process_result_concatted(cat_exe_req):
-  # FIXME(cosmicexplorer): we should only have to run Get once here. this:
-  # yield Get(ExecuteProcessResult, CatExecutionRequest, cat_exe_req)
-  # fails because ExecuteProcessRequest is a RootRule (which shouldn't be true),
-  # but there's some work required in isolated_process.py to fix this.
-  cat_proc_req = yield Get(ExecuteProcessRequest, CatExecutionRequest, cat_exe_req)
-  cat_process_result = yield Get(ExecuteProcessResult, ExecuteProcessRequest, cat_proc_req)
+  cat_process_result = yield Get(ExecuteProcessResult, CatExecutionRequest, cat_exe_req)
   yield Concatted(value=cat_process_result.stdout)
 
 
@@ -83,6 +78,7 @@ def create_cat_stdout_rules():
   return [
     cat_files_process_request_input_snapshot,
     cat_files_process_result_concatted,
+    RootRule(CatSourceFiles),
     RootRule(CatExecutionRequest),
   ]
 
@@ -142,10 +138,8 @@ stderr:
 
 @rule(JavacVersionOutput, [Select(JavacVersionCommand)])
 def get_javac_version_output(javac_version_command):
-  javac_version_proc_req = yield Get(
-    ExecuteProcessRequest, JavacVersionCommand, javac_version_command)
   javac_version_proc_result = yield Get(
-    ExecuteProcessResult, ExecuteProcessRequest, javac_version_proc_req)
+    ExecuteProcessResult, JavacVersionCommand, javac_version_command)
 
   exit_code = javac_version_proc_result.exit_code
   if exit_code != 0:
@@ -154,9 +148,7 @@ def get_javac_version_output(javac_version_command):
     raise ProcessExecutionFailure(
       exit_code, stdout, stderr, 'obtaining javac version')
 
-  yield JavacVersionOutput(
-    version_output=javac_version_proc_result.stderr,
-  )
+  yield JavacVersionOutput(version_output=javac_version_proc_result.stderr)
 
 
 class JavacCompileCommand(Javac):
@@ -233,10 +225,8 @@ class JavacCompileResult(datatype('JavacCompileResult', [])):
 
 @rule(JavacCompileResult, [Select(JavacCompileRequest)])
 def javac_compile_process_result(javac_compile_req):
-  javac_proc_req = yield Get(
-    ExecuteProcessRequest, JavacCompileRequest, javac_compile_req)
   javac_proc_result = yield Get(
-    ExecuteProcessResult, ExecuteProcessRequest, javac_proc_req)
+    ExecuteProcessResult, JavacCompileRequest, javac_compile_req)
 
   exit_code = javac_proc_result.exit_code
   if exit_code != 0:

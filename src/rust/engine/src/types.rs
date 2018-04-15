@@ -10,6 +10,7 @@ pub struct Types {
   pub construct_file: Function,
   pub construct_link: Function,
   pub construct_process_result: Function,
+  // pub construct_process_request: Function,
   pub address: TypeConstraint,
   pub has_products: TypeConstraint,
   pub has_variants: TypeConstraint,

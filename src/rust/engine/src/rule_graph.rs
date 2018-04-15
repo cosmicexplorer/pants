@@ -299,6 +299,45 @@ impl<'t> GraphMaker<'t> {
     }
   }
 
+  fn _match_get_rules(
+    &self,
+    get: &Get,
+    root_rule_dependency_edges: &mut RootRuleDependencyEdges,
+    rule_dependency_edges: &mut RuleDependencyEdges,
+    unfulfillable_rules: &mut UnfulfillableRuleMap,
+    rules_to_traverse: &mut VecDeque<Entry>,
+    was_unfulfillable: &mut bool,
+    entry: &Entry,
+  ) {
+    let &Get { ref subject, ref product } = get;
+
+    let rules_or_literals_for_selector = rhs(&self.tasks, subject.clone(), product);
+    if rules_or_literals_for_selector.is_empty() {
+      mark_unfulfillable(
+        unfulfillable_rules,
+        entry,
+        subject.clone(),
+        format!(
+          "no rule was available to compute {} for {} (tasks: {:?})",
+          type_constraint_str(product.clone()),
+          type_str(subject.clone()),
+          &self.tasks.all_tasks(),
+        ),
+      );
+      *was_unfulfillable = true;
+      return;
+    }
+    add_rules_to_graph(
+      rules_to_traverse,
+      rule_dependency_edges,
+      unfulfillable_rules,
+      root_rule_dependency_edges,
+      entry,
+      SelectKey::JustGet(get.clone()),
+      rules_or_literals_for_selector,
+    );
+  }
+
   fn _construct_graph(
     &self,
     beginning_rule: RootEntry,
@@ -448,37 +487,21 @@ impl<'t> GraphMaker<'t> {
             }
           }
           for get in gets {
-            match get {
-              &Get {
-                ref subject,
-                ref product,
-              } => {
-                let rules_or_literals_for_selector = rhs(&self.tasks, subject.clone(), product);
-                if rules_or_literals_for_selector.is_empty() {
-                  mark_unfulfillable(
-                    &mut unfulfillable_rules,
-                    &entry,
-                    subject.clone(),
-                    format!(
-                      "no rule was available to compute {} for {}",
-                      type_constraint_str(product.clone()),
-                      type_str(subject.clone())
-                    ),
-                  );
-                  was_unfulfillable = true;
-                  continue;
-                }
-                add_rules_to_graph(
-                  &mut rules_to_traverse,
-                  &mut rule_dependency_edges,
-                  &mut unfulfillable_rules,
-                  &mut root_rule_dependency_edges,
-                  &entry,
-                  SelectKey::JustGet(get.clone()),
-                  rules_or_literals_for_selector,
-                );
-              }
-            }
+            // TODO: add something here to add an additional Get when
+            // subject=CatExecutionRequest, product=ExecuteProcessResult --
+            // turn that into two gets:
+            // subject=CatExecutionRequest, product=ExecuteProcessRequest, and
+            // subject=ExecuteProcessRequest, product=ExecuteProcessResult, then
+            // remove the panic for ExecuteProcessRequest->ExecuteProcessResult
+            self._match_get_rules(
+              get,
+              &mut root_rule_dependency_edges,
+              &mut rule_dependency_edges,
+              &mut unfulfillable_rules,
+              &mut rules_to_traverse,
+              &mut was_unfulfillable,
+              &entry,
+            );
           }
         }
         _ => panic!(

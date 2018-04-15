@@ -246,9 +246,9 @@ unsafe impl Send for Externs {}
 pub type LogExtern = extern "C" fn(*const ExternContext, u8, str_ptr: *const u8, str_len: u64);
 
 // TODO: Type alias used to avoid rustfmt breaking itself by rendering a 101 character line.
-pub type SatisfedBool = bool;
+pub type SatisfiedBool = bool;
 pub type SatisfiedByExtern =
-  extern "C" fn(*const ExternContext, *const Value, *const Value) -> SatisfedBool;
+  extern "C" fn(*const ExternContext, *const Value, *const Value) -> SatisfiedBool;
 
 pub type SatisfiedByTypeExtern =
   extern "C" fn(*const ExternContext, *const Value, *const TypeId) -> bool;

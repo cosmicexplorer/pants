@@ -311,22 +311,27 @@ impl Select {
           .to_boxed(),
       ]
     } else if self.product() == &context.core.types.process_result {
-      let context2 = context.clone();
-      let execute_process_node = ExecuteProcess::lift(&self.subject);
+
+      let context = context.clone();
+      let value = externs::val_for(&self.subject);
+      assert!(externs::satisfied_by(
+        &context.core.types.process_request,
+        &value
+      ));
+
+      let execute_process_node = ExecuteProcess::lift(&value);
+
       vec![
         context
           .get(execute_process_node)
           .map(move |result| {
             externs::unsafe_call(
-              &context2.core.types.construct_process_result,
-              &[
+              &context.core.types.construct_process_result, &[
                 externs::store_bytes(&result.0.stdout),
                 externs::store_bytes(&result.0.stderr),
                 externs::store_i32(result.0.exit_code),
-              ],
-            )
-          })
-          .to_boxed(),
+              ])
+          }).to_boxed(),
       ]
     } else if let Some(&(_, ref value)) = context.core.tasks.gen_singleton(self.product()) {
       vec![future::ok(value.clone()).to_boxed()]
@@ -515,9 +520,7 @@ impl ExecuteProcess {
   ///
   /// Lifts a Key representing a python ExecuteProcessRequest value into a ExecuteProcess Node.
   ///
-  fn lift(subject: &Key) -> ExecuteProcess {
-    let value = externs::val_for(subject);
-
+  fn lift(value: &Value) -> ExecuteProcess {
     let mut env: BTreeMap<String, String> = BTreeMap::new();
     let env_var_parts = externs::project_multi_strs(&value, "env");
     // TODO: Error if env_var_parts.len() % 2 != 0
