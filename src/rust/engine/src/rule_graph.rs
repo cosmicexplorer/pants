@@ -309,7 +309,47 @@ impl<'t> GraphMaker<'t> {
     was_unfulfillable: &mut bool,
     entry: &Entry,
   ) {
-    let &Get { ref subject, ref product } = get;
+    let &Get {
+      ref subject,
+      ref product,
+    } = get;
+
+    let exe_proc_res_constraint = 3;
+    let exe_proc_req_type_id = 3;
+
+    if (product == exe_proc_res_constraint) && (subject != exe_proc_req_type_id) {
+      let exe_get = Get {
+        subject: exe_proc_req_type_id,
+        product: product.clone(),
+      };
+      self._match_get_rules(
+        exe_get,
+        root_rule_dependency_edges,
+        rule_dependency_edges,
+        unfulfillable_rules,
+        rules_to_traverse,
+        was_unfulfillable,
+        entry,
+      );
+
+      // make it search for rules producing an ExecuteProcessRequest
+      let exe_proc_req_type_constraint = 3;
+      let to_proc_req_get = Get {
+        subject: subject.clone(),
+        product: exe_proc_req_type_constraint,
+      };
+      self._match_get_rules(
+        to_proc_req_get,
+        root_rule_dependency_edges,
+        rule_dependency_edges,
+        unfulfillable_rules,
+        rules_to_traverse,
+        was_unfulfillable,
+        entry,
+      );
+
+      return;
+    }
 
     let rules_or_literals_for_selector = rhs(&self.tasks, subject.clone(), product);
     if rules_or_literals_for_selector.is_empty() {
