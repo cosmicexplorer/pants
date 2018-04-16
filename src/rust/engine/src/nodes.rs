@@ -282,6 +282,59 @@ impl Select {
     })
   }
 
+  fn is_process_request_value(context: &Context, value: &Value) -> bool {
+    externs::satisfied_by(&context.core.types.process_request, &value)
+  }
+
+  fn get_process_request(&self, context: &Context) -> NodeFuture<Value> {
+    let value = externs::val_for(&self.subject);
+
+    let ctx_raii = context.clone();
+
+    if Self::is_process_request_value(&ctx_raii, &value) {
+      future::ok(value.clone()).to_boxed()
+    } else {
+
+      let select_node = Select::new_with_entries(
+        ctx_raii.core.types.process_request ,
+        self.subject.clone(),
+        self.variants.clone(),
+        self.entries.clone(),
+      );
+
+      ctx_raii
+        .get(select_node)
+        .map(move |result| {
+          assert!(Self::is_process_request_value(&ctx_raii, &result));
+          result.clone()
+        }).to_boxed()
+    }
+  }
+
+  fn get_process_result(&self, context: &Context) -> NodeFuture<Value> {
+    let ctx_raii = context.clone();
+
+    let proc_request: NodeFuture<Value> = self.get_process_request(&ctx_raii);
+
+    let proc_result: NodeFuture<Value> = proc_request
+      .and_then(move |request| {
+        let execute_process_node: ExecuteProcess = ExecuteProcess::lift(&request);
+
+        ctx_raii
+          .get(execute_process_node)
+          .map(move |process_result| {
+            externs::unsafe_call(
+              &ctx_raii.core.types.construct_process_result, &[
+                externs::store_bytes(&process_result.0.stdout),
+                externs::store_bytes(&process_result.0.stderr),
+                externs::store_i32(process_result.0.exit_code),
+              ])
+          }).to_boxed()
+      }).to_boxed();
+
+    proc_result
+  }
+
   ///
   /// Return Futures for each Task/Node that might be able to compute the given product for the
   /// given subject and variants.
@@ -311,28 +364,7 @@ impl Select {
           .to_boxed(),
       ]
     } else if self.product() == &context.core.types.process_result {
-
-      let context = context.clone();
-      let value = externs::val_for(&self.subject);
-      assert!(externs::satisfied_by(
-        &context.core.types.process_request,
-        &value
-      ));
-
-      let execute_process_node = ExecuteProcess::lift(&value);
-
-      vec![
-        context
-          .get(execute_process_node)
-          .map(move |result| {
-            externs::unsafe_call(
-              &context.core.types.construct_process_result, &[
-                externs::store_bytes(&result.0.stdout),
-                externs::store_bytes(&result.0.stderr),
-                externs::store_i32(result.0.exit_code),
-              ])
-          }).to_boxed(),
-      ]
+      vec![self.get_process_result(&context)]
     } else if let Some(&(_, ref value)) = context.core.tasks.gen_singleton(self.product()) {
       vec![future::ok(value.clone()).to_boxed()]
     } else {
