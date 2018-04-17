@@ -129,16 +129,19 @@ pub fn call(func: &Value, args: &[Value]) -> Result<Value, Failure> {
 }
 
 pub fn generator_send(generator: &Value, arg: &Value) -> Result<GeneratorResponse, Failure> {
+  eprintln!("generator_send/arg: {}", val_to_str(&arg));
   let response = with_externs(|e| (e.generator_send)(e.context, generator, arg));
   match response.res_type {
     PyGeneratorResponseType::Break => Ok(GeneratorResponse::Break(response.values.unwrap_one())),
     PyGeneratorResponseType::Throw => Err(PyResult::failure_from(response.values.unwrap_one())),
     PyGeneratorResponseType::Get => {
+      let resp_val = response.values.unwrap_one();
+      eprintln!("resp_val: {}", val_to_str(&resp_val));
       let mut interns = INTERNS.write().unwrap();
       let constraint = TypeConstraint(interns.insert(response.constraints.unwrap_one()));
       Ok(GeneratorResponse::Get(Get(
         constraint,
-        interns.insert(response.values.unwrap_one()),
+        interns.insert(resp_val),
       )))
     }
     PyGeneratorResponseType::GetMulti => {

@@ -458,7 +458,10 @@ def _initialize_externs(ffi):
     """Given a generator, send it the given value and return a response."""
     c = ffi.from_handle(context_handle)
     try:
-      res = c.from_value(func).send(c.from_value(arg))
+      something = c.from_value(arg)
+      print("something: {}".format(something), file=sys.stderr)
+      res = c.from_value(func).send(something)
+      print("res: {}".format(res), file=sys.stderr)
       if isinstance(res, Get):
         # Get.
         values = [res.subject]
@@ -481,6 +484,9 @@ def _initialize_externs(ffi):
       values = [val]
       constraints = []
       tag = 1
+
+    print("values: {}".format(values), file=sys.stderr)
+    print("constraints: {}".format(constraints), file=sys.stderr)
 
     return (
         tag,

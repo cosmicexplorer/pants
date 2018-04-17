@@ -6,6 +6,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 import os
+import sys
 import tarfile
 import unittest
 
@@ -61,11 +62,13 @@ class CatExecutionRequest(datatype('CatExecutionRequest', [
 def cat_files_process_request_input_snapshot(cat_exe_req):
   cat_bin = cat_exe_req.shell_cat_binary
   cat_files_snapshot = yield Get(Snapshot, PathGlobs, cat_exe_req.input_file_globs)
-  yield ExecuteProcessRequest.create_from_snapshot(
+  result = ExecuteProcessRequest.create_from_snapshot(
     argv=cat_bin.gen_argv([cat_files_snapshot]),
     env=tuple(),
     snapshot=cat_files_snapshot,
   )
+  sys.stderr.write("heya: {}\n".format(result))
+  yield result
 
 
 @rule(Concatted, [Select(CatExecutionRequest)])

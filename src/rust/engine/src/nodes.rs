@@ -291,20 +291,27 @@ impl Select {
 
     let ctx_raii = context.clone();
 
+    eprintln!("get_process_request: {}", externs::val_to_str(&value));
+
     if Self::is_process_request_value(&ctx_raii, &value) {
-      future::ok(value.clone()).to_boxed()
+      eprintln!("ok");
+      ok(value.clone())
     } else {
+      // panic!("wow: {}", externs::val_to_str(&value));
+      assert_eq!(self.entries.len(), 1);
       let select_node = Select::new_with_entries(
         ctx_raii.core.types.process_request,
         self.subject,
         self.variants.clone(),
         self.entries.clone(),
       );
+      eprintln!("select_node: {:?}", select_node);
 
       select_node
         .run(ctx_raii.clone())
         .map_err(|e| was_required(e))
         .map(move |result| {
+          panic!("lol: {}", externs::val_to_str(&result));
           assert!(Self::is_process_request_value(&ctx_raii, &result));
           result.clone()
         })
@@ -315,23 +322,30 @@ impl Select {
   fn get_process_result(&self, context: &Context) -> NodeFuture<Value> {
     let ctx_raii = context.clone();
 
+    eprintln!("get_process_result");
+
     let proc_request: NodeFuture<Value> = self.get_process_request(&ctx_raii);
 
     let proc_result: NodeFuture<Value> = proc_request
       .and_then(move |request| {
+        eprintln!("proc_result/request: {}", externs::val_to_str(&request));
         let execute_process_node: ExecuteProcess = ExecuteProcess::lift(&request);
+
+        eprintln!("execute_process_node: {:?}", execute_process_node);
 
         execute_process_node
           .run(ctx_raii.clone())
           .map(move |process_result| {
-            externs::unsafe_call(
+            let process_result_value = externs::unsafe_call(
               &ctx_raii.core.types.construct_process_result,
               &[
                 externs::store_bytes(&process_result.0.stdout),
                 externs::store_bytes(&process_result.0.stderr),
                 externs::store_i32(process_result.0.exit_code),
               ],
-            )
+            );
+            eprintln!("process_result_value: {}", externs::val_to_str(&process_result_value));
+            process_result_value
           })
           .to_boxed()
       })
@@ -345,6 +359,7 @@ impl Select {
   /// given subject and variants.
   ///
   fn gen_nodes(&self, context: &Context) -> Vec<NodeFuture<Value>> {
+    eprintln!("gen_nodes/product: {:?}", externs::key_to_str(&self.product().0));
     // TODO: These `product==` hooks are hacky.
     if self.product() == &context.core.types.snapshot {
       // If the requested product is a Snapshot, execute a Snapshot Node and then lower to a Value
@@ -369,10 +384,30 @@ impl Select {
           .to_boxed(),
       ]
     } else if self.product() == &context.core.types.process_result {
+      eprintln!("executing processes");
       vec![self.get_process_result(&context)]
+      // let context2 = context.clone();
+      // let value = externs::val_for(&self.subject);
+      // let execute_process_node = ExecuteProcess::lift(&value);
+      // vec![
+      //   context
+      //     .get(execute_process_node)
+      //     .map(move |result| {
+      //       externs::unsafe_call(
+      //         &context2.core.types.construct_process_result,
+      //         &[
+      //           externs::store_bytes(&result.0.stdout),
+      //           externs::store_bytes(&result.0.stderr),
+      //           externs::store_i32(result.0.exit_code),
+      //         ],
+      //       )
+      //     })
+      //     .to_boxed(),
+      // ]
     } else if let Some(&(_, ref value)) = context.core.tasks.gen_singleton(self.product()) {
       vec![future::ok(value.clone()).to_boxed()]
     } else {
+      eprintln!("the else zone");
       self
         .entries
         .iter()
@@ -397,6 +432,7 @@ impl Node for Select {
   type Output = Value;
 
   fn run(self, context: Context) -> NodeFuture<Value> {
+    eprintln!("Select::run");
     // TODO add back support for variants https://github.com/pantsbuild/pants/issues/4020
 
     // If there is a variant_key, see whether it has been configured; if not, no match.
@@ -411,6 +447,19 @@ impl Node for Select {
       None => None,
     };
 
+    let value = externs::val_for(&self.subject);
+
+    let ctx_raii = context.clone();
+
+    eprintln!("subject: {}", externs::val_to_str(&value));
+    eprintln!("product: {:?}", externs::key_to_str(&self.product().0));
+    eprintln!("selector.product: {:?}", externs::key_to_str(&self.selector.product.0));
+    eprintln!("entries: {:?}", self.entries);
+
+    if Self::is_process_request_value(&ctx_raii, &value) {
+      eprintln!("run: {}", externs::val_to_str(&value));
+    }
+
     // If the Subject "is a" or "has a" Product, then we're done.
     if let Some(literal_value) =
       self.select_literal(&context, externs::val_for(&self.subject), &variant_value)
@@ -424,8 +473,12 @@ impl Node for Select {
         .gen_nodes(&context)
         .into_iter()
         .map(|node_future| {
+          eprintln!("plz");
           // Don't fail the join if one fails.
-          node_future.then(|r| future::ok(r))
+          node_future.then(|r| {
+            eprintln!("then: {:?}", r);
+            future::ok(r)
+          })
         })
         .collect::<Vec<_>>(),
     );
@@ -433,7 +486,10 @@ impl Node for Select {
     let variant_value = variant_value.map(|s| s.to_string());
     deps_future
       .and_then(move |dep_results| {
-        future::result(self.choose_task_result(context, dep_results, &variant_value))
+        eprintln!("dep_results: {:?}", dep_results);
+        let chosen_result = self.choose_task_result(context, dep_results, &variant_value);
+        eprintln!("chosen_result: {:?}", chosen_result);
+        future::result(chosen_result)
       })
       .to_boxed()
   }
