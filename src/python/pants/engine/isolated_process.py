@@ -191,7 +191,10 @@ class ExecuteProcessResult(datatype('ExecuteProcessResult', ['stdout', 'stderr',
 
 def create_process_rules():
   """Intrinsically replaced on the rust side."""
-  return [execute_process_noop, RootRule(ExecuteProcessRequest)]
+  return [
+    execute_process_noop,
+    RootRule(ExecuteProcessRequest),
+  ]
 
 
 @rule(ExecuteProcessResult, [Select(ExecuteProcessRequest)])

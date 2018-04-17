@@ -70,6 +70,8 @@ def cat_files_process_request_input_snapshot(cat_exe_req):
 
 @rule(Concatted, [Select(CatExecutionRequest)])
 def cat_files_process_result_concatted(cat_exe_req):
+  # cat_process_req = yield Get(ExecuteProcessRequest, CatExecutionRequest, cat_exe_req)
+  # cat_process_result = yield Get(ExecuteProcessResult, ExecuteProcessRequest, cat_process_req)
   cat_process_result = yield Get(ExecuteProcessResult, CatExecutionRequest, cat_exe_req)
   yield Concatted(value=cat_process_result.stdout)
 
@@ -78,13 +80,8 @@ def create_cat_stdout_rules():
   return [
     cat_files_process_request_input_snapshot,
     cat_files_process_result_concatted,
-    RootRule(CatSourceFiles),
     RootRule(CatExecutionRequest),
   ]
-
-
-class JavaOutputDir(datatype('JavaOutputDir', ['path'])):
-  pass
 
 
 class Javac(Binary):

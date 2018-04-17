@@ -294,20 +294,21 @@ impl Select {
     if Self::is_process_request_value(&ctx_raii, &value) {
       future::ok(value.clone()).to_boxed()
     } else {
-
       let select_node = Select::new_with_entries(
-        ctx_raii.core.types.process_request ,
-        self.subject.clone(),
+        ctx_raii.core.types.process_request,
+        self.subject,
         self.variants.clone(),
         self.entries.clone(),
       );
 
-      ctx_raii
-        .get(select_node)
+      select_node
+        .run(ctx_raii.clone())
+        .map_err(|e| was_required(e))
         .map(move |result| {
           assert!(Self::is_process_request_value(&ctx_raii, &result));
           result.clone()
-        }).to_boxed()
+        })
+        .to_boxed()
     }
   }
 
@@ -320,17 +321,21 @@ impl Select {
       .and_then(move |request| {
         let execute_process_node: ExecuteProcess = ExecuteProcess::lift(&request);
 
-        ctx_raii
-          .get(execute_process_node)
+        execute_process_node
+          .run(ctx_raii.clone())
           .map(move |process_result| {
             externs::unsafe_call(
-              &ctx_raii.core.types.construct_process_result, &[
+              &ctx_raii.core.types.construct_process_result,
+              &[
                 externs::store_bytes(&process_result.0.stdout),
                 externs::store_bytes(&process_result.0.stderr),
                 externs::store_i32(process_result.0.exit_code),
-              ])
-          }).to_boxed()
-      }).to_boxed();
+              ],
+            )
+          })
+          .to_boxed()
+      })
+      .to_boxed();
 
     proc_result
   }

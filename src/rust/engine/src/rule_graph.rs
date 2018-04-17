@@ -314,6 +314,8 @@ impl<'t> GraphMaker<'t> {
       ref product,
     } = get;
 
+    // TODO: when the product is an ExecuteProcessResult, 
+
     let rules_or_literals_for_selector = rhs(&self.tasks, subject.clone(), product);
     if rules_or_literals_for_selector.is_empty() {
       mark_unfulfillable(
