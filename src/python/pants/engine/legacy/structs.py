@@ -341,3 +341,9 @@ class RGlobs(BaseGlobs):
 class ZGlobs(BaseGlobs):
   path_globs_kwarg = 'zglobs'
   legacy_globs_class = wrapped_globs.ZGlobs
+
+
+class MustMatchGlobs(datatype('MustMatchGlobs', ['path_globs'])):
+  # TODO: make rules for this to turn into a Snapshot, but fail if the Snapshot
+  # is empty (see the .is_empty() method added to Snapshot)
+  pass
