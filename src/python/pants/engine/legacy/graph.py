@@ -372,6 +372,10 @@ def _eager_fileset_with_spec(spec_path, filespec, snapshot, include_dirs=False):
 def hydrate_sources(sources_field):
   """Given a SourcesField, request a Snapshot for its path_globs and create an EagerFilesetWithSpec."""
 
+  # TODO: do something around or inside this conversion from PathGlobs, since
+  # this is a SourcesField, and we now want to know if the glob doesn't
+  # match. This is almost definitely a capability other users of PathGlobs would
+  # want to be able to use.
   snapshot = yield Get(Snapshot, PathGlobs, sources_field.path_globs)
   fileset_with_spec = _eager_fileset_with_spec(sources_field.address.spec_path,
                                                sources_field.filespecs,
