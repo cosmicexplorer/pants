@@ -77,6 +77,10 @@ class Snapshot(datatype('Snapshot', ['fingerprint', 'digest_length', 'path_stats
     return [p for p in self.path_stats if type(p.stat) == File]
 
   @property
+  def is_empty(self):
+    return len(self.path_stats) == 0
+
+  @property
   def file_stats(self):
     return [p.stat for p in self.files]
 
