@@ -10,8 +10,8 @@ import os
 from pants.binaries.binary_tool import ExecutablePathProvider, NativeTool
 
 
-class Clang(NativeTool, ExecutablePathProvider):
-  options_scope = 'clang'
+class LLVM(NativeTool, ExecutablePathProvider):
+  options_scope = 'llvm'
   default_version = '6.0.0'
   archive_type = 'tgz'
 
