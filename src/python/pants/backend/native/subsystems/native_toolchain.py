@@ -7,7 +7,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
 
 from pants.backend.native.subsystems.gcc import GCC
 from pants.backend.native.subsystems.llvm import LLVM
-from pants.backend.native.subsystems.platform_specific.darwin.xcode_cli_tools import XCodeCLITools
+from pants.backend.native.subsystems.platform_specific.darwin.osx_lld import OSXLLD
 from pants.backend.native.subsystems.platform_specific.linux.binutils import Binutils
 from pants.binaries.binary_tool import ExecutablePathProvider
 from pants.subsystem.subsystem import Subsystem
@@ -52,6 +52,18 @@ class NativeToolchain(Subsystem, ExecutablePathProvider):
     'darwin': [XCodeCLITools],
     'linux': [Binutils],
   }
+
+  _PLATFORM_SPECIFIC_LINKER = {
+    'darwin': OSXLLD,
+  }
+
+  @memoized_property
+  def linker(self):
+
+  def _osx_linker(self):
+    return Linker(
+      path_entries=
+    )
 
   class UnsupportedPlatformError(Exception):
     """Thrown if the native toolchain is invoked on an unrecognized platform.
