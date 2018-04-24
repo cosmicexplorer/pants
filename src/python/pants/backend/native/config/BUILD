@@ -4,7 +4,8 @@
 
 python_library(
   dependencies=[
-    'src/python/pants/util:contextutil',
+    'src/python/pants/engine:rules',
     'src/python/pants/util:objects',
+    'src/python/pants/util:osutil',
   ],
 )

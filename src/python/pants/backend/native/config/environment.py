@@ -9,8 +9,9 @@ from contextlib import contextmanager
 
 from abc import abstractmethod, abstractproperty
 
-from pants.util.contextutil import environment_as, get_joined_path
+from pants.engine.rules import SingletonRule, rule
 from pants.util.objects import datatype
+from pants.util.osutil import all_normalized_os_names, get_normalized_os_name
 
 
 class UnsupportedPlatformError(Exception):
@@ -22,14 +23,26 @@ class UnsupportedPlatformError(Exception):
 
 class Platform(datatype('Platform', ['normed_os_name'])):
 
-  def resolve_platform_specific(self, platform_dict):
-    result = platform_dict.get(self.normed_os_name, None)
-    if result:
-      return result
+  @classmethod
+  def create(cls):
+    return Platform(get_normalized_os_name())
 
-    raise UnsupportedPlatformError(
-      "platform_dict has no entries for {!r}: {!r}"
-      .format(self.normed_os_name, platform_dict))
+  _NORMED_OS_NAMES = frozenset(all_normalized_os_names())
+
+  def resolve_platform_specific(self, platform_dict):
+    arg_keys = frozenset(platform_dict.keys())
+    unknown_plats = self._NORMED_OS_NAMES - arg_keys
+    if unknown_plats:
+      raise UnsupportedPlatformError(
+        "platform_dict {!r} must support platforms {!r}"
+        .format(platform_dict, list(unknown_plats)))
+    extra_plats = arg_keys - self._NORMED_OS_NAMES
+    if extra_plats:
+      raise UnsupportedPlatformError(
+        "platform_dict {!r} has unrecognized platforms {!r}"
+        .format(platform_dict, list(extra_plats)))
+
+    return platform_dict[self.normed_os_name]
 
 
 class Executable(object):
@@ -50,38 +63,21 @@ class Linker(datatype('Linker', [
   pass
 
 
-class LinkerProvider(object):
-
-  @abstractmethod
-  def linker(self, platform): pass
-
-
-class Compiler(datatype('Compiler', [
+class CCompiler(datatype('CCompiler', [
     'path_entries',
     'exe_filename',
 ]), Executable):
   pass
 
 
-class CompilerProvider(object):
+class CppCompiler(datatype('Compiler', [
+    'path_entries',
+    'exe_filename',
+]), Executable):
+  pass
 
-  @abstractmethod
-  def compiler(self, platform): pass
 
-
-class BootstrapEnvironment(datatype('BootstrapEnvironment', [
-    'cc',
-    'cxx',
-    'c_include_path',
-    'cplus_include_path',
-    'ld',
-    'library_path',
-    'exec_path',
-])):
-  """Contains the components of the native toolchain which Pants must provide.
-  This does not wrap up any source files, 3rdparty library locations, or
-  anything else that the user provides."""
-
-  @contextmanager
-  def native_toolchain_invocation(self):
-    sealed_native_toolchain_path = get_joined_path(self.exec_path)
+def create_native_environment_rules():
+  return [
+    SingletonRule(Platform, Platform.create()),
+  ]
