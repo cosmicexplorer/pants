@@ -12,6 +12,7 @@ from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 
+from pants.backend.native.config.environment import CCompiler, CppCompiler, Linker
 from pants.backend.native.subsystems.native_toolchain import NativeToolchain
 from pants.backend.python.python_requirement import PythonRequirement
 from pants.backend.python.targets.python_distribution import PythonDistribution
@@ -52,8 +53,23 @@ class BuildLocalPythonDistributions(Task):
     return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (NativeToolchain.scoped(cls),)
 
   @memoized_method
-  def _native_toolchain_instance(self):
+  def _native_toolchain(self):
     return NativeToolchain.scoped_instance(self)
+
+  def _request(self, product, subject):
+    return self.context._scheduler.product_request(product, [subject])[0]
+
+  @memoized_method
+  def _linker(self):
+    return self._request(Linker, self._native_toolchain())
+
+  @memoized_method
+  def _c_compiler(self):
+    return self._request(CCompiler, self._native_toolchain())
+
+  @memoized_method
+  def _cpp_compiler(self):
+    return self._request(CppCompiler, self._native_toolchain())
 
   @property
   def cache_target_dirs(self):
