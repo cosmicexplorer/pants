@@ -53,12 +53,8 @@ class NativeToolchain(Subsystem, ExecutablePathProvider):
     'linux': [Binutils],
   }
 
-  _PLATFORM_SPECIFIC_LINKER = {
-    'darwin': OSXLLD,
-  }
-
-  @memoized_property
-  def linker(self):
+  # @memoized_property
+  # def linker(self):
 
   def _osx_linker(self):
     return Linker(

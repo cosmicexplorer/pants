@@ -19,8 +19,13 @@ class LLVM(NativeTool, LinkerProvider):
   def path_entries(self):
     return [os.path.join(self.select(), 'bin')]
 
+  _PLATFORM_SPECIFIC_LINKER_NAME = {
+    'darwin': 'ld64.lld',
+    'linux': 'lld',
+  }
+
   def linker(self, platform):
     return Linker(
       path_entries=self.path_entries(),
-
-    )
+      exe_filename=platform.resolve_platform_specific(
+        self._PLATFORM_SPECIFIC_LINKER_NAME))

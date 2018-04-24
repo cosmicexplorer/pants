@@ -13,8 +13,23 @@ from pants.util.contextutil import environment_as, get_joined_path
 from pants.util.objects import datatype
 
 
+class UnsupportedPlatformError(Exception):
+  """Thrown if the native toolchain is invoked on an unrecognized platform.
+
+    Note that the native toolchain should work on all of Pants's supported
+    platforms."""
+
+
 class Platform(datatype('Platform', ['normed_os_name'])):
-  pass
+
+  def resolve_platform_specific(self, platform_dict):
+    result = platform_dict.get(self.normed_os_name, None)
+    if result:
+      return result
+
+    raise UnsupportedPlatformError(
+      "platform_dict has no entries for {!r}: {!r}"
+      .format(self.normed_os_name, platform_dict))
 
 
 class Executable(object):
@@ -44,9 +59,14 @@ class LinkerProvider(object):
 class Compiler(datatype('Compiler', [
     'path_entries',
     'exe_filename',
-    ''
 ]), Executable):
   pass
+
+
+class CompilerProvider(object):
+
+  @abstractmethod
+  def compiler(self, platform): pass
 
 
 class BootstrapEnvironment(datatype('BootstrapEnvironment', [
