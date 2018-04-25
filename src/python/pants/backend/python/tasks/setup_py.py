@@ -113,8 +113,9 @@ class SetupPyExecutionEnvironment(datatype('SetupPyExecutionEnvironment', [
 ])):
 
   def as_environment(self):
-    # Overridding LD or LDSHARED causes setup.py to try to invoke that linker
-    # directly without going through the compiler, which fails.
+    # NB: Overridding LD or LDSHARED causes setup.py to try to invoke that
+    # linker directly without going through the compiler, which fails. We should
+    # probably implement #5661 soon to avoid these kind of minefields.
     return {
       'PATH': self.exec_path,
       'CC': self.c_compiler_name,
