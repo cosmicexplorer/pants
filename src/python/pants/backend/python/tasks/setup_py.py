@@ -19,6 +19,7 @@ from pex.interpreter import PythonInterpreter
 from twitter.common.collections import OrderedSet
 from twitter.common.dirutil.chroot import Chroot
 
+from pants.backend.native.register import Platform
 from pants.backend.native.subsystems.native_toolchain import NativeToolchain
 from pants.backend.python.targets.python_binary import PythonBinary
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
@@ -87,10 +88,11 @@ class SetupPyInvocationEnvironment(datatype(['joined_path'])):
     }
 
 
-@rule(SetupPyInvocationEnvironment, [Select(NativeToolchain)])
-def get_setup_py_env(native_toolchain):
+@rule(SetupPyInvocationEnvironment, [Select(Platform), Select(NativeToolchain)])
+def get_setup_py_env(platform, native_toolchain):
+  is_linux = platform.normed_os_name == 'linux'
   joined_path = get_joined_path(
-    native_toolchain.path_entries(), os.environ.copy())
+    native_toolchain.path_entries(), os.environ.copy(), prepend=is_linux)
   return SetupPyInvocationEnvironment(joined_path)
 
 
