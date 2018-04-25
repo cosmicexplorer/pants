@@ -29,20 +29,21 @@ class Platform(datatype('Platform', ['normed_os_name'])):
 
   _NORMED_OS_NAMES = frozenset(all_normalized_os_names())
 
-  def resolve_platform_specific(self, platform_dict):
-    arg_keys = frozenset(platform_dict.keys())
+  def resolve_platform_specific(self, platform_specific_funs):
+    arg_keys = frozenset(platform_specific_funs.keys())
     unknown_plats = self._NORMED_OS_NAMES - arg_keys
     if unknown_plats:
       raise UnsupportedPlatformError(
-        "platform_dict {!r} must support platforms {!r}"
-        .format(platform_dict, list(unknown_plats)))
+        "platform_specific_funs {} must support platforms {}"
+        .format(platform_specific_funs, list(unknown_plats)))
     extra_plats = arg_keys - self._NORMED_OS_NAMES
     if extra_plats:
       raise UnsupportedPlatformError(
-        "platform_dict {!r} has unrecognized platforms {!r}"
-        .format(platform_dict, list(extra_plats)))
+        "platform_specific_funs {} has unrecognized platforms {}"
+        .format(platform_specific_funs, list(extra_plats)))
 
-    return platform_dict[self.normed_os_name]
+    fun_for_platform = platform_specific_funs[self.normed_os_name]
+    return fun_for_platform()
 
 
 class Executable(object):

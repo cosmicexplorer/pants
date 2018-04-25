@@ -23,8 +23,8 @@ class LLVM(NativeTool):
     return [os.path.join(self.select(), 'bin')]
 
   _PLATFORM_SPECIFIC_LINKER_NAME = {
-    'darwin': 'ld64.lld',
-    'linux': 'lld',
+    'darwin': lambda: 'ld64.lld',
+    'linux': lambda: 'lld',
   }
 
   def linker(self, platform):

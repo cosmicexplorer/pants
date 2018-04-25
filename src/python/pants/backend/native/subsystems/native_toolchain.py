@@ -5,7 +5,7 @@
 from __future__ import (absolute_import, division, generators, nested_scopes, print_function,
                         unicode_literals, with_statement)
 
-from pants.backend.native.config.environment import CCompiler, CppCompiler, Linker, Platform
+from pants.backend.native.config.environment import CCompiler, CppCompiler, Executable, Linker, Platform
 from pants.backend.native.subsystems.binaries.binutils import Binutils
 from pants.backend.native.subsystems.binaries.gcc import GCC
 from pants.backend.native.subsystems.binaries.llvm import LLVM
@@ -74,7 +74,6 @@ def select_linker(platform, native_toolchain):
 @rule(CCompiler, [Select(NativeToolchain)])
 def select_c_compiler(native_toolchain):
   c_compiler = yield Get(CCompiler, LLVM, native_toolchain._llvm)
-  # c_compiler = yield Get(CCompiler, GCC, native_toolchain._gcc)
   yield c_compiler
 
 

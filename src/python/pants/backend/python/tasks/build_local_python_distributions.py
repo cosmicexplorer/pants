@@ -12,20 +12,21 @@ from contextlib import contextmanager
 
 from pex.interpreter import PythonInterpreter
 
-from pants.backend.native.config.environment import CCompiler, CppCompiler, Linker
+from pants.backend.native.config.environment import CCompiler, CppCompiler, Linker, Platform
 from pants.backend.native.subsystems.native_toolchain import NativeToolchain
 from pants.backend.python.python_requirement import PythonRequirement
 from pants.backend.python.targets.python_distribution import PythonDistribution
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
-from pants.backend.python.tasks.setup_py import SetupPyInvocationEnvironment, SetupPyRunner
+from pants.backend.python.tasks.setup_py import SetupPyExecutionEnvironment, SetupPyRunner
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TargetDefinitionException, TaskError
 from pants.base.fingerprint_strategy import DefaultFingerprintStrategy
 from pants.build_graph.address import Address
+from pants.engine.rules import rule
 from pants.task.task import Task
 from pants.util.contextutil import environment_as
 from pants.util.dirutil import safe_mkdir
-from pants.util.memo import memoized_method
+from pants.util.memo import memoized_method, memoized_property
 
 
 class BuildLocalPythonDistributions(Task):
@@ -52,24 +53,12 @@ class BuildLocalPythonDistributions(Task):
   def subsystem_dependencies(cls):
     return super(BuildLocalPythonDistributions, cls).subsystem_dependencies() + (NativeToolchain.scoped(cls),)
 
-  @memoized_method
+  @memoized_property
   def _native_toolchain(self):
     return NativeToolchain.scoped_instance(self)
 
-  def _request(self, product, subject):
-    return self.context._scheduler.product_request(product, [subject])[0]
-
-  @memoized_method
-  def _linker(self):
-    return self._request(Linker, self._native_toolchain())
-
-  @memoized_method
-  def _c_compiler(self):
-    return self._request(CCompiler, self._native_toolchain())
-
-  @memoized_method
-  def _cpp_compiler(self):
-    return self._request(CppCompiler, self._native_toolchain())
+  def _setup_py_environment(self):
+    return self._request_single(SetupPyExecutionEnvironment, self._native_toolchain)
 
   @property
   def cache_target_dirs(self):
@@ -132,9 +121,8 @@ class BuildLocalPythonDistributions(Task):
   # compiler installed. Right now we just put our tools at the end of the PATH.
   @contextmanager
   def _setup_py_invocation_environment(self):
-    setup_py_env = self._request_single(
-      SetupPyInvocationEnvironment, self._native_toolchain_instance())
-    with environment_as(**setup_py_env.as_env_dict()):
+    setup_py_env = self._setup_py_environment().as_environment()
+    with environment_as(**setup_py_env):
       yield
 
   def _create_dist(self, dist_tgt, dist_target_dir, interpreter):
