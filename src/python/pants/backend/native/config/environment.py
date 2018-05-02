@@ -19,28 +19,28 @@ class UnsupportedPlatformError(Exception):
     platforms."""
 
 
-class Platform(datatype('Platform', ['normed_os_name'])):
+class Platform(datatype([('normalized_os_name', str)])):
 
   @classmethod
   def create(cls):
     return Platform(get_normalized_os_name())
 
-  _NORMED_OS_NAMES = frozenset(all_normalized_os_names())
+  _NORMALIZED_OS_NAMES = frozenset(all_normalized_os_names())
 
   def resolve_platform_specific(self, platform_specific_funs):
     arg_keys = frozenset(platform_specific_funs.keys())
-    unknown_plats = self._NORMED_OS_NAMES - arg_keys
+    unknown_plats = self._NORMALIZED_OS_NAMES - arg_keys
     if unknown_plats:
       raise UnsupportedPlatformError(
         "platform_specific_funs {} must support platforms {}"
         .format(platform_specific_funs, list(unknown_plats)))
-    extra_plats = arg_keys - self._NORMED_OS_NAMES
+    extra_plats = arg_keys - self._NORMALIZED_OS_NAMES
     if extra_plats:
       raise UnsupportedPlatformError(
         "platform_specific_funs {} has unrecognized platforms {}"
         .format(platform_specific_funs, list(extra_plats)))
 
-    fun_for_platform = platform_specific_funs[self.normed_os_name]
+    fun_for_platform = platform_specific_funs[self.normalized_os_name]
     return fun_for_platform()
 
 
@@ -55,25 +55,13 @@ class Executable(object):
     """???"""
 
 
-class Linker(datatype('Linker', [
-    'path_entries',
-    'exe_filename',
-]), Executable):
-  pass
+class Linker(datatype(['path_entries', 'exe_filename']), Executable): pass
 
 
-class CCompiler(datatype('CCompiler', [
-    'path_entries',
-    'exe_filename',
-]), Executable):
-  pass
+class CCompiler(datatype(['path_entries', 'exe_filename']), Executable): pass
 
 
-class CppCompiler(datatype('Compiler', [
-    'path_entries',
-    'exe_filename',
-]), Executable):
-  pass
+class CppCompiler(datatype(['path_entries', 'exe_filename']), Executable): pass
 
 
 def create_native_environment_rules():

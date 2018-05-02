@@ -106,7 +106,7 @@ def _detect_xcode_tools():
     cpp_compiler_name='clang++')
 
 
-class SetupPyExecutionEnvironment(datatype('SetupPyExecutionEnvironment', [
+class SetupPyExecutionEnvironment(datatype([
     'exec_path',
     'c_compiler_name',
     'cpp_compiler_name',
@@ -127,7 +127,7 @@ class SetupPyExecutionEnvironment(datatype('SetupPyExecutionEnvironment', [
 def get_setup_py_environment(platform, native_toolchain):
   # TODO(cosmicexplorer): make it possible to yield Get with a non-static
   # subject type and use `platform.resolve_platform_specific()`.
-  if platform.normed_os_name == 'darwin':
+  if platform.normalized_os_name == 'darwin':
     yield _detect_xcode_tools()
   else:
     c_compiler = yield Get(CCompiler, NativeToolchain, native_toolchain)

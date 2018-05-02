@@ -64,7 +64,7 @@ class NativeToolchain(Subsystem):
 def select_linker(platform, native_toolchain):
   # TODO(cosmicexplorer): make it possible to yield Get with a non-static
   # subject type and use `platform.resolve_platform_specific()`.
-  if platform.normed_os_name == 'darwin':
+  if platform.normalized_os_name == 'darwin':
     linker = yield Get(Linker, LLVM, native_toolchain._llvm)
   else:
     linker = yield Get(Linker, Binutils, native_toolchain._binutils)

@@ -44,7 +44,7 @@ class LLVM(NativeTool):
       exe_filename='clang++')
 
 
-class LLDRequest(datatype('LLDRequest', ['platform', 'llvm'])):
+class LLDRequest(datatype(['platform', 'llvm'])):
 
   def __new__(cls, platform, llvm):
     if type(platform) != Platform:
