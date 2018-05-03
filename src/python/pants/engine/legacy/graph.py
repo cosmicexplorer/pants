@@ -387,14 +387,14 @@ class SourcesGlobMatchError(Exception): pass
 def _get_globs_owning_files(rel_file_paths, rel_include_globs, base_globs, kwarg_name,
                             glob_match_failure, target_address=None):
   if not target_address:
-    # TODO: test this!!!
+    # TODO(cosmicexplorer): `target_address` is never going to be None right now -- either require
+    # it or test this path.
     target_addr_spec = '<no target>'
   else:
     target_addr_spec = target_address.spec
   try:
     owning_globs = assign_owning_globs(rel_file_paths, rel_include_globs)
   except GlobPathMatchingError as e:
-    # TODO: test this?
     raise SourcesGlobMatchError(
       "In target {spec} with {desc}={globs}: internal error matching globs: {err}"
       .format(spec=target_addr_spec, desc=kwarg_name, globs=base_globs, err=e),

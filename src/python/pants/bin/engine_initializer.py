@@ -141,6 +141,9 @@ class EngineInitializer(object):
     :param Native native: An instance of the native-engine subsystem.
     :param build_file_aliases: BuildFileAliases to register.
     :type build_file_aliases: :class:`pants.build_graph.build_file_aliases.BuildFileAliases`
+    :param glob_match_error_behavior: How to behave if a glob specified for a target's sources or
+                                      bundles does not expand to anything.
+    :type glob_match_error_behavior: :class:`pants.option.global_options.GlobMatchErrorBehavior`
     :param list build_ignore_patterns: A list of paths ignore patterns used when searching for BUILD
                                        files, usually taken from the '--build-ignore' global option.
     :param list exclude_target_regexps: A list of regular expressions for excluding targets.
@@ -178,7 +181,7 @@ class EngineInitializer(object):
     # Load the native backend.
     native = native or Native.create()
 
-    # Create a Scheduler containing graph and filesystem tasks, with no installed goals. The
+    # Create a Scheduler containing all installed tasks, with no installed goals. The
     # LegacyBuildGraph will explicitly request the products it needs.
     tasks = (
       create_legacy_graph_tasks(symbol_table) +

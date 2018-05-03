@@ -114,9 +114,7 @@ class GoalRunnerFactory(object):
         build_ignore_patterns=build_ignore_patterns,
         exclude_target_regexps=exclude_target_regexps,
         subproject_roots=subproject_build_roots,
-        # TODO: why is this self._options.for_global_scope() instead of self._global_options????
-        include_trace_on_error=self._options.for_global_scope().print_exception_stacktrace
-      )
+        include_trace_on_error=self._global_options.print_exception_stacktrace)
 
     target_roots = target_roots or TargetRootsCalculator.create(
       options=self._options,
