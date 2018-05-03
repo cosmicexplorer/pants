@@ -6,6 +6,7 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 import os
+import re
 import sys
 
 from pants.base.build_environment import get_buildroot
@@ -142,3 +143,27 @@ class PythonDistributionIntegrationTest(PantsRunIntegrationTest):
     command=['clean-all', 'test', '{}:fasthello'.format(self.fasthello_tests)]
     pants_run = self.run_pants(command=command, config=pants_ini_config)
     self.assert_success(pants_run)
+
+  def test_python_requirement_resolves_new_dist_after_source_change(self):
+    run_pydist_cmd = [
+      'run',
+      '{}:main_with_no_conflict'.format(self.fasthello_install_requires),
+    ]
+
+    def modify_hello_py_content(content):
+      return re.sub(r'import c_greet', '', content)
+
+    hello_py_source = os.path.join(
+      self.fasthello_install_requires,
+      'hello_package',
+      'hello.py')
+
+    with self.temporary_workdir() as workdir:
+      pants_run = self.run_pants_with_workdir(run_pydist_cmd, workdir)
+      self.assert_success(pants_run)
+      self._assert_native_greeting(pants_run.stdout_data)
+      with self.modified_file_content(hello_py_source, modify_hello_py_content):
+        pants_run = self.run_pants_with_workdir(run_pydist_cmd, workdir)
+        self.assert_failure(pants_run)
+        self.assertIn("NameError: global name 'c_greet' is not defined",
+                      pants_run.stderr_data)

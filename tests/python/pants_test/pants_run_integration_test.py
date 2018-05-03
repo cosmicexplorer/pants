@@ -422,6 +422,11 @@ class PantsRunIntegrationTest(unittest.TestCase):
   def file_renamed(self, prefix, test_name, real_name):
     real_path = os.path.join(prefix, real_name)
     test_path = os.path.join(prefix, test_name)
+    with self.file_renamed_absolute(test_path, real_path):
+      yield
+
+  @contextmanager
+  def file_renamed_absolute(self, test_path, real_path):
     try:
       os.rename(test_path, real_path)
       yield
@@ -441,6 +446,25 @@ class PantsRunIntegrationTest(unittest.TestCase):
       yield
     finally:
       os.unlink(path)
+
+  @contextmanager
+  def modified_file_content(self, path, transform_content):
+    """Temporarily rewrite the contents of an existing file for the purpose of an integration test."""
+    path = os.path.realpath(path)
+    assert path.startswith(
+      os.path.realpath(get_buildroot())), 'cannot write paths outside of the buildroot!'
+    assert os.path.exists(path), 'file must already exist!'
+
+    with open(path, 'rb') as fh:
+      content = fh.read()
+    new_content = transform_content(content)
+
+    with temporary_dir() as tmpdir:
+      tmp_file_path = os.path.join(tmpdir, os.path.basename(path))
+      with self.file_renamed_absolute(path, tmp_file_path):
+        with self.temporary_file_content(path, new_content):
+          yield
+
 
   @contextmanager
   def mock_buildroot(self, dirs_to_copy=None):
