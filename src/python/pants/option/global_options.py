@@ -58,7 +58,6 @@ class GlobMatchErrorBehavior(datatype([('error_on_glob_match_failure', str)])):
       return False
 
 
-
 class GlobalOptionsRegistrar(SubsystemClientMixin, Optionable):
   options_scope = GLOBAL_SCOPE
   options_scope_category = ScopeInfo.GLOBAL
