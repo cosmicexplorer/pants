@@ -6,6 +6,9 @@ from __future__ import (absolute_import, division, generators, nested_scopes, pr
                         unicode_literals, with_statement)
 
 import re
+from collections import defaultdict
+
+from pants.util.objects import datatype
 
 
 def glob_to_regex(pattern):
@@ -42,6 +45,45 @@ def glob_to_regex(pattern):
   out.append('$')
 
   return ''.join(out)
+
+
+class GlobPathMatchingError(Exception): pass
+
+
+class GlobMatches(datatype(['glob', 'matched_paths'])): pass
+
+
+def assign_owning_globs(paths, glob_strs):
+  """Return a mapping from glob string to owned file.
+
+  The mapping is a list of GlobMatches objects, ordered the same as `glob_strs`.
+
+  Example output:
+  [
+    GlobMatches('a/*.txt', ['a/file.txt', 'a/other_file.txt']),
+    GlobMatches('**/*.c', ['test.c', 'a/b/file.c']),
+  ]
+
+  NB: This method will mark glob patterns as empty if glob patterns before the
+  "empty" glob in the list also match all the files that the "empty" glob would
+  have matched.
+  """
+  glob_regexes = [(s, re.compile(glob_to_regex(s))) for s in glob_strs]
+  matched_globs = defaultdict(list)
+  for path in paths:
+    cur_matching_glob = None
+    for cur_glob_str, cur_glob_rx in glob_regexes:
+      if cur_glob_rx.match(path):
+        cur_matching_glob = cur_glob_str
+        break
+    if not cur_matching_glob:
+      raise GlobPathMatchingError(
+        "None of the provided globs matched the path: {!r}. Globs were: {!r}."
+        .format(path, glob_strs))
+    matched_globs[cur_matching_glob].append(path)
+
+  matches = [GlobMatches(s, matched_globs[s]) for s in glob_strs]
+  return matches
 
 
 def globs_matches(paths, patterns, exclude_patterns):
