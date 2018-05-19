@@ -23,6 +23,7 @@ from pants.help.help_printer import HelpPrinter
 from pants.init.subprocess import Subprocess
 from pants.init.target_roots_calculator import TargetRootsCalculator
 from pants.java.nailgun_executor import NailgunProcessGroup
+from pants.option.global_options import GlobMatchErrorBehavior
 from pants.option.ranked_value import RankedValue
 from pants.reporting.reporting import Reporting
 from pants.scm.subsystems.changed import Changed
@@ -106,13 +107,16 @@ class GoalRunnerFactory(object):
         pants_ignore_patterns,
         workdir,
         self._global_options.build_file_imports,
+        glob_match_error_behavior=GlobMatchErrorBehavior(
+          self._global_options.glob_expansion_failure),
         native=native,
         build_file_aliases=self._build_config.registered_aliases(),
         rules=self._build_config.rules(),
         build_ignore_patterns=build_ignore_patterns,
         exclude_target_regexps=exclude_target_regexps,
         subproject_roots=subproject_build_roots,
-        include_trace_on_error=self._options.for_global_scope().print_exception_stacktrace
+        # TODO: why is this self._options.for_global_scope() instead of self._global_options????
+        include_trace_on_error=self._global_options.print_exception_stacktrace
       ).new_session()
 
     target_roots = target_roots or TargetRootsCalculator.create(
