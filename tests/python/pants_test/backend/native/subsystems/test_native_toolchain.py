@@ -264,8 +264,17 @@ int main() {
         'linux': lambda: 'LD_LIBRARY_PATH',
       })
       runtime_libs_path = {lib_path_var: create_path_env_var(clangpp.library_dirs)}
-      self._do_compile_link(clangpp, linker_with_clangpp_workaround, 'hello.cpp', 'hello_clangpp',
-                            "I C the world, ++ more!",
-                            extra_compile_args=['-nostdinc++'],
-                            extra_link_args=['-lc++'],
-                            extra_invocation_env=runtime_libs_path)
+      self._do_compile_link(
+        clangpp, linker_with_clangpp_workaround, 'hello.cpp', 'hello_clangpp',
+        "I C the world, ++ more!",
+        # Otherwise we get some header errors on Linux because clang++ will prefer the system
+        # headers if they are allowed, and we provide our own already in the LLVM subsystem (and
+        # pass them in through CPATH).
+        extra_compile_args=['-nostdinc++'],
+        # LLVM will prefer LLVM's libc++ on OSX, and seemingly requires it even if it does not use
+        # its own C++ library implementation, and uses libstdc++, which we provide in the linker's
+        # LIBRARY_PATH. See https://libcxx.llvm.org/ for more info.
+        extra_link_args=['-lc++'],
+        # We need to provide libc++ on the runtime library path as well on Linux (OSX will have it
+        # already).
+        extra_invocation_env=runtime_libs_path)
