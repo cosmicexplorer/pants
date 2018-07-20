@@ -24,7 +24,7 @@ from pants.engine.rules import RootRule, rule
 from pants.engine.selectors import Get, Select
 from pants.subsystem.subsystem import Subsystem
 from pants.util.memo import memoized_property
-from pants.util.objects import Exactly, SubclassesOf, datatype
+from pants.util.objects import SubclassesOf, datatype
 from pants.util.strutil import create_path_env_var, safe_shlex_join
 
 
@@ -73,7 +73,7 @@ class PythonNativeCode(Subsystem):
   @memoized_property
   def _native_target_matchers(self):
     return {
-      Exactly(PythonDistribution): self.pydist_has_native_sources,
+      SubclassesOf(PythonDistribution): self.pydist_has_native_sources,
       SubclassesOf(NativeLibrary): self.native_target_has_native_sources,
     }
 
@@ -107,7 +107,7 @@ class PythonNativeCode(Subsystem):
                                           '--platforms option or a pants.ini file.']
     return targets_by_platforms
 
-  _PYTHON_PLATFORM_TARGETS_CONSTRAINT = Exactly(PythonBinary, PythonDistribution)
+  _PYTHON_PLATFORM_TARGETS_CONSTRAINT = SubclassesOf(PythonBinary, PythonDistribution)
 
   def check_build_for_current_platform_only(self, targets):
     """
