@@ -173,13 +173,6 @@ class LinkSharedLibraries(NativeTask):
     'linux': lambda: ['-shared'],
   }
 
-  def _get_third_party_lib_args(self, link_request):
-    ext_libs = link_request.external_libs_info
-    if not ext_libs:
-      return []
-
-    return ext_libs.get_third_party_lib_args()
-
   def _execute_link_request(self, link_request):
     object_files = link_request.object_files
 
@@ -197,7 +190,8 @@ class LinkSharedLibraries(NativeTask):
     cmd = ([linker.exe_filename] +
            platform.resolve_platform_specific(self._SHARED_CMDLINE_ARGS) +
            linker.extra_args +
-           self._get_third_party_lib_args(link_request) +
+           ['-L{}'.format(lib_dir) for lib_dir in link_request.external_lib_dirs] +
+           ['-l{}'.format(lib_name) for lib_name in link_request.external_lib_names] +
            ['-o', os.path.abspath(resulting_shared_lib_path)] +
            [os.path.abspath(obj) for obj in object_files])
     self.context.log.debug("linker command: {}".format(cmd))
