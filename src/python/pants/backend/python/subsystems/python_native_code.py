@@ -246,8 +246,8 @@ class SetupPyExecutionEnvironment(datatype([
       ret['CPATH'] = create_path_env_var(all_include_dirs)
 
       shared_compile_flags = safe_shlex_join(plat.resolve_platform_specific({
-        'darwin': lambda: [MIN_OSX_VERSION_ARG],
-        'linux': lambda: [],
+        'darwin': lambda: [MIN_OSX_VERSION_ARG, '-nobuiltininc', '-nostdinc', '-nostdinc++'],
+        'linux': lambda: ['-nobuiltininc', '-nostdinc', '-nostdinc++'],
       }))
       ret['CFLAGS'] = shared_compile_flags
       ret['CXXFLAGS'] = shared_compile_flags
