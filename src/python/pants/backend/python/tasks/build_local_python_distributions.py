@@ -283,6 +283,7 @@ class BuildLocalPythonDistributions(Task):
     setup_runner = SetupPyRunner(
       source_dir=dist_target_dir,
       setup_command=setup_py_snapshot_version_argv,
+      setup_py_filename=dist_tgt.setup_py_filename,
       interpreter=interpreter)
 
     setup_py_env = setup_py_execution_environment.as_environment()

@@ -167,7 +167,7 @@ def ensure_setup_requires_site_dir(reqs_to_resolve, interpreter, site_dir,
     'headers': os.path.join(site_dir, 'headers'),
     'scripts': os.path.join(site_dir, 'bin'),
     'platlib': site_dir,
-    'data': site_dir
+    'data': site_dir,
   }
 
   # The `python_dist` target builds for the current platform only.
