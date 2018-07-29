@@ -11,17 +11,18 @@ import shutil
 
 from pex import pep425tags
 from pex.interpreter import PythonInterpreter
+from pex.pex_builder import PEXBuilder
 
 from pants.backend.native.config.environment import LLVMCppToolchain, LLVMCToolchain, Platform
 from pants.backend.native.targets.native_library import NativeLibrary
 from pants.backend.native.tasks.link_shared_libraries import SharedLibrary
 from pants.backend.python.python_requirement import PythonRequirement
-from pants.backend.python.subsystems.python_native_code import (PythonNativeCode,
+from pants.backend.python.subsystems.python_setup_execution import (PythonNativeCode,
                                                                 SetupPyExecutionEnvironment,
                                                                 SetupPyNativeTools,
                                                                 ensure_setup_requires_site_dir)
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
-from pants.backend.python.tasks.pex_build_util import is_local_python_dist
+from pants.backend.python.tasks.pex_build_util import dump_requirements, is_local_python_dist
 from pants.backend.python.tasks.setup_py import SetupPyRunner
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TargetDefinitionException, TaskError
@@ -38,7 +39,7 @@ class BuildLocalPythonDistributions(Task):
 
   options_scope = 'python-create-distributions'
 
-  # NB: these are all the immediate subdirectories of the target's results directory.
+  # NB: these are the immediate subdirectories of the target's results directory.
   # This contains any modules from a setup_requires().
   _SETUP_REQUIRES_SITE_SUBDIR = 'setup_requires_site'
   # This will contain the sources used to build the python_dist().
@@ -283,7 +284,6 @@ class BuildLocalPythonDistributions(Task):
     setup_runner = SetupPyRunner(
       source_dir=dist_target_dir,
       setup_command=setup_py_snapshot_version_argv,
-      setup_py_filename=dist_tgt.setup_py_filename,
       interpreter=interpreter)
 
     setup_py_env = setup_py_execution_environment.as_environment()

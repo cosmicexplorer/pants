@@ -9,6 +9,7 @@ from builtins import object
 
 from pants.backend.python.python_requirement import PythonRequirement
 from pants.base.build_environment import pants_version
+from pants.util.memo import memoized_classproperty
 
 
 class PantsRequirement(object):
@@ -27,12 +28,14 @@ class PantsRequirement(object):
   def __init__(self, parse_context):
     self._parse_context = parse_context
 
+  pants_python_requirement_string = 'pantsbuild.pants=={}'.format(pants_version())
+
   def __call__(self, name=None):
     """
     :param string name: The name to use for the target, defaults to the parent dir name.
     """
     name = name or os.path.basename(self._parse_context.rel_path)
-    requirement = PythonRequirement(requirement='pantsbuild.pants=={}'.format(pants_version()))
+    pants_python_requirement = PythonRequirement(requirement=self.pants_python_requirement_string)
     self._parse_context.create_object('python_requirement_library',
                                       name=name,
-                                      requirements=[requirement])
+                                      requirements=[pants_python_requirement])

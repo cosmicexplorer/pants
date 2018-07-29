@@ -3,6 +3,5 @@
 
 
 python_dist(
-  sources=['pants_setup.py', 'hello.c'],
-  setup_py_alternate_filename='pants_setup.py',
+  sources=['setup.py', 'hello.c'],
 )

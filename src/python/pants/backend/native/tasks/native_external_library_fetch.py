@@ -103,7 +103,7 @@ class NativeExternalLibraryFetch(Task):
 
   @memoized_property
   def _conan_binary(self):
-    return Conan.scoped_instance(self).bootstrap_conan()
+    return Conan.scoped_instance(self).bootstrap_pex_tool()
 
   def execute(self):
     native_lib_tgts = self.context.targets(self.native_library_constraint.satisfied_by)

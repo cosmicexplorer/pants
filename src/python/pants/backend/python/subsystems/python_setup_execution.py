@@ -5,6 +5,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import shutil
 from builtins import str
 from collections import defaultdict
 
@@ -14,12 +15,14 @@ from pants.backend.native.config.environment import CppToolchain, CToolchain, Pl
 from pants.backend.native.subsystems.native_toolchain import NativeToolchain
 from pants.backend.native.subsystems.xcode_cli_tools import MIN_OSX_VERSION_ARG
 from pants.backend.native.targets.native_library import NativeLibrary
+from pants.backend.python.pants_requirement import PantsRequirement
 from pants.backend.python.subsystems.python_setup import PythonSetup
 from pants.backend.python.targets.python_binary import PythonBinary
 from pants.backend.python.targets.python_distribution import PythonDistribution
 from pants.backend.python.tasks.pex_build_util import resolve_multi
 from pants.base.exceptions import IncompatiblePlatformsError
 from pants.subsystem.subsystem import Subsystem
+from pants.util.dirutil import safe_mkdir_for
 from pants.util.memo import memoized_property
 from pants.util.objects import SubclassesOf, datatype
 from pants.util.strutil import create_path_env_var, safe_shlex_join
@@ -154,12 +157,12 @@ class SetupRequiresSiteDir(datatype(['site_dir'])): pass
 
 # TODO: This could be formulated as an @rule if targets and `PythonInterpreter` are made available
 # to the v2 engine.
-def ensure_setup_requires_site_dir(reqs_to_resolve, interpreter, site_dir,
-                                   platforms=None):
-  if not reqs_to_resolve:
-    return None
+def ensure_setup_requires_site_dir(reqs_to_resolve, interpreter, site_dir, platforms=None):
 
-  setup_requires_dists = resolve_multi(interpreter, reqs_to_resolve, platforms, None)
+  if reqs_to_resolve is None:
+    setup_requires_dists = {'current': []}
+  else:
+    setup_requires_dists = resolve_multi(interpreter, reqs_to_resolve, platforms, None)
 
   # FIXME: there's no description of what this does or why it's necessary.
   overrides = {
@@ -175,6 +178,14 @@ def ensure_setup_requires_site_dir(reqs_to_resolve, interpreter, site_dir,
   for obj in setup_requires_dists['current']:
     wf = WheelFile(obj.location)
     wf.install(overrides=overrides, force=True)
+
+  # FIXME: make whether to add this a target/subsystem option!
+  pants_distutils_extensions_file = os.path.join(
+    os.path.dirname(__file__),
+    'pants_distutils_extensions.py')
+  pants_distutils_generated_file = os.path.join(site_dir, 'pants_distutils_extensions.py')
+  safe_mkdir_for(pants_distutils_generated_file)
+  shutil.copyfile(pants_distutils_extensions_file, pants_distutils_generated_file)
 
   return SetupRequiresSiteDir(site_dir)
 

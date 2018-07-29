@@ -25,7 +25,6 @@ class PythonDistribution(PythonTarget):
                address=None,
                payload=None,
                sources=None,
-               setup_py_alternate_filename=None,
                setup_requires=None,
                **kwargs):
     """
@@ -41,16 +40,11 @@ class PythonDistribution(PythonTarget):
     :param list setup_requires: A list of python requirements to provide during the invocation of
                                 setup.py.
     """
-    setup_py_filename = setup_py_alternate_filename or 'setup.py'
-
-    if not setup_py_filename in sources:
+    if not 'setup.py' in sources:
       raise TargetDefinitionException(
         self,
-        "A file named {} must be in the same "
-        "directory as the BUILD file containing this target."
-        .format(setup_py_filename))
-
-    self.setup_py_filename = setup_py_filename
+        "A file named 'setup.py' must be in the same "
+        "directory as the BUILD file containing this target.")
 
     payload = payload or Payload()
     payload.add_fields({
