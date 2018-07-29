@@ -12,6 +12,7 @@ import shutil
 from abc import abstractmethod
 from builtins import map, object, str, zip
 from collections import OrderedDict, defaultdict
+from textwrap import dedent
 
 from pex.compatibility import string, to_bytes
 from pex.installer import InstallerBase, Packager
@@ -51,8 +52,18 @@ setup(**
 class SetupPyRunner(InstallerBase):
   _EXTRAS = ('setuptools', 'wheel')
 
-  def __init__(self, source_dir, setup_command, **kw):
+  @property
+  def SETUP_BOOTSTRAP_FOOTER(self):
+    """???"""
+    return dedent("""
+    __file__ = '{setup_py_filename}'
+    sys.argv[0] = '{setup_py_filename}'
+    exec(compile(open(__file__, 'rb').read(), __file__, 'exec'))
+    """.format(setup_py_filename=self._setup_py_filename))
+
+  def __init__(self, source_dir, setup_command, setup_py_filename=None, **kw):
     self.__setup_command = setup_command
+    self._setup_py_filename = setup_py_filename or 'setup.py'
     super(SetupPyRunner, self).__init__(source_dir, **kw)
 
   def mixins(self):
