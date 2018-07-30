@@ -5,18 +5,9 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
-import os
-
-from pex.interpreter import PythonInterpreter
-from pex.pex import PEX
-from pex.pex_builder import PEXBuilder
-from pex.pex_info import PexInfo
 
 from pants.backend.python.python_requirement import PythonRequirement
-from pants.backend.python.tasks.pex_build_util import dump_requirements
-from pants.base.build_environment import get_pants_cachedir
 from pants.binaries.executable_pex_tool import ExecutablePexTool
-from pants.util.dirutil import safe_concurrent_creation
 from pants.util.memo import memoized_property
 
 
@@ -58,5 +49,5 @@ class Conan(ExecutablePexTool):
              advanced=True, help='The requirements used to build the conan client pex.')
 
   @memoized_property
-  def pex_tool_requirements(self):
+  def base_requirements(self):
     return [PythonRequirement(req) for req in self.get_options().conan_requirements]
