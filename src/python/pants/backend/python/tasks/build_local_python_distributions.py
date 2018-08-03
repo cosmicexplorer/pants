@@ -12,7 +12,8 @@ import shutil
 from pex import pep425tags
 from pex.interpreter import PythonInterpreter
 
-from pants.backend.native.config.environment import LLVMCppToolchain, LLVMCToolchain, Platform
+from pants.backend.native.config.environment import (GCCCppToolchain, GCCCToolchain,
+                                                     LLVMCppToolchain, LLVMCToolchain, Platform)
 from pants.backend.native.targets.native_library import NativeLibrary
 from pants.backend.native.tasks.link_shared_libraries import SharedLibrary
 from pants.backend.python.python_requirement import PythonRequirement
@@ -70,6 +71,15 @@ class BuildLocalPythonDistributions(Task):
       PythonNativeCode.scoped(cls),
     )
 
+  # FIXME: do this in PythonNativeCode, and use a enum-like datatype as in GlobMatchErrorBehavior
+  @classmethod
+  def register_options(cls, register):
+    super(BuildLocalPythonDistributions, cls).register_options(register)
+
+    register('--toolchain', type=str, choices=['gcc', 'llvm'], default='llvm', advanced=True,
+             help='Which toolchain to use to compile and link native code '
+                  'in python_dist() targets.')
+
   class BuildLocalPythonDistributionsError(TaskError): pass
 
   @memoized_classproperty
@@ -88,15 +98,27 @@ class BuildLocalPythonDistributions(Task):
 
   @memoized_property
   def _c_toolchain(self):
-    llvm_c_toolchain = self._request_single(
-      LLVMCToolchain, self._python_native_code_settings.native_toolchain)
-    return llvm_c_toolchain.c_toolchain
+    if self.get_options().toolchain == 'gcc':
+      gcc_c_toolchain = self._request_single(
+        GCCCToolchain, self._python_native_code_settings.native_toolchain)
+      c_toolchain = gcc_c_toolchain.c_toolchain
+    else:
+      llvm_c_toolchain = self._request_single(
+        LLVMCToolchain, self._python_native_code_settings.native_toolchain)
+      c_toolchain = llvm_c_toolchain.c_toolchain
+    return c_toolchain
 
   @memoized_property
   def _cpp_toolchain(self):
-    llvm_cpp_toolchain = self._request_single(
-      LLVMCppToolchain, self._python_native_code_settings.native_toolchain)
-    return llvm_cpp_toolchain.cpp_toolchain
+    if self.get_options().toolchain == 'gcc':
+      gcc_cpp_toolchain = self._request_single(
+        GCCCppToolchain, self._python_native_code_settings.native_toolchain)
+      cpp_toolchain = gcc_cpp_toolchain.cpp_toolchain
+    else:
+      llvm_cpp_toolchain = self._request_single(
+        LLVMCppToolchain, self._python_native_code_settings.native_toolchain)
+      cpp_toolchain = llvm_cpp_toolchain.cpp_toolchain
+    return cpp_toolchain
 
   # TODO: This should probably be made into an @classproperty (see PR #5901).
   @property
