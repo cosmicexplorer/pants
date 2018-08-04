@@ -45,10 +45,23 @@ class PythonDistributionIntegrationTest(PantsRunIntegrationTest):
       # Check that we have exact one wheel output
       self.assertEqual(len(glob.glob(wheel_glob)), 1)
 
-  def test_pants_run(self):
+  def test_pants_run_llvm(self):
     with temporary_dir() as tmp_dir:
       command=[
         '--pants-distdir={}'.format(tmp_dir),
+        '--pyprep-build-local-dists-toolchain=llvm',
+        'run',
+        '{}:main'.format(self.fasthello_project)]
+      pants_run = self.run_pants(command=command)
+      self.assert_success(pants_run)
+      # Check that text was properly printed to stdout.
+      self._assert_native_greeting(pants_run.stdout_data)
+
+  def test_pants_run_gcc(self):
+    with temporary_dir() as tmp_dir:
+      command=[
+        '--pants-distdir={}'.format(tmp_dir),
+        '--pyprep-build-local-dists-toolchain=gcc',
         'run',
         '{}:main'.format(self.fasthello_project)]
       pants_run = self.run_pants(command=command)
