@@ -248,4 +248,8 @@ class SetupPyExecutionEnvironment(datatype([
         self._SHARED_CMDLINE_ARGS)
       ret['LDFLAGS'] = safe_shlex_join(all_new_ldflags)
 
+      # GCC will try to use smart quotes, which are incorrectly decoded somewhere and raising an
+      # error. This setting ensures no smart quotes are used (and other things too, probably).
+      ret['LC_ALL'] = 'C'
+
     return ret
