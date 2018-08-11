@@ -9,6 +9,7 @@ from builtins import str
 
 from future.utils import PY2
 from pex.fetcher import Fetcher
+from pex.package import WheelPackage
 from pex.resolver import resolve
 from twitter.common.collections import OrderedSet
 
@@ -162,6 +163,7 @@ def resolve_multi(interpreter, requirements, platforms, find_links):
       fetchers=fetchers,
       platform=expand_and_maybe_adjust_platform(interpreter=interpreter, platform=platform),
       context=python_repos.get_network_context(),
+      precedence=(WheelPackage,),
       cache=requirements_cache_dir,
       cache_ttl=python_setup.resolver_cache_ttl,
       allow_prereleases=python_setup.resolver_allow_prereleases,
