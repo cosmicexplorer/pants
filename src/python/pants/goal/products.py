@@ -4,6 +4,7 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import logging
 import os
 from builtins import object, str
 from collections import defaultdict
@@ -11,7 +12,11 @@ from collections import defaultdict
 import six
 from twitter.common.collections import OrderedSet
 
+from pants.util.collections import assert_single_element
 from pants.util.dirutil import fast_relpath
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProductError(Exception):
@@ -301,6 +306,13 @@ class Products(object):
       else:
         return self.by_target[target][basedir]
 
+    def append_to_target_base(self, target, value):
+      logger.debug("product mapping: {}".format(self))
+      logger.debug("target: {}".format(target))
+      logger.debug("value: {}".format(value))
+
+      self.add(target, target.target_base).append(value)
+
     def has(self, target):
       """Returns whether we have a mapping for the specified target.
 
@@ -316,6 +328,22 @@ class Products(object):
         :API: public
       """
       return self.by_target.get(target)
+
+    def get_with_single_dir(self, target):
+      """???/FIXME: merge with get_only(self)!!!"""
+      logger.debug("product mapping: {}".format(self))
+      logger.debug("target: {}".format(target))
+
+      product = self.get(target)
+      single_base_dir = assert_single_element(product.keys())
+      single_product = assert_single_element(product[single_base_dir])
+
+      return single_base_dir, single_product
+
+    def get_single(self, target):
+      """???"""
+      _, single_product = self.get_with_single_dir(target)
+      return single_product
 
     def __getitem__(self, target):
       """

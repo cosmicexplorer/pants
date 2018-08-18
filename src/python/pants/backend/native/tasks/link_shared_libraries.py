@@ -91,14 +91,6 @@ class LinkSharedLibraries(NativeTask):
     # FIXME: convert this to a v2 engine dependency injection.
     return Platform.create()
 
-  def _retrieve_single_product_at_target_base(self, product_mapping, target):
-    self.context.log.debug("product_mapping: {}".format(product_mapping))
-    self.context.log.debug("target: {}".format(target))
-    product = product_mapping.get(target)
-    single_base_dir = assert_single_element(product.keys())
-    single_product = assert_single_element(product[single_base_dir])
-    return single_product
-
   def execute(self):
     targets_providing_artifacts = self.context.targets(NativeLibrary.produces_ctypes_native_library)
     native_target_deps_product = self.context.products.get(NativeTargetDependencies)
@@ -151,13 +143,13 @@ class LinkSharedLibraries(NativeTask):
                          external_libs_product):
     self.context.log.debug("link target: {}".format(vt.target))
 
-    deps = self._retrieve_single_product_at_target_base(native_target_deps_product, vt.target)
+    deps = native_target_deps_product.get_single(vt.target)
 
     all_compiled_object_files = []
 
     for dep_tgt in deps:
       self.context.log.debug("dep_tgt: {}".format(dep_tgt))
-      object_files = self._retrieve_single_product_at_target_base(compiled_objects_product, dep_tgt)
+      object_files = compiled_objects_product.get_single(dep_tgt)
       self.context.log.debug("object_files: {}".format(object_files))
       object_file_paths = object_files.file_paths()
       self.context.log.debug("object_file_paths: {}".format(object_file_paths))

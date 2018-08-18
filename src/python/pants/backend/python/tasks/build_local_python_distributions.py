@@ -8,6 +8,7 @@ import glob
 import os
 import re
 import shutil
+from future.utils import text_type
 
 from pex import pep425tags
 from pex.interpreter import PythonInterpreter
@@ -31,12 +32,18 @@ from pants.util.collections import assert_single_element
 from pants.util.contextutil import environment_as
 from pants.util.dirutil import safe_mkdir_for, split_basename_and_dirname
 from pants.util.memo import memoized_classproperty, memoized_property
+from pants.util.objects import datatype
+
+
+class LocalPythonDistributionWheel(datatype([('path', text_type)])): pass
 
 
 class BuildLocalPythonDistributions(Task):
   """Create python distributions (.whl) from python_dist targets."""
 
   options_scope = 'python-create-distributions'
+
+  cache_target_dirs = True
 
   # NB: these are all the immediate subdirectories of the target's results directory.
   # This contains any modules from a setup_requires().
@@ -50,10 +57,7 @@ class BuildLocalPythonDistributions(Task):
 
   @classmethod
   def product_types(cls):
-    # Note that we don't actually place the products in the product map. We stitch
-    # them into the build graph instead.  This is just to force the round engine
-    # to run this task when dists need to be built.
-    return [PythonRequirementLibrary, 'local_wheels']
+    return [LocalPythonDistributionWheel]
 
   @classmethod
   def prepare(cls, options, round_manager):
@@ -98,11 +102,6 @@ class BuildLocalPythonDistributions(Task):
       LLVMCppToolchain, self._python_native_code_settings.native_toolchain)
     return llvm_cpp_toolchain.cpp_toolchain
 
-  # TODO: This should probably be made into an @classproperty (see PR #5901).
-  @property
-  def cache_target_dirs(self):
-    return True
-
   def _get_setup_requires_to_resolve(self, dist_target):
     if not dist_target.setup_requires:
       return None
@@ -138,17 +137,12 @@ class BuildLocalPythonDistributions(Task):
         for vt in invalidation_check.invalid_vts:
           self._prepare_and_create_dist(interpreter, shared_libs_product, vt)
 
-        local_wheel_products = self.context.products.get('local_wheels')
+        local_wheel_product = self.context.products.get(LocalPythonDistributionWheel)
         for vt in invalidation_check.all_vts:
-          dist = self._get_whl_from_dir(vt.results_dir)
-          req_lib_addr = Address.parse('{}__req_lib'.format(vt.target.address.spec))
-          self._inject_synthetic_dist_requirements(dist, req_lib_addr)
-          # Make any target that depends on the dist depend on the synthetic req_lib,
-          # for downstream consumption.
-          for dependent in self.context.build_graph.dependents_of(vt.target.address):
-            self.context.build_graph.inject_dependency(dependent, req_lib_addr)
-          dist_dir, dist_base = split_basename_and_dirname(dist)
-          local_wheel_products.add(vt.target, dist_dir).append(dist_base)
+          wheel_dist_path = self._get_whl_from_dir(vt.results_dir)
+          local_wheel_product.append_to_target_base(
+            vt.target,
+            LocalPythonDistributionWheel(text_type(wheel_dist_path)))
 
   def _get_native_artifact_deps(self, target):
     native_artifact_targets = []
@@ -303,20 +297,6 @@ class BuildLocalPythonDistributions(Task):
                   interpreter=interpreter,
                   env=setup_py_env,
                   command=setup_py_snapshot_version_argv))
-
-  def _inject_synthetic_dist_requirements(self, dist, req_lib_addr):
-    """Inject a synthetic requirements library that references a local wheel.
-
-    :param dist: Path of the locally built wheel to reference.
-    :param req_lib_addr:  :class: `Address` to give to the synthetic target.
-    :return: a :class: `PythonRequirementLibrary` referencing the locally-built wheel.
-    """
-    whl_dir, base = split_basename_and_dirname(dist)
-    whl_metadata = base.split('-')
-    req_name = '=='.join([whl_metadata[0], whl_metadata[1]])
-    req = PythonRequirement(req_name, repository=whl_dir)
-    self.context.build_graph.inject_synthetic_target(req_lib_addr, PythonRequirementLibrary,
-                                                     requirements=[req])
 
   @classmethod
   def _get_whl_from_dir(cls, install_dir):

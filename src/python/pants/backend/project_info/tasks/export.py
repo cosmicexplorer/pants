@@ -344,6 +344,7 @@ class ExportTask(ResolveRequirementsTaskBase, IvyTaskMixin, CoursierMixin):
       for interpreter, targets in six.iteritems(python_interpreter_targets_mapping):
         req_libs = [target for target in Target.closure_for_targets(targets)
                     if has_python_requirements(target)]
+        # TODO: python_dist targets currently aren't represented in export output at all!
         chroot = self.resolve_requirements(interpreter, req_libs)
         interpreters_info[str(interpreter.identity)] = {
           'binary': interpreter.binary,

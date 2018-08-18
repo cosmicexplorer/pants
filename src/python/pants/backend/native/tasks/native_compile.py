@@ -117,10 +117,6 @@ class NativeCompile(NativeTask, AbstractClass):
 
     return deps
 
-  @staticmethod
-  def _add_product_at_target_base(product_mapping, target, value):
-    product_mapping.add(target, target.target_base).append(value)
-
   def execute(self):
     object_files_product = self.context.products.get(ObjectFiles)
     native_deps_product = self.context.products.get(NativeTargetDependencies)
@@ -130,14 +126,14 @@ class NativeCompile(NativeTask, AbstractClass):
     with self.invalidated(source_targets, invalidate_dependents=True) as invalidation_check:
       for vt in invalidation_check.invalid_vts:
         deps = self.native_deps(vt.target)
-        self._add_product_at_target_base(native_deps_product, vt.target, deps)
+        native_deps_product.append_to_target_base(vt.target, deps)
         compile_request = self._make_compile_request(vt, deps, external_libs_product)
         self.context.log.debug("compile_request: {}".format(compile_request))
         self._compile(compile_request)
 
       for vt in invalidation_check.all_vts:
         object_files = self.collect_cached_objects(vt)
-        self._add_product_at_target_base(object_files_product, vt.target, object_files)
+        object_files_product.append_to_target_base(vt.target, object_files)
 
   # This may be calculated many times for a target, so we memoize it.
   @memoized_method

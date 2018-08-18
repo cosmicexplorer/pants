@@ -7,6 +7,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 from builtins import str
 from contextlib import contextmanager
+from pkg_resources import find_distributions
 
 from pex.interpreter import PythonInterpreter
 from pex.pex import PEX
@@ -15,10 +16,13 @@ from pex.pex_builder import PEXBuilder
 from pants.backend.python.python_requirement import PythonRequirement
 from pants.backend.python.subsystems.python_native_code import PythonNativeCode
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
+from pants.backend.python.tasks.build_local_python_distributions import \
+  LocalPythonDistributionWheel
 from pants.backend.python.tasks.pex_build_util import dump_requirement_libs, dump_requirements
 from pants.base.hash_utils import hash_all
 from pants.invalidation.cache_manager import VersionedTargetSet
 from pants.task.task import Task
+from pants.util.collections import assert_single_element
 from pants.util.dirutil import safe_concurrent_creation
 from pants.util.memo import memoized_property
 
@@ -44,16 +48,17 @@ class ResolveRequirementsTaskBase(Task):
   @classmethod
   def prepare(cls, options, round_manager):
     round_manager.require_data(PythonInterpreter)
-    round_manager.optional_product(PythonRequirementLibrary)  # For local dists.
+    round_manager.optional_product(LocalPythonDistributionWheel)  # For local dists.
     # Codegen may inject extra resolvable deps, so make sure we have a product dependency
     # on relevant codegen tasks, if any.
     round_manager.optional_data('python')
 
-  def resolve_requirements(self, interpreter, req_libs):
+  def resolve_requirements(self, interpreter, req_libs, local_wheels=None):
     """Requirements resolution for PEX files.
 
     :param interpreter: Resolve against this :class:`PythonInterpreter`.
     :param req_libs: A list of :class:`PythonRequirementLibrary` targets to resolve.
+    # FIXME: local_wheels doc!
     :returns: a PEX containing target requirements and any specified python dist targets.
     """
     with self.invalidated(req_libs) as invalidation_check:
@@ -80,7 +85,13 @@ class ResolveRequirementsTaskBase(Task):
       if not os.path.isdir(path):
         with safe_concurrent_creation(path) as safe_path:
           builder = PEXBuilder(path=safe_path, interpreter=interpreter, copy=True)
-          dump_requirement_libs(builder, interpreter, req_libs, self.context.log, platforms=maybe_platforms)
+          dump_requirement_libs(builder, interpreter, req_libs, self.context.log,
+                                platforms=maybe_platforms)
+          if local_wheels:
+            for whl_dist in local_wheels:
+              found_dists = list(find_distributions(whl_dist.path))
+              for d in found_dists:
+                builder.add_distribution(d)
           builder.freeze()
     return PEX(path, interpreter=interpreter)
 

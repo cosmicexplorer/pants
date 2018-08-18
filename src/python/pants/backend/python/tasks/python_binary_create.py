@@ -13,6 +13,8 @@ from pex.pex_info import PexInfo
 from pants.backend.python.subsystems.python_native_code import PythonNativeCode
 from pants.backend.python.targets.python_binary import PythonBinary
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
+from pants.backend.python.tasks.build_local_python_distributions import \
+  LocalPythonDistributionWheel
 from pants.backend.python.tasks.pex_build_util import (dump_requirement_libs, dump_sources,
                                                        has_python_requirements, has_python_sources,
                                                        has_resources, is_python_target)
@@ -54,7 +56,7 @@ class PythonBinaryCreate(Task):
     # See comment below for why we don't use the GatherSources.PYTHON_SOURCES product.
     round_manager.require_data(PythonInterpreter)
     round_manager.optional_data('python')  # For codegen.
-    round_manager.optional_product(PythonRequirementLibrary)  # For local dists.
+    round_manager.optional_product(LocalPythonDistributionWheel)  # For local dists.
 
   @staticmethod
   def is_binary(target):
