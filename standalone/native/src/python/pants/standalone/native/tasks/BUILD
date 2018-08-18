@@ -5,9 +5,9 @@
 python_library(
   dependencies=[
     '3rdparty/python:future',
-    'src/python/pants/backend/native/config',
-    'src/python/pants/backend/native/subsystems',
-    'src/python/pants/backend/native/targets',
+    'src/python/pants.standalone.native/config',
+    'src/python/pants.standalone.native/subsystems',
+    'src/python/pants.standalone.native/targets',
     'src/python/pants/base:build_environment',
     'src/python/pants/base:exceptions',
     'src/python/pants/base:workunit',

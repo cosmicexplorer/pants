@@ -16,7 +16,6 @@ from pants.backend.python.pex_util import expand_and_maybe_adjust_platform
 from pants.backend.python.subsystems.python_repos import PythonRepos
 from pants.backend.python.subsystems.python_setup import PythonSetup
 from pants.backend.python.targets.python_binary import PythonBinary
-from pants.backend.python.targets.python_distribution import PythonDistribution
 from pants.backend.python.targets.python_library import PythonLibrary
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
 from pants.backend.python.targets.python_tests import PythonTests
@@ -34,10 +33,6 @@ def is_python_target(tgt):
 
 def has_python_sources(tgt):
   return is_python_target(tgt) and tgt.has_sources()
-
-
-def is_local_python_dist(tgt):
-  return isinstance(tgt, PythonDistribution)
 
 
 def has_resources(tgt):

@@ -592,7 +592,7 @@ class SetupPy(Task):
     # We drive creation of setup.py distributions from the original target graph, grabbing codegen'd
     # sources when needed. We ignore PythonDistribution targets.
     def is_exported_python_target(t):
-      return t.is_original and self.has_provides(t) and not is_local_python_dist(t)
+      return t.is_original and self.has_provides(t) and t.is_exportable
 
     exported_python_targets = OrderedSet(t for t in self.context.target_roots
                                          if is_exported_python_target(t))

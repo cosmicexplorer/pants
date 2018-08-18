@@ -2,7 +2,7 @@
 
 python_library(
   dependencies=[
-    'src/python/pants/backend/native/config',
+    'src/python/pants.standalone.native/config',
     'src/python/pants/util:osutil',
   ],
 )

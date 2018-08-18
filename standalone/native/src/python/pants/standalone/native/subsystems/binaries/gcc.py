@@ -6,8 +6,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 
-from pants.backend.native.config.environment import CCompiler, CppCompiler, Platform
-from pants.backend.native.subsystems.utils.archive_file_mapper import ArchiveFileMapper
+from pants.standalone.native.config.environment import CCompiler, CppCompiler, Platform
+from pants.standalone.native.subsystems.utils.archive_file_mapper import ArchiveFileMapper
 from pants.binaries.binary_tool import NativeTool
 from pants.engine.rules import RootRule, rule
 from pants.engine.selectors import Select

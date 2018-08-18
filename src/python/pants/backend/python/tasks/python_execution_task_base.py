@@ -11,7 +11,6 @@ from pex.interpreter import PythonInterpreter
 from pex.pex import PEX
 
 from pants.backend.python.subsystems.python_setup import PythonSetup
-from pants.backend.python.targets.python_distribution import PythonDistribution
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
 from pants.backend.python.targets.python_target import PythonTarget
 from pants.backend.python.tasks.gather_sources import GatherSources
@@ -85,8 +84,7 @@ class PythonExecutionTaskBase(ResolveRequirementsTaskBase):
   def create_pex(self, pex_info=None):
     """Returns a wrapped pex that "merges" the other pexes via PEX_PATH."""
     relevant_targets = self.context.targets(
-      lambda tgt: isinstance(tgt, (
-        PythonDistribution, PythonRequirementLibrary, PythonTarget, Files)))
+      lambda tgt: isinstance(tgt, (PythonRequirementLibrary, PythonTarget, Files)))
     with self.invalidated(relevant_targets) as invalidation_check:
 
       # If there are no relevant targets, we still go through the motions of resolving

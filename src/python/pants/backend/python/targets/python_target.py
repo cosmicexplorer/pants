@@ -24,6 +24,8 @@ class PythonTarget(Target):
   :API: public
   """
 
+  is_exportable = True
+
   def __init__(self,
                address=None,
                payload=None,

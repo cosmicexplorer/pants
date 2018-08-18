@@ -6,8 +6,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 from textwrap import dedent
 
-from pants.backend.native.targets.native_library import CLibrary
-from pants.backend.native.tasks.c_compile import CCompile
+from pants.standalone.native.targets.native_library import CLibrary
+from pants.standalone.native.tasks.c_compile import CCompile
 from pants_test.backend.native.tasks.native_task_test_base import (NativeCompileTestMixin,
                                                                    NativeTaskTestBase)
 

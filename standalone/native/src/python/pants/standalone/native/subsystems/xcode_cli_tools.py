@@ -6,7 +6,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 
-from pants.backend.native.config.environment import Assembler, CCompiler, CppCompiler, Linker
+from pants.standalone.native.config.environment import Assembler, CCompiler, CppCompiler, Linker
 from pants.engine.rules import RootRule, rule
 from pants.engine.selectors import Select
 from pants.subsystem.subsystem import Subsystem

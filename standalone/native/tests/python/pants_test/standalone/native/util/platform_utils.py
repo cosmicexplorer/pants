@@ -4,7 +4,7 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from pants.backend.native.config.environment import Platform
+from pants.standalone.native.config.environment import Platform
 from pants.util.osutil import all_normalized_os_names
 
 

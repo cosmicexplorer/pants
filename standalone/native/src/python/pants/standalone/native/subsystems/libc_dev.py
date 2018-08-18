@@ -6,8 +6,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 
-from pants.backend.native.config.environment import HostLibcDev
-from pants.backend.native.subsystems.utils.parse_search_dirs import ParseSearchDirs
+from pants.standalone.native.config.environment import HostLibcDev
+from pants.standalone.native.subsystems.utils.parse_search_dirs import ParseSearchDirs
 from pants.base.hash_utils import hash_file
 from pants.option.custom_types import dir_option
 from pants.subsystem.subsystem import Subsystem

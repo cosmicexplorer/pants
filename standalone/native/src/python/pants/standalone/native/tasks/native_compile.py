@@ -9,10 +9,10 @@ from abc import abstractmethod
 from builtins import filter
 from collections import defaultdict
 
-from pants.backend.native.config.environment import Executable
-from pants.backend.native.targets.native_library import NativeLibrary
-from pants.backend.native.tasks.native_external_library_fetch import NativeExternalLibraryFiles
-from pants.backend.native.tasks.native_task import NativeTask
+from pants.standalone.native.config.environment import Executable
+from pants.standalone.native.targets.native_library import NativeLibrary
+from pants.standalone.native.tasks.native_external_library_fetch import NativeExternalLibraryFiles
+from pants.standalone.native.tasks.native_task import NativeTask
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnit, WorkUnitLabel
@@ -74,7 +74,7 @@ class NativeCompile(NativeTask, AbstractClass):
   def get_compile_settings(self):
     """An instance of `NativeCompileSettings` which is used in `NativeCompile`.
 
-    :return: :class:`pants.backend.native.subsystems.native_compile_settings.NativeCompileSettings`
+    :return: :class:`pants.standalone.native.subsystems.native_compile_settings.NativeCompileSettings`
     """
 
   @memoized_property
@@ -185,7 +185,7 @@ class NativeCompile(NativeTask, AbstractClass):
   def get_compiler(self):
     """An instance of `Executable` which can be invoked to compile files.
 
-    :return: :class:`pants.backend.native.config.environment.Executable`
+    :return: :class:`pants.standalone.native.config.environment.Executable`
     """
 
   @memoized_property

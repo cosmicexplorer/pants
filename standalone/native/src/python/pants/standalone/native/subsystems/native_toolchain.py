@@ -4,15 +4,15 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from pants.backend.native.config.environment import (Assembler, CCompiler, CppCompiler,
+from pants.standalone.native.config.environment import (Assembler, CCompiler, CppCompiler,
                                                      CppToolchain, CToolchain, GCCCppToolchain,
                                                      GCCCToolchain, Linker, LLVMCppToolchain,
                                                      LLVMCToolchain, Platform)
-from pants.backend.native.subsystems.binaries.binutils import Binutils
-from pants.backend.native.subsystems.binaries.gcc import GCC
-from pants.backend.native.subsystems.binaries.llvm import LLVM
-from pants.backend.native.subsystems.libc_dev import LibcDev
-from pants.backend.native.subsystems.xcode_cli_tools import XCodeCLITools
+from pants.standalone.native.subsystems.binaries.binutils import Binutils
+from pants.standalone.native.subsystems.binaries.gcc import GCC
+from pants.standalone.native.subsystems.binaries.llvm import LLVM
+from pants.standalone.native.subsystems.libc_dev import LibcDev
+from pants.standalone.native.subsystems.xcode_cli_tools import XCodeCLITools
 from pants.engine.rules import RootRule, rule
 from pants.engine.selectors import Get, Select
 from pants.subsystem.subsystem import Subsystem

@@ -1,9 +1,9 @@
 python_tests(
   dependencies=[
-    'src/python/pants/backend/native',
-    'src/python/pants/backend/native/config',
-    'src/python/pants/backend/native/subsystems',
-    'src/python/pants/backend/native/subsystems/binaries',
+    'src/python/pants.standalone.native',
+    'src/python/pants.standalone.native/config',
+    'src/python/pants.standalone.native/subsystems',
+    'src/python/pants.standalone.native/subsystems/binaries',
     'src/python/pants/util:contextutil',
     'src/python/pants/util:osutil',
     'src/python/pants/util:process_handler',

@@ -4,11 +4,11 @@
 
 python_library(
   dependencies=[
-    'src/python/pants/backend/native/config',
-    'src/python/pants/backend/native/subsystems',
-    'src/python/pants/backend/native/subsystems/binaries',
-    'src/python/pants/backend/native/targets',
-    'src/python/pants/backend/native/tasks',
+    'src/python/pants.standalone.native/config',
+    'src/python/pants.standalone.native/subsystems',
+    'src/python/pants.standalone.native/subsystems/binaries',
+    'src/python/pants.standalone.native/targets',
+    'src/python/pants.standalone.native/tasks',
     'src/python/pants/build_graph',
     'src/python/pants/goal:task_registrar',
   ],

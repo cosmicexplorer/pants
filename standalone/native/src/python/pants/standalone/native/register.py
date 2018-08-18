@@ -4,19 +4,19 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from pants.backend.native.config.environment import create_native_environment_rules
-from pants.backend.native.subsystems.binaries.binutils import create_binutils_rules
-from pants.backend.native.subsystems.binaries.gcc import create_gcc_rules
-from pants.backend.native.subsystems.binaries.llvm import create_llvm_rules
-from pants.backend.native.subsystems.native_toolchain import create_native_toolchain_rules
-from pants.backend.native.subsystems.xcode_cli_tools import create_xcode_cli_tools_rules
-from pants.backend.native.targets.external_native_library import ExternalNativeLibrary
-from pants.backend.native.targets.native_artifact import NativeArtifact
-from pants.backend.native.targets.native_library import CLibrary, CppLibrary
-from pants.backend.native.tasks.c_compile import CCompile
-from pants.backend.native.tasks.cpp_compile import CppCompile
-from pants.backend.native.tasks.link_shared_libraries import LinkSharedLibraries
-from pants.backend.native.tasks.native_external_library_fetch import NativeExternalLibraryFetch
+from pants.standalone.native.config.environment import create_native_environment_rules
+from pants.standalone.native.subsystems.binaries.binutils import create_binutils_rules
+from pants.standalone.native.subsystems.binaries.gcc import create_gcc_rules
+from pants.standalone.native.subsystems.binaries.llvm import create_llvm_rules
+from pants.standalone.native.subsystems.native_toolchain import create_native_toolchain_rules
+from pants.standalone.native.subsystems.xcode_cli_tools import create_xcode_cli_tools_rules
+from pants.standalone.native.targets.external_native_library import ExternalNativeLibrary
+from pants.standalone.native.targets.native_artifact import NativeArtifact
+from pants.standalone.native.targets.native_library import CLibrary, CppLibrary
+from pants.standalone.native.tasks.c_compile import CCompile
+from pants.standalone.native.tasks.cpp_compile import CppCompile
+from pants.standalone.native.tasks.link_shared_libraries import LinkSharedLibraries
+from pants.standalone.native.tasks.native_external_library_fetch import NativeExternalLibraryFetch
 from pants.build_graph.build_file_aliases import BuildFileAliases
 from pants.goal.task_registrar import TaskRegistrar as task
 

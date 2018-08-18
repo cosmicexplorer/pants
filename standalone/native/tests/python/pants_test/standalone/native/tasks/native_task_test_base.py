@@ -7,9 +7,9 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import os
 from textwrap import dedent
 
-from pants.backend.native import register
-from pants.backend.native.targets.native_library import CppLibrary
-from pants.backend.native.tasks.native_external_library_fetch import NativeExternalLibraryFetch
+from pants.standalone.native import register
+from pants.standalone.native.targets.native_library import CppLibrary
+from pants.standalone.native.tasks.native_external_library_fetch import NativeExternalLibraryFetch
 from pants_test.task_test_base import TaskTestBase
 
 

@@ -6,13 +6,13 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 
-from pants.backend.native.config.environment import Linker, LLVMCppToolchain, Platform
-from pants.backend.native.subsystems.native_toolchain import NativeToolchain
-from pants.backend.native.targets.native_artifact import NativeArtifact
-from pants.backend.native.targets.native_library import NativeLibrary
-from pants.backend.native.tasks.native_compile import NativeTargetDependencies, ObjectFiles
-from pants.backend.native.tasks.native_external_library_fetch import NativeExternalLibraryFiles
-from pants.backend.native.tasks.native_task import NativeTask
+from pants.standalone.native.config.environment import Linker, LLVMCppToolchain, Platform
+from pants.standalone.native.subsystems.native_toolchain import NativeToolchain
+from pants.standalone.native.targets.native_artifact import NativeArtifact
+from pants.standalone.native.targets.native_library import NativeLibrary
+from pants.standalone.native.tasks.native_compile import NativeTargetDependencies, ObjectFiles
+from pants.standalone.native.tasks.native_external_library_fetch import NativeExternalLibraryFiles
+from pants.standalone.native.tasks.native_task import NativeTask
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnit, WorkUnitLabel
 from pants.util.collections import assert_single_element

@@ -8,9 +8,9 @@ import os
 import re
 from distutils.dir_util import copy_tree
 
-from pants.backend.native.config.environment import Platform
-from pants.backend.native.subsystems.conan import Conan
-from pants.backend.native.targets.external_native_library import ExternalNativeLibrary
+from pants.standalone.native.config.environment import Platform
+from pants.standalone.native.subsystems.conan import Conan
+from pants.standalone.native.targets.external_native_library import ExternalNativeLibrary
 from pants.base.exceptions import TaskError
 from pants.invalidation.cache_manager import VersionedTargetSet
 from pants.task.task import Task

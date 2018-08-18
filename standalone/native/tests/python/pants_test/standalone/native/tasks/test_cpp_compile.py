@@ -4,7 +4,7 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from pants.backend.native.tasks.cpp_compile import CppCompile
+from pants.standalone.native.tasks.cpp_compile import CppCompile
 from pants_test.backend.native.tasks.native_task_test_base import (NativeCompileTestMixin,
                                                                    NativeTaskTestBase)
 

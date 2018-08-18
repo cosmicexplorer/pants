@@ -66,6 +66,7 @@ class ResolveRequirementsTaskBase(Task):
       # We need to ensure that we are resolving for only the current platform if we are
       # including local python dist targets that have native extensions.
       tgts = self.context.targets()
+      # FIXME: need an injectable way to do this check!
       if self._python_native_code_settings.check_build_for_current_platform_only(tgts):
         maybe_platforms = ['current']
       else:
