@@ -31,6 +31,12 @@ class ResolveRequirementsTaskBase(Task):
   for running the relevant python code.
   """
 
+  # FIXME(#5869): delete this and get Subsystems from options, when that is possible.
+  def _request_single(self, product, subject):
+    # NB: This is not supposed to be exposed to Tasks yet -- see #4769 to track the status of
+    # exposing v2 products in v1 tasks.
+    return self.context._scheduler.product_request(product, [subject])[0]
+
   @classmethod
   def subsystem_dependencies(cls):
     return super(ResolveRequirementsTaskBase, cls).subsystem_dependencies() + (
