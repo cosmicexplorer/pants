@@ -125,10 +125,13 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       assignment to positional and keyword params. This is unfortunate, potentially slow, and is an
       artifact of the specific implementation of default values used right now.
       """
+      # We whittle down the arguments from here, then use the default values (if given) for any
+      # remaining ones.
+      remaining_field_name_dict = ordered_fields_by_name.copy()
+
       try:
         # Get this from the list of DatatypeFieldDecl above.
-        # positional_args = parsed_field_list[0:len(args)]
-        parsed_field_list[0:len(args)]
+        positional_field_names = field_name_list[0:len(args)]
         # If we go out of range, the user has provided too many positional arguments.
       except IndexError as e:
         raise cls.make_type_error(
@@ -138,15 +141,14 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           .format(args=args, kwargs=kwargs),
           e)
 
-      remaining_field_name_dict = ordered_fields_by_name.copy()
-      for i in range(0, len(args)):
-        remaining_field_name_dict.pop(field_name_list[i])
+      for name in positional_field_names:
+        remaining_field_name_dict.pop(name)
 
       # `non_positional_fields` is an OrderedDict without any entries for the first `len(args)`
       # fields.
       try:
-        # keyword_args = [remaining_field_name_dict.pop(k) for k in kwargs]
-        [remaining_field_name_dict.pop(k) for k in kwargs]
+        for k in kwargs:
+          remaining_field_name_dict.pop(k)
       except KeyError as e:
         raise cls.make_type_error(
           "Unrecognized keyword argument provided to the constructor: "
