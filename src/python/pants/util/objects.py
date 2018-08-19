@@ -9,11 +9,73 @@ from abc import abstractmethod
 from builtins import object, zip
 from collections import OrderedDict, namedtuple
 
-from future.utils import PY2
+from future.utils import PY2, text_type
 from twitter.common.collections import OrderedSet
 
+from pants.util.collections import safe_get_index
 from pants.util.memo import memoized, memoized_classproperty
 from pants.util.meta import AbstractClass
+
+
+class FieldDeclarationError(TypeError): pass
+
+
+class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
+    'field_name',
+    'type_constraint',
+    'default_value',
+])):
+
+  @classmethod
+  def parse(cls, maybe_decl):
+    """The type of `maybe_decl` can be thought of as:
+    [str | (field_name: str, type?: (TypeConstraint | type), default_value?: Any)]
+    for convenience.
+    """
+    type_spec = None
+    default_value = None
+
+    if isinstance(maybe_decl, text_type):
+      field_name = maybe_decl
+    elif isinstance(maybe_decl, tuple):
+      # isinstance(x, tuple) == True if x is a namedtuple() subclass as well.
+      field_name = maybe_decl[0]
+      type_spec = safe_get_index(maybe_decl, 1)
+      default_value = safe_get_index(maybe_decl, 2)
+    else:
+      raise FieldDeclarationError(
+        "The field declaration {value!r} must be a string or tuple, but its type was: {the_type!r}."
+        .format(value=maybe_decl, the_type=type(maybe_decl).__name__))
+
+    type_constraint = None
+    if isinstance(type_spec, TypeConstraint):
+      type_constraint = type_spec
+    elif isinstance(type_spec, type):
+      type_constraint = Exactly(type_spec)
+    elif type_spec is not None:
+      raise FieldDeclarationError(
+        "The type spec {spec!r} for the field {field_name!r} must be "
+        "a type, a TypeConstraint, or None, but its type was: {type_spec_type!r}."
+        .format(spec=type_spec,
+                field_name=field_name,
+                type_spec_type=type(type_spec).__name__))
+
+    if default_value is not None:
+      if type_constraint is not None:
+        # The default value for the field must obey the field's type constraint, if both are
+        # provided. This will error at class creation time if not.
+        try:
+          type_constraint.validate_satisfied_by(default_value)
+        except TypeConstraintError as e:
+          raise FieldDeclarationError(
+            "The default value {value!r} for the field {field_name!r} did not satisfy the field's "
+            "type constraint: {err}."
+            .format(value=default_value,
+                    field_name=field_name,
+                    err=str(e)),
+            e)
+
+    return cls(field_name, type_constraint, default_value)
 
 
 def datatype(field_decls, superclass_name=None, **kwargs):
@@ -30,36 +92,90 @@ def datatype(field_decls, superclass_name=None, **kwargs):
   :return: A type object which can then be subclassed.
   :raises: :class:`TypeError`
   """
-  field_names = []
-  fields_with_constraints = OrderedDict()
+  parsed_field_list = []
+
   for maybe_decl in field_decls:
-    # ('field_name', type)
-    if isinstance(maybe_decl, tuple):
-      field_name, type_spec = maybe_decl
-      if isinstance(type_spec, type):
-        type_constraint = Exactly(type_spec)
-      elif isinstance(type_spec, TypeConstraint):
-        type_constraint = type_spec
-      else:
-        raise TypeError(
-          "type spec for field '{}' was not a type or TypeConstraint: was {!r} (type {!r})."
-          .format(field_name, type_spec, type(type_spec).__name__))
-      fields_with_constraints[field_name] = type_constraint
-    else:
-      # interpret it as a field name without a type to check
-      field_name = maybe_decl
-    # namedtuple() already checks field uniqueness
-    field_names.append(field_name)
+    parsed_decl = DatatypeFieldDecl.parse(maybe_decl)
+    # namedtuple() already checks field name uniqueness, so we defer to it checking that here.
+    parsed_field_list.append(parsed_decl)
 
   if not superclass_name:
     superclass_name = '_anonymous_namedtuple_subclass'
 
-  namedtuple_cls = namedtuple(superclass_name, field_names, **kwargs)
+  field_name_list = [p.field_name for p in parsed_field_list]
+  namedtuple_cls = namedtuple(superclass_name, field_name_list, **kwargs)
+
+  # Now we know that the elements of `field_name_list` (the field names) are unique, because the
+  # namedtuple() constructor will have ensured that.
+  ordered_fields_by_name = OrderedDict((p.field_name, p) for p in parsed_field_list)
 
   class DataType(namedtuple_cls):
     @classmethod
     def make_type_error(cls, msg, *args, **kwargs):
       return TypeCheckError(cls.__name__, msg, *args, **kwargs)
+
+    # TODO: consider memoizing? That may blow up a hash map (unless we keyed just on field decl)?
+    @classmethod
+    def _parse_arg_from_field_decl(cls, value, parsed_field_decl):
+      if value is None:
+        value = parsed_field_decl.default_value
+      else:
+        try:
+          parsed_field_decl.type_constraint.validate_satisfied_by(value)
+        except TypeCheckError as e:
+          raise cls.make_type_error(e)
+
+      return value
+
+    @classmethod
+    def _parse_args_kwargs(cls, args, kwargs):
+      """Assign positional and keyword arguments to the fields of this datatype.
+
+      Apply default values, if a default value was declared for the field and the field was not
+      specified in the call to this datatype's constructor.
+
+      TODO: Currently, we are essentially reimplementing the python function argument parsing /
+      assignment to positional and keyword params. This is unfortunate, potentially slow, and is an
+      artifact of the specific implementation of default values used right now.
+      """
+      try:
+        # Get this from the list of DatatypeFieldDecl above.
+        # positional_args = parsed_field_list[0:len(args)]
+        parsed_field_list[0:len(args)]
+        # If we go out of range, the user has provided too many positional arguments.
+      except IndexError as e:
+        raise cls.make_type_error(
+          "Too many positional arguments were provided to the constructor: "
+          "args={args!r},\n"
+          "kwargs={kwargs!r}."
+          .format(args=args, kwargs=kwargs),
+          e)
+
+      field_name_dict = ordered_fields_by_name.copy()
+      for i in range(0, len(args)):
+        field_name_dict.pop(field_name_list[i])
+
+      # `non_positional_fields` is an OrderedDict without any entries for the first `len(args)` fields.
+      try:
+        # keyword_args = [field_name_dict.pop(k) for k in kwargs]
+        [field_name_dict.pop(k) for k in kwargs]
+      except KeyError as e:
+        raise cls.make_type_error(
+          "Unrecognized keyword argument provided to the constructor: "
+          "args={args!r},\n"
+          "kwargs={kwargs!r}."
+          .format(args=args, kwargs=kwargs),
+          e)
+
+      # If there are any unmentioned fields, get the default value, or let the super(__new__) raise.
+      all_keyword_args_including_default = kwargs
+      if field_name_dict:
+        for field_name, field_decl in field_name_dict.items():
+          default_value = field_decl.default_value
+          if default_value is not None:
+            all_keyword_args_including_default[field_name] = default_value
+
+      return (args, all_keyword_args_including_default)
 
     def __new__(cls, *args, **kwargs):
       # TODO: Ideally we could execute this exactly once per `cls` but it should be a
@@ -67,21 +183,25 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       if not hasattr(cls.__eq__, '_eq_override_canary'):
         raise cls.make_type_error('Should not override __eq__.')
 
+      # TODO: ???
+      posn_args, kw_args = cls._parse_args_kwargs(args, kwargs)
+
       try:
-        this_object = super(DataType, cls).__new__(cls, *args, **kwargs)
+        this_object = super(DataType, cls).__new__(cls, *posn_args, **kw_args)
       except TypeError as e:
-        raise cls.make_type_error(e)
+        raise cls.make_type_error(str(e), e)
 
       # TODO(cosmicexplorer): Make this kind of exception pattern (filter for
       # errors then display them all at once) more ergonomic.
       type_failure_msgs = []
-      for field_name, field_constraint in fields_with_constraints.items():
+      for field_name, field_decl in ordered_fields_by_name.items():
         field_value = getattr(this_object, field_name)
-        try:
-          field_constraint.validate_satisfied_by(field_value)
-        except TypeConstraintError as e:
-          type_failure_msgs.append(
-            "field '{}' was invalid: {}".format(field_name, e))
+        if field_decl.type_constraint is not None:
+          try:
+            field_decl.type_constraint.validate_satisfied_by(field_value)
+          except TypeConstraintError as e:
+            type_failure_msgs.append("field '{}' was invalid: {}".format(field_name, e))
+
       if type_failure_msgs:
         raise cls.make_type_error('\n'.join(type_failure_msgs))
 
@@ -133,7 +253,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
 
     def __repr__(self):
       args_formatted = []
-      for field_name in field_names:
+      for field_name in ordered_fields_by_name.keys():
         field_value = getattr(self, field_name)
         args_formatted.append("{}={!r}".format(field_name, field_value))
       return '{class_name}({args_joined})'.format(
@@ -142,8 +262,8 @@ def datatype(field_decls, superclass_name=None, **kwargs):
 
     def __str__(self):
       elements_formatted = []
-      for field_name in field_names:
-        constraint_for_field = fields_with_constraints.get(field_name, None)
+      for field_name in ordered_fields_by_name.keys():
+        constraint_for_field = ordered_fields_by_name.get(field_name, None)
         field_value = getattr(self, field_name)
         if not constraint_for_field:
           elements_formatted.append(
