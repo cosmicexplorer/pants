@@ -114,19 +114,6 @@ def datatype(field_decls, superclass_name=None, **kwargs):
     def make_type_error(cls, msg, *args, **kwargs):
       return TypeCheckError(cls.__name__, msg, *args, **kwargs)
 
-    # TODO: consider memoizing? That may blow up a hash map (unless we keyed just on field decl)?
-    @classmethod
-    def _parse_arg_from_field_decl(cls, value, parsed_field_decl):
-      if value is None:
-        value = parsed_field_decl.default_value
-      else:
-        try:
-          parsed_field_decl.type_constraint.validate_satisfied_by(value)
-        except TypeCheckError as e:
-          raise cls.make_type_error(e)
-
-      return value
-
     @classmethod
     def _parse_args_kwargs(cls, args, kwargs):
       """Assign positional and keyword arguments to the fields of this datatype.
@@ -151,14 +138,15 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           .format(args=args, kwargs=kwargs),
           e)
 
-      field_name_dict = ordered_fields_by_name.copy()
+      remaining_field_name_dict = ordered_fields_by_name.copy()
       for i in range(0, len(args)):
-        field_name_dict.pop(field_name_list[i])
+        remaining_field_name_dict.pop(field_name_list[i])
 
-      # `non_positional_fields` is an OrderedDict without any entries for the first `len(args)` fields.
+      # `non_positional_fields` is an OrderedDict without any entries for the first `len(args)`
+      # fields.
       try:
-        # keyword_args = [field_name_dict.pop(k) for k in kwargs]
-        [field_name_dict.pop(k) for k in kwargs]
+        # keyword_args = [remaining_field_name_dict.pop(k) for k in kwargs]
+        [remaining_field_name_dict.pop(k) for k in kwargs]
       except KeyError as e:
         raise cls.make_type_error(
           "Unrecognized keyword argument provided to the constructor: "
@@ -168,13 +156,16 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           e)
 
       # If there are any unmentioned fields, get the default value, or let the super(__new__) raise.
-      all_keyword_args_including_default = kwargs
-      if field_name_dict:
-        for field_name, field_decl in field_name_dict.items():
+      # NB: If None is explicitly provided as the value, the default value will NOT be used!
+      all_keyword_args_including_default = kwargs.copy()
+      if remaining_field_name_dict:
+        for field_name, field_decl in remaining_field_name_dict.items():
           default_value = field_decl.default_value
           if default_value is not None:
             all_keyword_args_including_default[field_name] = default_value
 
+      # Keep all the positional args as positional args, and only add any field defaults by keyword
+      # arg.
       return (args, all_keyword_args_including_default)
 
     def __new__(cls, *args, **kwargs):
