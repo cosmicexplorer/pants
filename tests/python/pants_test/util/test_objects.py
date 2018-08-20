@@ -547,6 +547,20 @@ class TypedDatatypeTest(BaseTest):
 field 'nonneg_int' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
     self.assertEqual(str(cm.exception), expected_msg)
 
+    # test that too many positional args fails
+    with self.assertRaises(TypeError) as cm:
+      CamelCaseWrapper(4, 5)
+    expected_msg_ending = (
+      "__new__() takes 1 positional argument but 2 were given"
+      if PY3 else
+      "__new__() takes exactly 2 arguments (3 given)"
+    )
+    expected_msg = "error: in constructor of type CamelCaseWrapper: type check error:\\n"
+    ex_str = str(cm.exception)
+    self.assertIn(TypeError.__name__, ex_str)
+    self.assertIn(expected_msg, ex_str)
+    self.assertIn(expected_msg_ending, ex_str)
+
     # test that kwargs with keywords that aren't field names fail the same way
     with self.assertRaises(TypeError) as cm:
       CamelCaseWrapper(4, a=3)
