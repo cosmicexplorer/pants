@@ -17,6 +17,7 @@ from pants.util.memo import memoized, memoized_classproperty
 from pants.util.meta import AbstractClass
 
 
+# TODO: add a field for the object's __doc__ string?
 class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     'field_name',
     'type_constraint',
@@ -93,7 +94,12 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     # type, which is shorthand for Exactly(<type>).
     if bool(remaining_decl_elements):
       type_spec = remaining_decl_elements.popleft()
-      if (type_spec is None) or isinstance(type_spec, TypeConstraint):
+      if isinstance(type_spec, TypeConstraint):
+        type_constraint = type_spec
+        if type_constraint.has_default_value:
+          has_default_value = True
+          default_value = type_constraint.default_value
+      elif type_spec is None:
         type_constraint = type_spec
       elif isinstance(type_spec, type):
         type_constraint = Exactly(type_spec)
@@ -106,9 +112,6 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     if bool(remaining_decl_elements):
       has_default_value = True
       default_value = remaining_decl_elements.popleft()
-    elif type_constraint is not None and type_constraint.has_default_value:
-      has_default_value = True
-      default_value = type_constraint.default_value
 
     # We were either given an explicit value for `has_default_value`, or we set it depending on
     # whether `default_value` is None.
@@ -169,12 +172,15 @@ def optional(type_constraint):
   if _none_type in type_constraint.types:
     return type_constraint
 
-  class ConstraintAlsoAcceptingNone(type_constraint):
+  base_constraint_type = type(type_constraint)
+  class ConstraintAlsoAcceptingNone(base_constraint_type):
     has_default_value = True
     default_value = None
 
-    def __init__(self, *args, **kwargs):
-      return super(ConstraintAlsoAcceptingNone, self).__init__(_none_type, *args, **kwargs)
+    def satisfied_by_type(self, obj_type):
+      if obj_type is _none_type:
+        return True
+      return type_constraint.satisfied_by_type(obj_type)
 
   return ConstraintAlsoAcceptingNone
 
@@ -195,8 +201,20 @@ def datatype(field_decls, superclass_name=None, **kwargs):
   """
   parsed_field_list = []
 
+  seen_default_value_decl = False
   for maybe_decl in field_decls:
     parsed_decl = DatatypeFieldDecl.parse(maybe_decl)
+    # After the first argument with a default value, the rest (rightwards) must each have a default
+    # as well.
+    if seen_default_value_decl:
+      if not parsed_decl.has_default_value:
+        raise DatatypeFieldDecl.FieldDeclarationError(
+          "datatype field declaration {!r} (parsed into {!r}) must have a default value, "
+          "because it follows a declaration with a default value in the field declarations "
+          "{!r} (the preceding parsed arguments were: {!r})."
+          .format(maybe_decl, parsed_decl, field_decls, parsed_field_list))
+    else:
+      seen_default_value_decl = parsed_decl.has_default_value
     # namedtuple() already checks field name uniqueness, so we defer to it checking that here.
     parsed_field_list.append(parsed_decl)
 
@@ -256,6 +274,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           "kwargs={kwargs!r}."
           .format(arg=field_name, args=args, kwargs=kwargs),
           e)
+      print("checked_kwarg_values: {}".format(checked_kwarg_values), file=sys.stderr)
 
       checked_arg_values = []
       try:
@@ -285,6 +304,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           .format(n=len(args), num_fields=len(ordered_fields_by_name), args=args, kwargs=kwargs,
                   err=str(e)),
           e)
+      print("checked_arg_values: {}".format(checked_arg_values), file=sys.stderr)
 
       # Collect errors type-checking positional and keyword args while processing, then display them
       # all at once here.
@@ -316,7 +336,9 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       # specified. Some of these values may be changed through coercion if a TypeConstraint does so
       # in its validate_satisfied_by() method. However, unknown keyword args and too many positional
       # args are still handled by the call to the super constructor.
+      print("args: {}, kwargs: {}".format(args, kwargs), file=sys.stderr)
       posn_args, kw_args = cls._parse_args_kwargs(args, kwargs)
+      print("posn_args: {}, kw_args: {}".format(posn_args, kw_args), file=sys.stderr)
 
       try:
         return super(DataType, cls).__new__(cls, *posn_args, **kw_args)
@@ -657,10 +679,21 @@ class Convert(SubclassesOf):
     return obj
 
 
-class Any(TypeConstraint):
+class AnyClass(TypeConstraint):
   _variance_symbol = '*'
 
   def satisfied_by_type(self, _obj_type):
+    return True
+
+
+class Nullable(TypeConstraint):
+
+  has_default_value = True
+  default_value = None
+
+  _variance_symbol = '?'
+
+  def satisfied_by_type(self, obj_type):
     return True
 
 
