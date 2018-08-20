@@ -43,12 +43,8 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
         "field_name must be an instance of {!r}, but was instead {!r} (type {!r})."
         .format(text_type, field_name, type(field_name).__name__))
 
-    # A type constraint may optionally be provided, either as a TypeConstraint instance, or as a
-    # type, which is shorthand for Exactly(<type>).
     if type_constraint is None or isinstance(type_constraint, TypeConstraint):
       pass
-    elif isinstance(type_constraint, type):
-      type_constraint = Exactly(type_constraint)
     else:
       raise cls.FieldDeclarationError(
         "type_constraint for field {field!r} must be an instance of type or TypeConstraint, "
@@ -84,6 +80,7 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     type_spec = None
     default_value = None
     has_default_value = False
+    type_constraint = None
 
     remaining_decl_elements = deque(tuple_decl)
 
@@ -92,12 +89,26 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
 
     field_name = text_type(remaining_decl_elements.popleft())
 
-    # Optional positional arguments.
+    # A type constraint may optionally be provided, either as a TypeConstraint instance, or as a
+    # type, which is shorthand for Exactly(<type>).
     if bool(remaining_decl_elements):
       type_spec = remaining_decl_elements.popleft()
+      if (type_spec is None) or isinstance(type_spec, TypeConstraint):
+        type_constraint = type_spec
+      elif isinstance(type_spec, type):
+        type_constraint = Exactly(type_spec)
+      else:
+        raise cls.FieldDeclarationError(
+          "type_spec for field {field!r} must be an instance of type or TypeConstraint, if given, "
+          "but was instead {value!r} (type {the_type!r})."
+          .format(field=field_name, value=type_spec, the_type=type(type_spec).__name__))
+
     if bool(remaining_decl_elements):
       has_default_value = True
       default_value = remaining_decl_elements.popleft()
+    elif type_constraint is not None and type_constraint.has_default_value:
+      has_default_value = True
+      default_value = type_constraint.default_value
 
     # We were either given an explicit value for `has_default_value`, or we set it depending on
     # whether `default_value` is None.
@@ -111,7 +122,7 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
 
     return cls(
       field_name=field_name,
-      type_constraint=type_spec,
+      type_constraint=type_constraint,
       default_value=default_value,
       has_default_value=has_default_value)
 
@@ -143,6 +154,18 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
                 the_type=type(maybe_decl).__name__))
 
     return parsed_decl
+
+
+def optional(type_constraint):
+  none_type = type(None)
+  if none_type in type_constraint.types:
+    return type_constraint
+
+  class ConstraintAlsoAcceptingNone(type_constraint):
+    def __init__(self, *args, **kwargs):
+      return super(ConstraintAlsoAcceptingNone, self).__init__(none_type, *args, **kwargs)
+
+  return ConstraintAlsoAcceptingNone
 
 
 def datatype(field_decls, superclass_name=None, **kwargs):
@@ -475,6 +498,9 @@ class TypeConstraint(AbstractClass):
   :class:`SubclassesOf`.
   """
 
+  default_value = None
+  has_default_value = False
+
   def __init__(self, *types, **kwargs):
     """Creates a type constraint centered around the given types.
 
@@ -595,6 +621,12 @@ class Converter(SubclassesOf):
   @memoized_property
   def _variance_symbol(self):
     return '->{}'.format(self.klass_ctor.__name__)
+
+  has_default_value = True
+
+  @memoized_property
+  def default_value(self):
+    return self.klass_ctor()
 
   def __init__(self, klass_ctor, **kwargs):
     self.klass_ctor = klass_ctor

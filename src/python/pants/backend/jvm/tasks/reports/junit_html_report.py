@@ -18,7 +18,7 @@ from pants.base.mustache import MustacheRenderer
 from pants.util.dirutil import safe_mkdir_for, safe_walk
 from pants.util.memo import memoized_property
 from pants.util.meta import AbstractClass
-from pants.util.objects import datatype
+from pants.util.objects import Converter, datatype
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -145,11 +145,13 @@ class ReportTestSuite(object):
     return d
 
 
-class ReportTestCase(datatype(['name', 'time', 'failure', 'error', 'skipped'])):
+class ReportTestCase(datatype([
+    'name',
+    ('time', Converter(float)),
+    'failure',
+    'error',
+    ('skipped', bool, False)])):
   """Data object for a JUnit test case"""
-
-  def __new__(cls, name, time, failure=None, error=None, skipped=False):
-    return super(ReportTestCase, cls).__new__(cls, name, float(time), failure, error, skipped)
 
   @memoized_property
   def icon_class(self):
