@@ -78,7 +78,7 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     remaining_decl_elements = deque(tuple_decl)
 
     if not bool(remaining_decl_elements):
-      raise ValueError("???/why are you passing an empty tuple?")
+      raise ValueError("Empty tuple {!r} passed to datatype().".format(tuple_decl))
 
     field_name = text_type(remaining_decl_elements.popleft())
 
@@ -94,7 +94,10 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     if bool(remaining_decl_elements):
       has_default_value = remaining_decl_elements.popleft()
       if bool(remaining_decl_elements):
-        raise ValueError("???/idk any further positional arguments")
+        raise ValueError(
+          "There are too many elements of the tuple {!r} passed to datatype(). "
+          "The tuple must have between 1 and 4 arguments. The remaining arguments were: {!r}."
+          .format(tuple_decl, list(remaining_decl_elements)))
 
     return cls(
       field_name=field_name,
