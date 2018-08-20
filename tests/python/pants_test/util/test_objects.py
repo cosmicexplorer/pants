@@ -12,6 +12,7 @@ from builtins import object, str
 
 from future.utils import PY2, PY3, text_type
 
+from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError,
                                 TypedDatatypeInstanceConstructionError, datatype, enum)
 from pants_test.base_test import BaseTest
@@ -152,6 +153,23 @@ class WithExplicitTypeConstraint(datatype([('a_string', text_type), ('an_int', E
 
 
 class MixedTyping(datatype(['value', ('name', text_type)])): pass
+
+
+class WithDefaultValueTuple(datatype([('an_int', int, 3)])): pass
+
+
+class WithRawDefaultValueTuple(datatype([('an_int', int, None, True)])): pass
+
+
+# `F` is what we imported `pants.util.objects.DatatypeFieldDecl` as.
+class WithJustDefaultValueExplicitFieldDecl(datatype([F('a_bool', bool, True)])): pass
+
+
+class WithDefaultValueNumericExplicitFieldDecl(datatype([F('a_bool', bool, 3, True)])): pass
+
+
+# This could represent a tribool, maybe.
+class WithDefaultValueNoneExplicitFieldDecl(datatype([F('a_bool', bool, None, True)])): pass
 
 
 class SomeBaseClass(object):
@@ -382,6 +400,25 @@ class TypedDatatypeTest(BaseTest):
       "type spec for field 'a_field' was not a type or TypeConstraint: "
       "was 2 (type 'int').")
     self.assertEqual(str(cm.exception), expected_msg)
+
+  def test_class_construction_default_value_error(self):
+    with self.assertRaises(F.FieldDeclarationError) as cm:
+      class WithInvalidTypeDefaultValue(datatype([('x', int, None)])): pass
+    expected_msg = (
+      "default_value None for the field u'x' "
+      "must satisfy the provided type_constraint Exactly(int).")
+    self.assertIn(expected_msg, str(cm.exception))
+
+    # This could just be a tuple, but the keyword in the F constructor adds clarity.
+    class WithUncheckedDefaultValue(datatype([
+        F('x', Exactly(int, type(None)), None, has_default_value=True)]
+    )): pass
+    self.assertEqual(WithUncheckedDefaultValue().x, None)
+
+  def test_instance_construction_default_value(self):
+    self.assertEqual(WithDefaultValueTuple().an_int, 3)
+    self.assertEqual(WithDefaultValueTuple(4).an_int, 4)
+    self.assertEqual(WithDefaultValueTuple(an_int=4).an_int, 4)
 
   def test_instance_construction_by_repr(self):
     some_val = SomeTypedDatatype(3)

@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import sys
 from abc import abstractmethod
 from builtins import object, zip
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict, deque, namedtuple
 
 from future.utils import PY2, text_type
 from twitter.common.collections import OrderedSet
@@ -17,14 +17,92 @@ from pants.util.memo import memoized, memoized_classproperty
 from pants.util.meta import AbstractClass
 
 
-class FieldDeclarationError(TypeError): pass
-
-
 class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     'field_name',
     'type_constraint',
     'default_value',
+    # If the `default_value` is None, or something that doesn't pass the `type_constraint`, setting
+    # this to True avoids running the type check (and this technique allows a None default value).
+    'has_default_value',
 ])):
+
+  class FieldDeclarationError(TypeError): pass
+
+  def __new__(cls, field_name, type_constraint=None, default_value=None, has_default_value=False):
+
+    # TODO: would we ever want field names to conform to any pattern for any reason?
+    if not isinstance(field_name, text_type):
+      raise cls.FieldDeclarationError(
+        "field_name must be an instance of {!r}, but was instead {!r} (type {!r})."
+        .format(text_type, field_name, type(field_name).__name__))
+
+    if type_constraint is None or isinstance(type_constraint, TypeConstraint):
+      pass
+    elif isinstance(type_constraint, type):
+      type_constraint = Exactly(type_constraint)
+    else:
+      raise cls.FieldDeclarationError(
+        "type_constraint must be an instance of type or TypeConstraint,"
+        "but was instead {value!r} (type {the_type!r})."
+        .format(value=type_constraint, the_type=type(type_constraint).__name__))
+
+    if not isinstance(has_default_value, bool):
+      raise cls.FieldDeclarationError(
+        "has_default_value must be a bool, but was instead {!r} (type {!r})."
+        .format(has_default_value, type(has_default_value).__name__))
+
+    # The default value for the field must obey the field's type constraint, if both are
+    # provided. This will error at datatype class creation time if not.
+    if not has_default_value and type_constraint is not None:
+      try:
+        type_constraint.validate_satisfied_by(default_value)
+      except TypeConstraintError as e:
+        raise cls.FieldDeclarationError(
+          "default_value {default_value!r} for the field {field_name!r} must satisfy the provided "
+          "type_constraint {tc!r}. {err}"
+          .format(default_value=default_value,
+                  field_name=field_name,
+                  tc=type_constraint,
+                  err=str(e)),
+          e)
+
+    return super(DatatypeFieldDecl, cls).__new__(
+      cls, field_name, type_constraint, default_value, has_default_value)
+
+  @classmethod
+  def _parse_tuple(cls, tuple_decl):
+    type_spec = None
+    default_value = None
+
+    remaining_decl_elements = deque(tuple_decl)
+
+    if not bool(remaining_decl_elements):
+      raise ValueError("???/why are you passing an empty tuple?")
+
+    field_name = text_type(remaining_decl_elements.popleft())
+
+    default_value_was_provided = False
+    # Optional positional arguments.
+    if bool(remaining_decl_elements):
+      type_spec = remaining_decl_elements.popleft()
+    if bool(remaining_decl_elements):
+      default_value_was_provided = True
+      default_value = remaining_decl_elements.popleft()
+
+    # We were either given an explicit value for `has_default_value`, or we set it depending on
+    # whether `default_value` is None.
+    if bool(remaining_decl_elements):
+      has_default_value = remaining_decl_elements.popleft()
+      if bool(remaining_decl_elements):
+        raise ValueError("???/idk any further positional arguments")
+    else:
+      has_default_value = not default_value_was_provided
+
+    return cls(
+      field_name=field_name,
+      type_constraint=type_spec,
+      default_value=default_value,
+      has_default_value=has_default_value)
 
   @classmethod
   def parse(cls, maybe_decl):
@@ -32,50 +110,20 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     [str | (field_name: str, type?: (TypeConstraint | type), default_value?: Any)]
     for convenience.
     """
-    type_spec = None
-    default_value = None
-
-    if isinstance(maybe_decl, text_type):
-      field_name = maybe_decl
+    if isinstance(maybe_decl, cls):
+      return maybe_decl
+    elif isinstance(maybe_decl, text_type):
+      return cls(field_name=maybe_decl)
     elif isinstance(maybe_decl, tuple):
-      # isinstance(x, tuple) == True if x is a namedtuple() subclass as well.
-      field_name = maybe_decl[0]
-      type_spec = safe_get_index(maybe_decl, 1)
-      default_value = safe_get_index(maybe_decl, 2)
+      return cls._parse_tuple(maybe_decl)
     else:
-      raise FieldDeclarationError(
-        "The field declaration {value!r} must be a string or tuple, but its type was: {the_type!r}."
-        .format(value=maybe_decl, the_type=type(maybe_decl).__name__))
-
-    type_constraint = None
-    if isinstance(type_spec, TypeConstraint):
-      type_constraint = type_spec
-    elif isinstance(type_spec, type):
-      type_constraint = Exactly(type_spec)
-    elif type_spec is not None:
-      raise FieldDeclarationError(
-        "The type spec {spec!r} for the field {field_name!r} must be "
-        "a type, a TypeConstraint, or None, but its type was: {type_spec_type!r}."
-        .format(spec=type_spec,
-                field_name=field_name,
-                type_spec_type=type(type_spec).__name__))
-
-    if default_value is not None:
-      if type_constraint is not None:
-        # The default value for the field must obey the field's type constraint, if both are
-        # provided. This will error at class creation time if not.
-        try:
-          type_constraint.validate_satisfied_by(default_value)
-        except TypeConstraintError as e:
-          raise FieldDeclarationError(
-            "The default value {value!r} for the field {field_name!r} did not satisfy the field's "
-            "type constraint: {err}."
-            .format(value=default_value,
-                    field_name=field_name,
-                    err=str(e)),
-            e)
-
-    return cls(field_name, type_constraint, default_value)
+      raise cls.FieldDeclarationError(
+        "The field declaration {value!r} must be a {str_type!r}, tuple, "
+        "or {this_type!r} instance, but its type was: {the_type!r}."
+        .format(value=maybe_decl,
+                str_type=text_type,
+                this_type=cls.__name__,
+                the_type=type(maybe_decl).__name__))
 
 
 def datatype(field_decls, superclass_name=None, **kwargs):
@@ -162,9 +210,8 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       all_keyword_args_including_default = kwargs.copy()
       if remaining_field_name_dict:
         for field_name, field_decl in remaining_field_name_dict.items():
-          default_value = field_decl.default_value
-          if default_value is not None:
-            all_keyword_args_including_default[field_name] = default_value
+          if field_decl.has_default_value:
+            all_keyword_args_including_default[field_name] = field_decl.default_value
 
       # Keep all the positional args as positional args, and only add any field defaults by keyword
       # arg.
