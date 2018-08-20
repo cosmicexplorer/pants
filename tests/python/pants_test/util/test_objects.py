@@ -387,6 +387,9 @@ class TypedDatatypeTest(BaseTest):
     self.assertIn(str(cm.exception), expected_msg)
 
   def test_class_construction_default_value(self):
+    with self.assertRaises(ValueError) as cm:
+      class WithEmptyTuple(datatype([()])): pass
+
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class WithInvalidTypeDefaultValue(datatype([('x', int, None)])): pass
     expected_msg = (
@@ -411,6 +414,9 @@ class TypedDatatypeTest(BaseTest):
     self.assertEqual(WithCheckedDefaultValue().x, None)
     self.assertEqual(WithCheckedDefaultValue(3).x, 3)
     self.assertEqual(WithCheckedDefaultValue(x=3).x, 3)
+
+    with self.assertRaises(ValueError) as cm:
+      class WithTooManyElementsTuple(datatype([('x', int, None, True, None)])): pass
 
   def test_instance_construction_default_value(self):
     self.assertEqual(WithDefaultValueTuple().an_int, 3)
@@ -500,8 +506,11 @@ class TypedDatatypeTest(BaseTest):
   def test_instance_construction_errors(self):
     with self.assertRaises(TypeError) as cm:
       SomeTypedDatatype(something=3)
-    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\n__new__() got an unexpected keyword argument 'something'"
-    self.assertEqual(str(cm.exception), expected_msg)
+    # self.assertEqual(str(ex_base), "KeyError('something',)")
+    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\\nUnrecognized keyword argument \'something\' provided to the constructor: args=(),\\nkwargs={\'something\': 3}."
+    ex_str = str(cm.exception)
+    self.assertIn(KeyError.__name__, ex_str)
+    self.assertIn(expected_msg, ex_str)
 
     # not providing all the fields
     with self.assertRaises(TypeError) as cm:
@@ -511,8 +520,11 @@ class TypedDatatypeTest(BaseTest):
       if PY3 else
       "__new__() takes exactly 2 arguments (1 given)"
     )
-    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\n" + expected_msg_ending
-    self.assertEqual(str(cm.exception), expected_msg)
+    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\\n"
+    ex_str = str(cm.exception)
+    self.assertIn(TypeError.__name__, ex_str)
+    self.assertIn(expected_msg, ex_str)
+    self.assertIn(expected_msg_ending, ex_str)
 
     # unrecognized fields
     with self.assertRaises(TypeError) as cm:
@@ -522,8 +534,11 @@ class TypedDatatypeTest(BaseTest):
       if PY3 else
       "__new__() takes exactly 2 arguments (3 given)"
     )
-    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\n" + expected_msg_ending
-    self.assertEqual(str(cm.exception), expected_msg)
+    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\\n"
+    ex_str = str(cm.exception)
+    self.assertIn(TypeError.__name__, ex_str)
+    self.assertIn(expected_msg, ex_str)
+    self.assertIn(expected_msg_ending, ex_str)
 
     with self.assertRaises(TypedDatatypeInstanceConstructionError) as cm:
       CamelCaseWrapper(nonneg_int=3)
@@ -535,8 +550,10 @@ field 'nonneg_int' was invalid: value 3 (with type 'int') must satisfy this type
     # test that kwargs with keywords that aren't field names fail the same way
     with self.assertRaises(TypeError) as cm:
       CamelCaseWrapper(4, a=3)
-    expected_msg = "error: in constructor of type CamelCaseWrapper: type check error:\n__new__() got an unexpected keyword argument 'a'"
-    self.assertEqual(str(cm.exception), expected_msg)
+    expected_msg = "error: in constructor of type CamelCaseWrapper: type check error:\\nUnrecognized keyword argument \'a\' provided to the constructor: args=(4,),\\nkwargs={\'a\': 3}."
+    ex_str = str(cm.exception)
+    self.assertIn(KeyError.__name__, ex_str)
+    self.assertIn(expected_msg, ex_str)
 
   def test_type_check_errors(self):
     # single type checking failure
