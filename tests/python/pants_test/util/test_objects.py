@@ -418,7 +418,7 @@ class TypedDatatypeTest(BaseTest):
     with self.assertRaises(ValueError):
       class WithTooManyElementsTuple(datatype([('x', int, None, True, None)])): pass
 
-    with self.assertRaises(ValueError):
+    with self.assertRaises(TypeError):
       class WithTooManyKwargsTuple(datatype([
           F('x', int, None, True, has_default_value=False)
       ])): pass
@@ -534,37 +534,24 @@ class TypedDatatypeTest(BaseTest):
     # unrecognized fields
     with self.assertRaises(TypeError) as cm:
       SomeTypedDatatype(3, 4)
-    expected_msg_ending = (
-      "__new__() takes 2 positional arguments but 3 were given"
-      if PY3 else
-      "__new__() takes exactly 2 arguments (3 given)"
-    )
-    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\\n"
-    ex_str = str(cm.exception)
-    self.assertIn(TypeError.__name__, ex_str)
-    self.assertIn(expected_msg, ex_str)
-    self.assertIn(expected_msg_ending, ex_str)
+    expected_msg = """error: in constructor of type SomeTypedDatatype: type check error:
+Too many positional arguments (2 > 1) were provided to the constructor: args=(3, 4),
+kwargs={}."""
+    self.assertEqual(expected_msg, str(cm.exception))
 
     with self.assertRaises(TypedDatatypeInstanceConstructionError) as cm:
       CamelCaseWrapper(nonneg_int=3)
     expected_msg = (
-      """error: in constructor of type CamelCaseWrapper: type check error:
-field 'nonneg_int' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
+      """error: in constructor of type CamelCaseWrapper: type check error:\nfield 'nonneg_int' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
     self.assertEqual(str(cm.exception), expected_msg)
 
     # test that too many positional args fails
     with self.assertRaises(TypeError) as cm:
       CamelCaseWrapper(4, 5)
-    expected_msg_ending = (
-      "__new__() takes 1 positional argument but 2 were given"
-      if PY3 else
-      "__new__() takes exactly 2 arguments (3 given)"
-    )
-    expected_msg = "error: in constructor of type CamelCaseWrapper: type check error:\\n"
-    ex_str = str(cm.exception)
-    self.assertIn(TypeError.__name__, ex_str)
-    self.assertIn(expected_msg, ex_str)
-    self.assertIn(expected_msg_ending, ex_str)
+    expected_msg = """error: in constructor of type CamelCaseWrapper: type check error:
+Too many positional arguments (2 > 1) were provided to the constructor: args=(4, 5),
+kwargs={}."""
+    self.assertEqual(expected_msg, str(cm.exception))
 
     # test that kwargs with keywords that aren't field names fail the same way
     with self.assertRaises(TypeError) as cm:
@@ -576,12 +563,18 @@ field 'nonneg_int' was invalid: value 3 (with type 'int') must satisfy this type
 
   def test_type_check_errors(self):
     # single type checking failure
-    with self.assertRaises(TypeCheckError) as cm:
+    with self.assertRaises(TypeError) as cm:
       SomeTypedDatatype([])
-    expected_msg = (
-      """error: in constructor of type SomeTypedDatatype: type check error:
-field 'val' was invalid: value [] (with type 'list') must satisfy this type constraint: Exactly(int).""")
-    self.assertEqual(str(cm.exception), expected_msg)
+    def compare_str(include_unicode=False):
+      expected_message = (
+        """error: in constructor of type SomeTypedDatatype: type check error:
+field {unicode_literal}'val' was invalid (provided as positional argument 0): value [] (with type 'list') must satisfy this type constraint: Exactly(int)."""
+      .format(unicode_literal='u' if include_unicode else ''))
+      self.assertEqual(str(cm.exception), expected_message)
+    if PY2:
+      compare_str(include_unicode=True)
+    else:
+      compare_str()
 
     # type checking failure with multiple arguments (one is correct)
     with self.assertRaises(TypeCheckError) as cm:
@@ -589,7 +582,7 @@ field 'val' was invalid: value [] (with type 'list') must satisfy this type cons
     def compare_str(unicode_type_name, include_unicode=False):
       expected_message = (
         """error: in constructor of type AnotherTypedDatatype: type check error:
-field 'elements' was invalid: value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
+field {unicode_literal}'elements' was invalid (provided as positional argument 1): value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
       .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
       self.assertEqual(str(cm.exception), expected_message)
     if PY2:
@@ -603,8 +596,8 @@ field 'elements' was invalid: value {unicode_literal}'should be list' (with type
     def compare_str(unicode_type_name, include_unicode=False):
       expected_message = (
         """error: in constructor of type AnotherTypedDatatype: type check error:
-field 'string' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly({type_name}).
-field 'elements' was invalid: value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
+field {unicode_literal}'string' was invalid (provided as positional argument 0): value 3 (with type 'int') must satisfy this type constraint: Exactly({type_name}).
+field {unicode_literal}'elements' was invalid (provided as positional argument 1): value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
           .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
       self.assertEqual(str(cm.exception), expected_message)
     if PY2:
@@ -617,7 +610,7 @@ field 'elements' was invalid: value {unicode_literal}'should be list' (with type
     def compare_str(unicode_type_name, include_unicode=False):
       expected_message = (
         """error: in constructor of type NonNegativeInt: type check error:
-field 'an_int' was invalid: value {unicode_literal}'asdf' (with type '{type_name}') must satisfy this type constraint: Exactly(int)."""
+field {unicode_literal}'an_int' was invalid (provided as positional argument 0): value {unicode_literal}'asdf' (with type '{type_name}') must satisfy this type constraint: Exactly(int)."""
           .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
       self.assertEqual(str(cm.exception), expected_message)
     if PY2:
@@ -634,10 +627,16 @@ value is negative: -3.""")
 
     with self.assertRaises(TypeCheckError) as cm:
       WithSubclassTypeConstraint(3)
-    expected_msg = (
-      """error: in constructor of type WithSubclassTypeConstraint: type check error:
-field 'some_value' was invalid: value 3 (with type 'int') must satisfy this type constraint: SubclassesOf(SomeBaseClass).""")
-    self.assertEqual(str(cm.exception), expected_msg)
+    def compare_str(include_unicode=False):
+      expected_message = (
+        """error: in constructor of type WithSubclassTypeConstraint: type check error:
+field {unicode_literal}'some_value' was invalid (provided as positional argument 0): value 3 (with type 'int') must satisfy this type constraint: SubclassesOf(SomeBaseClass)."""
+          .format(unicode_literal='u' if include_unicode else ''))
+      self.assertEqual(str(cm.exception), expected_message)
+    if PY2:
+      compare_str(include_unicode=True)
+    else:
+      compare_str()
 
   def test_copy(self):
     obj = AnotherTypedDatatype(string='some_string', elements=[1, 2, 3])

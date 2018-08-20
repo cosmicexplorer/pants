@@ -64,7 +64,7 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     # provided. This will error at datatype class creation time if not.
     if ((default_value is not None) or has_default_value) and (type_constraint is not None):
       try:
-        type_constraint.validate_satisfied_by(default_value)
+        default_value = type_constraint.validate_satisfied_by(default_value)
       except TypeConstraintError as e:
         raise cls.FieldDeclarationError(
           "default_value {default_value!r} for the field {field_name!r} must satisfy the provided "
@@ -197,38 +197,67 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       # remaining ones.
       remaining_field_name_dict = ordered_fields_by_name.copy()
 
-      try:
-        # Get this from the list of DatatypeFieldDecl above.
+      # Get this from the list of DatatypeFieldDecl above.
+      if len(args) == 0:
+        positional_field_names = []
+      elif len(args) <= len(field_name_list):
         positional_field_names = field_name_list[0:len(args)]
-        # If we go out of range, the user has provided too many positional arguments.
-      except IndexError as e:
+      else:
+      # If we go out of range, the user has provided too many positional arguments.
         raise cls.make_type_error(
           "Too many positional arguments "
           "({n!r} > {num_fields!r}) were provided to the constructor: "
           "args={args!r},\n"
           "kwargs={kwargs!r}."
-          .format(n=len(args), num_fields=len(ordered_fields_by_name), args=args, kwargs=kwargs),
-          e)
+          .format(n=len(args), num_fields=len(ordered_fields_by_name), args=args, kwargs=kwargs))
 
-      for name in positional_field_names:
-        remaining_field_name_dict.pop(name)
+      arg_check_error_messages = []
+      checked_arg_values = []
+      for name_index in range(0, len(positional_field_names)):
+        name = positional_field_names[name_index]
+        decl_for_name = remaining_field_name_dict.pop(name)
+        arg_value = args[name_index]
 
-      # `non_positional_fields` is an OrderedDict without any entries for the first `len(args)`
-      # fields.
+        if decl_for_name.type_constraint is not None:
+          try:
+            arg_value = decl_for_name.type_constraint.validate_satisfied_by(arg_value)
+          except TypeConstraintError as e:
+            arg_check_error_messages.append(
+              "field {name!r} was invalid (provided as positional argument {ind!r}): {err}"
+              .format(name=name, ind=name_index, err=str(e)))
+        checked_arg_values.append(arg_value)
+
+      checked_kwarg_values = {}
       try:
-        for k in kwargs:
-          remaining_field_name_dict.pop(k)
+        for field_name in kwargs:
+          decl_for_name = remaining_field_name_dict.pop(field_name)
+          kwarg_value = kwargs[field_name]
+
+          if decl_for_name.type_constraint is not None:
+            try:
+              kwarg_value = decl_for_name.type_constraint.validate_satisfied_by(kwarg_value)
+            except TypeConstraintError as e:
+              arg_check_error_messages.append(
+                "field {name!r} was invalid (provided as a keyword argument): {err}"
+                .format(name=field_name, err=str(e)))
+          checked_kwarg_values[field_name] = kwarg_value
       except KeyError as e:
         raise cls.make_type_error(
           "Unrecognized keyword argument {arg!r} provided to the constructor: "
           "args={args!r},\n"
           "kwargs={kwargs!r}."
-          .format(arg=k, args=args, kwargs=kwargs),
+          .format(arg=field_name, args=args, kwargs=kwargs),
           e)
+
+      # Collect errors type-checking positional and keyword args while processing, then display them
+      # all at once here.
+      if arg_check_error_messages:
+        raise cls.make_type_error(
+          '\n'.join(arg_check_error_messages))
 
       # If there are any unmentioned fields, get the default value, or let the super(__new__) raise.
       # NB: If None is explicitly provided as the value, the default value will NOT be used!
-      all_keyword_args_including_default = kwargs.copy()
+      all_keyword_args_including_default = checked_kwarg_values.copy()
       if remaining_field_name_dict:
         for field_name, field_decl in remaining_field_name_dict.items():
           if field_decl.has_default_value:
@@ -236,7 +265,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
 
       # Keep all the positional args as positional args, and only add any field defaults by keyword
       # arg.
-      return (args, all_keyword_args_including_default)
+      return (checked_arg_values, all_keyword_args_including_default)
 
     def __new__(cls, *args, **kwargs):
       # TODO: Ideally we could execute this exactly once per `cls` but it should be a
@@ -247,30 +276,15 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       # NB: We manually parse `args` and `kwargs` here in order to apply any default values the user
       # may have specified in the call to datatype(), and we need to do that before calling the
       # super constructor, because the super constructor requires every argument to be
-      # specified. However, unknown keyword args and too many positional args are still handled by
-      # the call to the super constructor.
+      # specified. Some of these values may be changed through coercion if a TypeConstraint does so
+      # in its validate_satisfied_by() method. However, unknown keyword args and too many positional
+      # args are still handled by the call to the super constructor.
       posn_args, kw_args = cls._parse_args_kwargs(args, kwargs)
 
       try:
-        this_object = super(DataType, cls).__new__(cls, *posn_args, **kw_args)
+        return super(DataType, cls).__new__(cls, *posn_args, **kw_args)
       except TypeError as e:
         raise cls.make_type_error(str(e), e)
-
-      # TODO(cosmicexplorer): Make this kind of exception pattern (filter for
-      # errors then display them all at once) more ergonomic.
-      type_failure_msgs = []
-      for field_name, field_decl in ordered_fields_by_name.items():
-        field_value = getattr(this_object, field_name)
-        if field_decl.type_constraint is not None:
-          try:
-            field_decl.type_constraint.validate_satisfied_by(field_value)
-          except TypeConstraintError as e:
-            type_failure_msgs.append("field '{}' was invalid: {}".format(field_name, e))
-
-      if type_failure_msgs:
-        raise cls.make_type_error('\n'.join(type_failure_msgs))
-
-      return this_object
 
     def __eq__(self, other):
       if self is other:
