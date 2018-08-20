@@ -12,6 +12,7 @@ from builtins import object, str
 
 from future.utils import PY2, PY3, text_type
 
+from pants.util.objects import Converter
 from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError,
                                 TypedDatatypeInstanceConstructionError, datatype, enum)
@@ -159,13 +160,13 @@ class WithDefaultValueTuple(datatype([('an_int', int, 3)])): pass
 
 
 # `F` is what we imported `pants.util.objects.DatatypeFieldDecl` as.
-class WithJustDefaultValueExplicitFieldDecl(datatype([F('a_bool', bool, True)])): pass
+class WithJustDefaultValueExplicitFieldDecl(datatype([F('a_bool', Exactly(bool), True)])): pass
 
 
-class WithDefaultValueNumericExplicitFieldDecl(datatype([F('a_tuple', tuple, (), True)])): pass
+class WithDefaultValueNumericExplicitFieldDecl(datatype([F('a_tuple', Converter(tuple))])): pass
 
 
-class WithDefaultValueNoneExplicitFieldDecl(datatype([F('a_bool', bool, False, True)])): pass
+class WithDefaultValueNoneExplicitFieldDecl(datatype([F('a_bool', Converter(bool))])): pass
 
 
 class SomeBaseClass(object):
@@ -383,7 +384,7 @@ class TypedDatatypeTest(BaseTest):
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class InvalidTypeSpec(datatype([('a_field', 2)])): pass
     expected_msg = (
-      "type_constraint for field u'a_field' must be an instance of type or TypeConstraint, but was instead 2 (type 'int').")
+      "type_spec for field u'a_field' must be an instance of type or TypeConstraint, if given, but was instead 2 (type 'int').")
     self.assertIn(str(cm.exception), expected_msg)
 
   def test_class_construction_default_value(self):

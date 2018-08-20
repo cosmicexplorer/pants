@@ -152,14 +152,10 @@ class ResolveError(MappingError):
 
 class AddressMapper(datatype([
   'parser',
-  # 'build_patterns',
-  # 'build_ignore_patterns',
-  # 'exclude_target_regexps',
-  # 'subproject_roots',
   ('build_patterns', Converter(tuple), ['BUILD', 'BUILD.*']),
-  ('build_ignore_patterns', Converter(tuple), ()),
-  ('exclude_target_regexps', Converter(tuple), ()),
-  ('subproject_roots', Converter(tuple), ()),
+  ('build_ignore_patterns', Converter(tuple)),
+  ('exclude_target_regexps', Converter(tuple)),
+  ('subproject_roots', Converter(tuple)),
 ])):
   """Configuration to parse build files matching a filename pattern."""
   # def __new__(cls,
