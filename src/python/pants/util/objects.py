@@ -42,18 +42,18 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
       type_constraint = Exactly(type_constraint)
     else:
       raise cls.FieldDeclarationError(
-        "type_constraint must be an instance of type or TypeConstraint,"
+        "type_constraint for field {field!r} must be an instance of type or TypeConstraint, "
         "but was instead {value!r} (type {the_type!r})."
-        .format(value=type_constraint, the_type=type(type_constraint).__name__))
+        .format(field=field_name, value=type_constraint, the_type=type(type_constraint).__name__))
 
     if not isinstance(has_default_value, bool):
       raise cls.FieldDeclarationError(
-        "has_default_value must be a bool, but was instead {!r} (type {!r})."
-        .format(has_default_value, type(has_default_value).__name__))
+        "has_default_value for field {!r} must be a bool, but was instead {!r} (type {!r})."
+        .format(field_name, has_default_value, type(has_default_value).__name__))
 
     # The default value for the field must obey the field's type constraint, if both are
     # provided. This will error at datatype class creation time if not.
-    if not has_default_value and type_constraint is not None:
+    if ((default_value is not None) or has_default_value) and (type_constraint is not None):
       try:
         type_constraint.validate_satisfied_by(default_value)
       except TypeConstraintError as e:
@@ -73,6 +73,7 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
   def _parse_tuple(cls, tuple_decl):
     type_spec = None
     default_value = None
+    has_default_value = False
 
     remaining_decl_elements = deque(tuple_decl)
 
@@ -81,12 +82,11 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
 
     field_name = text_type(remaining_decl_elements.popleft())
 
-    default_value_was_provided = False
     # Optional positional arguments.
     if bool(remaining_decl_elements):
       type_spec = remaining_decl_elements.popleft()
     if bool(remaining_decl_elements):
-      default_value_was_provided = True
+      has_default_value = True
       default_value = remaining_decl_elements.popleft()
 
     # We were either given an explicit value for `has_default_value`, or we set it depending on
@@ -95,8 +95,6 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
       has_default_value = remaining_decl_elements.popleft()
       if bool(remaining_decl_elements):
         raise ValueError("???/idk any further positional arguments")
-    else:
-      has_default_value = not default_value_was_provided
 
     return cls(
       field_name=field_name,
@@ -185,10 +183,11 @@ def datatype(field_decls, superclass_name=None, **kwargs):
         # If we go out of range, the user has provided too many positional arguments.
       except IndexError as e:
         raise cls.make_type_error(
-          "Too many positional arguments were provided to the constructor: "
+          "Too many positional arguments "
+          "({n!r} > {num_fields!r}) were provided to the constructor: "
           "args={args!r},\n"
           "kwargs={kwargs!r}."
-          .format(args=args, kwargs=kwargs),
+          .format(n=len(args), num_fields=len(ordered_fields_by_name), args=args, kwargs=kwargs),
           e)
 
       for name in positional_field_names:
@@ -201,10 +200,10 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           remaining_field_name_dict.pop(k)
       except KeyError as e:
         raise cls.make_type_error(
-          "Unrecognized keyword argument provided to the constructor: "
+          "Unrecognized keyword argument {arg!r} provided to the constructor: "
           "args={args!r},\n"
           "kwargs={kwargs!r}."
-          .format(args=args, kwargs=kwargs),
+          .format(arg=k, args=args, kwargs=kwargs),
           e)
 
       # If there are any unmentioned fields, get the default value, or let the super(__new__) raise.
@@ -304,10 +303,10 @@ def datatype(field_decls, superclass_name=None, **kwargs):
 
     def __str__(self):
       elements_formatted = []
-      for field_name in ordered_fields_by_name.keys():
-        constraint_for_field = ordered_fields_by_name.get(field_name, None)
+      for field_name, decl_for_field in ordered_fields_by_name.items():
+        type_constraint_for_field = decl_for_field.type_constraint
         field_value = getattr(self, field_name)
-        if not constraint_for_field:
+        if not type_constraint_for_field:
           elements_formatted.append(
             # TODO: consider using the repr of arguments in this method.
             "{field_name}={field_value}"
@@ -317,7 +316,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           elements_formatted.append(
             "{field_name}<{type_constraint}>={field_value}"
             .format(field_name=field_name,
-                    type_constraint=constraint_for_field,
+                    type_constraint=decl_for_field.type_constraint,
                     field_value=field_value))
       return '{class_name}({typed_tagged_elements})'.format(
         class_name=type(self).__name__,

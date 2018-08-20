@@ -162,11 +162,10 @@ class WithDefaultValueTuple(datatype([('an_int', int, 3)])): pass
 class WithJustDefaultValueExplicitFieldDecl(datatype([F('a_bool', bool, True)])): pass
 
 
-class WithDefaultValueNumericExplicitFieldDecl(datatype([F('a_bool', bool, 3, True)])): pass
+class WithDefaultValueNumericExplicitFieldDecl(datatype([F('a_tuple', tuple, (), True)])): pass
 
 
-# This could represent a tribool, maybe.
-class WithDefaultValueNoneExplicitFieldDecl(datatype([F('a_bool', bool, None, True)])): pass
+class WithDefaultValueNoneExplicitFieldDecl(datatype([F('a_bool', bool, False, True)])): pass
 
 
 class SomeBaseClass(object):
@@ -326,16 +325,12 @@ class TypedDatatypeTest(BaseTest):
 
     # If the type_name can't be converted into a suitable identifier, throw a
     # ValueError.
-    with self.assertRaises(ValueError) as cm:
+    with self.assertRaises(F.FieldDeclarationError) as cm:
       class NonStrType(datatype([int])): pass
     expected_msg = (
-      "Type names and field names must be valid identifiers: \"<class 'int'>\""
-      if PY3 else
-      "Type names and field names can only contain alphanumeric characters and underscores: \"<type 'int'>\""
-    )
-    self.assertEqual(str(cm.exception), expected_msg)
+      "The field declaration <type 'int'> must be a <type 'unicode'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'.")
+    self.assertIn(str(cm.exception), expected_msg)
 
-    # This raises a TypeError because it doesn't provide a required argument.
     with self.assertRaises(TypeError) as cm:
       class NoFields(datatype()): pass
     expected_msg = (
@@ -345,23 +340,17 @@ class TypedDatatypeTest(BaseTest):
     )
     self.assertEqual(str(cm.exception), expected_msg)
 
-    with self.assertRaises(ValueError) as cm:
+    with self.assertRaises(F.FieldDeclarationError) as cm:
       class JustTypeField(datatype([text_type])): pass
     expected_msg = (
-      "Type names and field names must be valid identifiers: \"<class 'str'>\""
-      if PY3 else
-      "Type names and field names can only contain alphanumeric characters and underscores: \"<type 'unicode'>\""
-    )
-    self.assertEqual(str(cm.exception), expected_msg)
+      "The field declaration <type 'unicode'> must be a <type 'unicode'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'.")
+    self.assertIn(str(cm.exception), expected_msg)
 
-    with self.assertRaises(ValueError) as cm:
+    with self.assertRaises(F.FieldDeclarationError) as cm:
       class NonStringField(datatype([3])): pass
     expected_msg = (
-      "Type names and field names must be valid identifiers: '3'"
-      if PY3 else
-      "Type names and field names cannot start with a number: '3'"
-    )
-    self.assertEqual(str(cm.exception), expected_msg)
+      "The field declaration 3 must be a <type 'unicode'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'int'.")
+    self.assertIn(str(cm.exception), expected_msg)
 
     with self.assertRaises(ValueError) as cm:
       class NonStringTypeField(datatype([(32, int)])): pass
@@ -391,12 +380,11 @@ class TypedDatatypeTest(BaseTest):
     expected_msg = "Encountered duplicate field name: 'field_a'"
     self.assertEqual(str(cm.exception), expected_msg)
 
-    with self.assertRaises(TypeError) as cm:
+    with self.assertRaises(F.FieldDeclarationError) as cm:
       class InvalidTypeSpec(datatype([('a_field', 2)])): pass
     expected_msg = (
-      "type spec for field 'a_field' was not a type or TypeConstraint: "
-      "was 2 (type 'int').")
-    self.assertEqual(str(cm.exception), expected_msg)
+      "type_constraint for field u'a_field' must be an instance of type or TypeConstraint, but was instead 2 (type 'int').")
+    self.assertIn(str(cm.exception), expected_msg)
 
   def test_class_construction_default_value(self):
     with self.assertRaises(F.FieldDeclarationError) as cm:
@@ -629,9 +617,8 @@ field 'some_value' was invalid: value 3 (with type 'int') must satisfy this type
     with self.assertRaises(TypeCheckError) as cm:
       obj.copy(nonexistent_field=3)
     expected_msg = (
-      """error: in constructor of type AnotherTypedDatatype: type check error:
-__new__() got an unexpected keyword argument 'nonexistent_field'""")
-    self.assertEqual(str(cm.exception), expected_msg)
+      "error: in constructor of type AnotherTypedDatatype: type check error:\\nUnrecognized keyword argument \'nonexistent_field\' provided to the constructor")
+    self.assertIn(expected_msg, str(cm.exception))
 
     with self.assertRaises(TypeCheckError) as cm:
       obj.copy(elements=3)
@@ -668,3 +655,4 @@ field 'elements' was invalid: value 3 (with type 'int') must satisfy this type c
       .format('u' if PY2 else ''))
     with self.assertRaisesRegexp(TypeCheckError, expected_rx_falsy_value):
       SomeEnum(x='')
+    self.assertEqual(str(cm.exception), expected_msg)
