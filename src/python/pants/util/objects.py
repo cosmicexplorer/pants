@@ -591,6 +591,26 @@ class SubclassesOf(TypeConstraint):
     return issubclass(obj_type, self._types)
 
 
+class Converter(SubclassesOf):
+  @memoized_property
+  def _variance_symbol(self):
+    return '->{}'.format(self.klass_ctor.__name__)
+
+  def __init__(self, klass_ctor, **kwargs):
+    self.klass_ctor = klass_ctor
+    super(Converter, self).__init__(klass_ctor, **kwargs)
+
+  def validate_satisfied_by(self, obj):
+    if super(Converter, self).satisfied_by_type(type(obj)):
+      pass
+    elif obj is None:
+      obj = self.klass_ctor()
+    else:
+      obj = self.klass_ctor(obj)
+
+    return obj
+
+
 class Collection(object):
   """Constructs classes representing collections of objects of a particular type."""
   # TODO: could we check that the input is iterable in the ctor?
