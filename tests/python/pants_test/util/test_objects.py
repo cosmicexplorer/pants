@@ -158,9 +158,6 @@ class MixedTyping(datatype(['value', ('name', text_type)])): pass
 class WithDefaultValueTuple(datatype([('an_int', int, 3)])): pass
 
 
-class WithRawDefaultValueTuple(datatype([('an_int', int, None, True)])): pass
-
-
 # `F` is what we imported `pants.util.objects.DatatypeFieldDecl` as.
 class WithJustDefaultValueExplicitFieldDecl(datatype([F('a_bool', bool, True)])): pass
 
@@ -401,7 +398,7 @@ class TypedDatatypeTest(BaseTest):
       "was 2 (type 'int').")
     self.assertEqual(str(cm.exception), expected_msg)
 
-  def test_class_construction_default_value_error(self):
+  def test_class_construction_default_value(self):
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class WithInvalidTypeDefaultValue(datatype([('x', int, None)])): pass
     expected_msg = (
@@ -409,11 +406,23 @@ class TypedDatatypeTest(BaseTest):
       "must satisfy the provided type_constraint Exactly(int).")
     self.assertIn(expected_msg, str(cm.exception))
 
-    # This could just be a tuple, but the keyword in the F constructor adds clarity.
-    class WithUncheckedDefaultValue(datatype([
+    # Check that even if `has_default_value` is True, the default value is still checked against the
+    # `type_constraint` at datatype() call time.
+    with self.assertRaises(F.FieldDeclarationError) as cm:
+      class WithInvalidTypeDefaultAndRawArg(datatype([('x', int, None, True)])): pass
+    expected_msg = (
+      "default_value None for the field u'x' "
+      "must satisfy the provided type_constraint Exactly(int).")
+    self.assertIn(expected_msg, str(cm.exception))
+
+    # This could just be a tuple, but the keyword in the F constructor adds clarity. This works
+    # because of the expanded type constraint.
+    class WithCheckedDefaultValue(datatype([
         F('x', Exactly(int, type(None)), None, has_default_value=True)]
     )): pass
-    self.assertEqual(WithUncheckedDefaultValue().x, None)
+    self.assertEqual(WithCheckedDefaultValue().x, None)
+    self.assertEqual(WithCheckedDefaultValue(3).x, 3)
+    self.assertEqual(WithCheckedDefaultValue(x=3).x, 3)
 
   def test_instance_construction_default_value(self):
     self.assertEqual(WithDefaultValueTuple().an_int, 3)

@@ -111,11 +111,11 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     for convenience.
     """
     if isinstance(maybe_decl, cls):
-      return maybe_decl
+      parsed_decl = maybe_decl
     elif isinstance(maybe_decl, text_type):
-      return cls(field_name=maybe_decl)
+      parsed_decl = cls(field_name=maybe_decl)
     elif isinstance(maybe_decl, tuple):
-      return cls._parse_tuple(maybe_decl)
+      parsed_decl = cls._parse_tuple(maybe_decl)
     else:
       raise cls.FieldDeclarationError(
         "The field declaration {value!r} must be a {str_type!r}, tuple, "
@@ -124,6 +124,8 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
                 str_type=text_type,
                 this_type=cls.__name__,
                 the_type=type(maybe_decl).__name__))
+
+    return parsed_decl
 
 
 def datatype(field_decls, superclass_name=None, **kwargs):
