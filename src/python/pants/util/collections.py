@@ -6,8 +6,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 from builtins import next
 
-from pants.util.memo import memoized
-
 
 def combined_dict(*dicts):
   """Combine one or more dicts into a new, unified dict (dicts to the right take precedence)."""
@@ -39,18 +37,3 @@ def assert_single_element(iterable):
     return first_item
 
   raise ValueError("iterable {!r} has more than one element.".format(iterable))
-
-
-@memoized
-def _realize_iterable(iterable):
-  """???"""
-  return list(iterable)
-
-
-def safe_get_index(iterable, index):
-  """???"""
-  realized_list = _realize_iterable(iterable)
-  if index < len(realized_list):
-    return realized_list[index]
-  else:
-    return None
