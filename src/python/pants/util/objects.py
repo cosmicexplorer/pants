@@ -25,17 +25,26 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     # differentiate from just not providing a `default_value`.
     'has_default_value',
 ])):
+  """Description of a field, used in calls to datatype().
+
+  All elements of the list passed to datatype() are parsed into instances of this class by the
+  parse() classmethod.
+  """
 
   class FieldDeclarationError(TypeError): pass
 
   def __new__(cls, field_name, type_constraint=None, default_value=None, has_default_value=False):
 
     # TODO: would we ever want field names to conform to any pattern for any reason?
+    # A field name must always be provided, and must be the appropriate text type for the python
+    # version.
     if not isinstance(field_name, text_type):
       raise cls.FieldDeclarationError(
         "field_name must be an instance of {!r}, but was instead {!r} (type {!r})."
         .format(text_type, field_name, type(field_name).__name__))
 
+    # A type constraint may optionally be provided, either as a TypeConstraint instance, or as a
+    # type, which is shorthand for Exactly(<type>).
     if type_constraint is None or isinstance(type_constraint, TypeConstraint):
       pass
     elif isinstance(type_constraint, type):
@@ -71,6 +80,7 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
 
   @classmethod
   def _parse_tuple(cls, tuple_decl):
+    """Interpret the elements of a tuple (by position) into a field declaration."""
     type_spec = None
     default_value = None
     has_default_value = False
@@ -114,12 +124,16 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     for convenience.
     """
     if isinstance(maybe_decl, cls):
+      # If already a DatatypeFieldDecl instance, just return it.
       parsed_decl = maybe_decl
     elif isinstance(maybe_decl, text_type):
+      # A string alone is interpreted as an untyped field of that name.
       parsed_decl = cls(field_name=maybe_decl)
     elif isinstance(maybe_decl, tuple):
+      # A tuple may be provided, whose elements are interpreted into a DatatypeFieldDecl.
       parsed_decl = cls._parse_tuple(maybe_decl)
     else:
+      # Unrecognized input.
       raise cls.FieldDeclarationError(
         "The field declaration {value!r} must be a {str_type!r}, tuple, "
         "or {this_type!r} instance, but its type was: {the_type!r}."
@@ -230,7 +244,11 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       if not hasattr(cls.__eq__, '_eq_override_canary'):
         raise cls.make_type_error('Should not override __eq__.')
 
-      # TODO: ???
+      # NB: We manually parse `args` and `kwargs` here in order to apply any default values the user
+      # may have specified in the call to datatype(), and we need to do that before calling the
+      # super constructor, because the super constructor requires every argument to be
+      # specified. However, unknown keyword args and too many positional args are still handled by
+      # the call to the super constructor.
       posn_args, kw_args = cls._parse_args_kwargs(args, kwargs)
 
       try:

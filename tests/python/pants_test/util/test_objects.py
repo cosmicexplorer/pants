@@ -415,8 +415,13 @@ class TypedDatatypeTest(BaseTest):
     self.assertEqual(WithCheckedDefaultValue(3).x, 3)
     self.assertEqual(WithCheckedDefaultValue(x=3).x, 3)
 
-    with self.assertRaises(ValueError) as cm:
+    with self.assertRaises(ValueError):
       class WithTooManyElementsTuple(datatype([('x', int, None, True, None)])): pass
+
+    with self.assertRaises(ValueError):
+      class WithTooManyKwargsTuple(datatype([
+          F('x', int, None, True, has_default_value=False)
+      ])): pass
 
   def test_instance_construction_default_value(self):
     self.assertEqual(WithDefaultValueTuple().an_int, 3)
