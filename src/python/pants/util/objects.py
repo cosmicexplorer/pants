@@ -21,8 +21,8 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     'field_name',
     'type_constraint',
     'default_value',
-    # If the `default_value` is None, or something that doesn't pass the `type_constraint`, setting
-    # this to True avoids running the type check (and this technique allows a None default value).
+    # If the `default_value` is None, setting this argument to True is also required to
+    # differentiate from just not providing a `default_value`.
     'has_default_value',
 ])):
 
@@ -108,7 +108,9 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
   @classmethod
   def parse(cls, maybe_decl):
     """The type of `maybe_decl` can be thought of as:
-    [str | (field_name: str, type?: (TypeConstraint | type), default_value?: Any)]
+
+    str | (field_name: str, type?: (TypeConstraint | type), default_value?: Any, has_default_value: bool)
+
     for convenience.
     """
     if isinstance(maybe_decl, cls):
