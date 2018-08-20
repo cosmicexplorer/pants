@@ -175,8 +175,9 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       specified in the call to this datatype's constructor.
 
       TODO: Currently, we are essentially reimplementing the python function argument parsing /
-      assignment to positional and keyword params. This is unfortunate, potentially slow, and is an
-      artifact of the specific implementation of default values used right now.
+      assignment to positional and keyword params whenever we call a datatype()'s constructor. This
+      is unfortunate, potentially slow, and is an artifact of the specific implementation of default
+      values in this method.
       """
       # We whittle down the arguments from here, then use the default values (if given) for any
       # remaining ones.
