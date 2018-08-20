@@ -156,14 +156,25 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     return parsed_decl
 
 
+_none_type = type(None)
+
+
 def optional(type_constraint):
-  none_type = type(None)
-  if none_type in type_constraint.types:
+  if isinstance(type_constraint, type):
+    type_constraint = Exactly(type_constraint)
+  elif not isinstance(type_constraint, TypeConstraint):
+    raise TypeError("type_constraint must be a TypeConstraint: was {!r} (type {!r})."
+                    .format(type_constraint, type(type_constraint).__name__))
+
+  if _none_type in type_constraint.types:
     return type_constraint
 
   class ConstraintAlsoAcceptingNone(type_constraint):
+    has_default_value = True
+    default_value = None
+
     def __init__(self, *args, **kwargs):
-      return super(ConstraintAlsoAcceptingNone, self).__init__(none_type, *args, **kwargs)
+      return super(ConstraintAlsoAcceptingNone, self).__init__(_none_type, *args, **kwargs)
 
   return ConstraintAlsoAcceptingNone
 
@@ -221,34 +232,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       remaining_field_name_dict = ordered_fields_by_name.copy()
 
       # Get this from the list of DatatypeFieldDecl above.
-      if len(args) == 0:
-        positional_field_names = []
-      elif len(args) <= len(field_name_list):
-        positional_field_names = field_name_list[0:len(args)]
-      else:
-      # If we go out of range, the user has provided too many positional arguments.
-        raise cls.make_type_error(
-          "Too many positional arguments "
-          "({n!r} > {num_fields!r}) were provided to the constructor: "
-          "args={args!r},\n"
-          "kwargs={kwargs!r}."
-          .format(n=len(args), num_fields=len(ordered_fields_by_name), args=args, kwargs=kwargs))
-
       arg_check_error_messages = []
-      checked_arg_values = []
-      for name_index in range(0, len(positional_field_names)):
-        name = positional_field_names[name_index]
-        decl_for_name = remaining_field_name_dict.pop(name)
-        arg_value = args[name_index]
-
-        if decl_for_name.type_constraint is not None:
-          try:
-            arg_value = decl_for_name.type_constraint.validate_satisfied_by(arg_value)
-          except TypeConstraintError as e:
-            arg_check_error_messages.append(
-              "field {name!r} was invalid (provided as positional argument {ind!r}): {err}"
-              .format(name=name, ind=name_index, err=str(e)))
-        checked_arg_values.append(arg_value)
 
       checked_kwarg_values = {}
       try:
@@ -263,6 +247,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
               arg_check_error_messages.append(
                 "field {name!r} was invalid (provided as a keyword argument): {err}"
                 .format(name=field_name, err=str(e)))
+
           checked_kwarg_values[field_name] = kwarg_value
       except KeyError as e:
         raise cls.make_type_error(
@@ -270,6 +255,35 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           "args={args!r},\n"
           "kwargs={kwargs!r}."
           .format(arg=field_name, args=args, kwargs=kwargs),
+          e)
+
+      checked_arg_values = []
+      try:
+        remaining_name_list = list(remaining_field_name_dict.keys())
+        if len(remaining_name_list) > 0:
+          for name_index in range(0, len(args)):
+            name = remaining_name_list[name_index]
+            decl_for_name = remaining_field_name_dict.pop(name)
+            arg_value = args[name_index]
+
+            if decl_for_name.type_constraint is not None:
+              try:
+                arg_value = decl_for_name.type_constraint.validate_satisfied_by(arg_value)
+              except TypeConstraintError as e:
+                arg_check_error_messages.append(
+                  "field {name!r} was invalid (provided as positional argument {ind!r}): {err}"
+                  .format(name=name, ind=name_index, err=str(e)))
+
+            checked_arg_values.append(arg_value)
+      except IndexError as e:
+        # If we go out of range, the user has provided too many positional arguments.
+        raise cls.make_type_error(
+          "Too many positional arguments "
+          "({n!r} > {num_fields!r}) were provided to the constructor: "
+          "args={args!r},\n"
+          "kwargs={kwargs!r}. {err}"
+          .format(n=len(args), num_fields=len(ordered_fields_by_name), args=args, kwargs=kwargs,
+                  err=str(e)),
           e)
 
       # Collect errors type-checking positional and keyword args while processing, then display them
@@ -617,7 +631,7 @@ class SubclassesOf(TypeConstraint):
     return issubclass(obj_type, self._types)
 
 
-class Converter(SubclassesOf):
+class Convert(SubclassesOf):
   @memoized_property
   def _variance_symbol(self):
     return '->{}'.format(self.klass_ctor.__name__)
@@ -630,10 +644,10 @@ class Converter(SubclassesOf):
 
   def __init__(self, klass_ctor, **kwargs):
     self.klass_ctor = klass_ctor
-    super(Converter, self).__init__(klass_ctor, **kwargs)
+    super(Convert, self).__init__(klass_ctor, **kwargs)
 
   def validate_satisfied_by(self, obj):
-    if super(Converter, self).satisfied_by_type(type(obj)):
+    if super(Convert, self).satisfied_by_type(type(obj)):
       pass
     elif obj is None:
       obj = self.klass_ctor()
@@ -641,6 +655,13 @@ class Converter(SubclassesOf):
       obj = self.klass_ctor(obj)
 
     return obj
+
+
+class Any(TypeConstraint):
+  _variance_symbol = '*'
+
+  def satisfied_by_type(self, _obj_type):
+    return True
 
 
 class Collection(object):

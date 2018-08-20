@@ -12,7 +12,7 @@ from builtins import object, str
 
 from future.utils import PY2, PY3, text_type
 
-from pants.util.objects import Converter
+from pants.util.objects import Convert
 from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError,
                                 TypedDatatypeInstanceConstructionError, datatype, enum)
@@ -163,10 +163,10 @@ class WithDefaultValueTuple(datatype([('an_int', int, 3)])): pass
 class WithJustDefaultValueExplicitFieldDecl(datatype([F('a_bool', Exactly(bool), True)])): pass
 
 
-class WithDefaultValueNumericExplicitFieldDecl(datatype([F('a_tuple', Converter(tuple))])): pass
+class WithDefaultValueNumericExplicitFieldDecl(datatype([F('a_tuple', Convert(tuple))])): pass
 
 
-class WithDefaultValueNoneExplicitFieldDecl(datatype([F('a_bool', Converter(bool))])): pass
+class WithDefaultValueNoneExplicitFieldDecl(datatype([F('a_bool', Convert(bool))])): pass
 
 
 class SomeBaseClass(object):
@@ -535,24 +535,25 @@ class TypedDatatypeTest(BaseTest):
     # unrecognized fields
     with self.assertRaises(TypeError) as cm:
       SomeTypedDatatype(3, 4)
-    expected_msg = """error: in constructor of type SomeTypedDatatype: type check error:
-Too many positional arguments (2 > 1) were provided to the constructor: args=(3, 4),
-kwargs={}."""
-    self.assertEqual(expected_msg, str(cm.exception))
+    expected_msg = """error: in constructor of type SomeTypedDatatype: type check error:\\nToo many positional arguments (2 > 1) were provided to the constructor: args=(3, 4),\\nkwargs={}. list index out of range"""
+    ex_str = str(cm.exception)
+    self.assertIn(IndexError.__name__, ex_str)
+    self.assertIn(expected_msg, ex_str)
 
     with self.assertRaises(TypedDatatypeInstanceConstructionError) as cm:
       CamelCaseWrapper(nonneg_int=3)
     expected_msg = (
-      """error: in constructor of type CamelCaseWrapper: type check error:\nfield 'nonneg_int' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
-    self.assertEqual(str(cm.exception), expected_msg)
+      """error: in constructor of type CamelCaseWrapper: type check error:
+field 'nonneg_int' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
+    self.assertEqual(expected_msg, str(cm.exception))
 
     # test that too many positional args fails
     with self.assertRaises(TypeError) as cm:
       CamelCaseWrapper(4, 5)
-    expected_msg = """error: in constructor of type CamelCaseWrapper: type check error:
-Too many positional arguments (2 > 1) were provided to the constructor: args=(4, 5),
-kwargs={}."""
-    self.assertEqual(expected_msg, str(cm.exception))
+    expected_msg = """error: in constructor of type CamelCaseWrapper: type check error:\\nToo many positional arguments (2 > 1) were provided to the constructor: args=(4, 5),\\nkwargs={}. list index out of range"""
+    ex_str = str(cm.exception)
+    self.assertIn(IndexError.__name__, ex_str)
+    self.assertIn(expected_msg, ex_str)
 
     # test that kwargs with keywords that aren't field names fail the same way
     with self.assertRaises(TypeError) as cm:

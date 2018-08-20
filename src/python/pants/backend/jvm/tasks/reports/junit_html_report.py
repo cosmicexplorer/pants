@@ -18,7 +18,7 @@ from pants.base.mustache import MustacheRenderer
 from pants.util.dirutil import safe_mkdir_for, safe_walk
 from pants.util.memo import memoized_property
 from pants.util.meta import AbstractClass
-from pants.util.objects import Converter, datatype
+from pants.util.objects import Convert, datatype
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ class ReportTestSuite(object):
 
 class ReportTestCase(datatype([
     'name',
-    ('time', Converter(float)),
+    ('time', Convert(float)),
     'failure',
     'error',
     ('skipped', bool, False)])):

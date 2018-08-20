@@ -10,7 +10,7 @@ from collections import OrderedDict
 from pants.build_graph.address import BuildFileAddress
 from pants.engine.objects import Serializable
 from pants.util.memo import memoized_property
-from pants.util.objects import Converter, datatype
+from pants.util.objects import Convert, datatype
 
 
 class MappingError(Exception):
@@ -152,10 +152,10 @@ class ResolveError(MappingError):
 
 class AddressMapper(datatype([
   'parser',
-  ('build_patterns', Converter(tuple), ['BUILD', 'BUILD.*']),
-  ('build_ignore_patterns', Converter(tuple)),
-  ('exclude_target_regexps', Converter(tuple)),
-  ('subproject_roots', Converter(tuple)),
+  ('build_patterns', Convert(tuple), ['BUILD', 'BUILD.*']),
+  ('build_ignore_patterns', Convert(tuple)),
+  ('exclude_target_regexps', Convert(tuple)),
+  ('subproject_roots', Convert(tuple)),
 ])):
   """Configuration to parse build files matching a filename pattern."""
   # def __new__(cls,
