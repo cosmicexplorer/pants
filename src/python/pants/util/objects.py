@@ -162,6 +162,7 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
 _none_type = type(None)
 
 
+# TODO: *need* to test this, and any other `TypeConstraint`s we define in this file.
 def optional(type_constraint):
   if isinstance(type_constraint, type):
     type_constraint = Exactly(type_constraint)
