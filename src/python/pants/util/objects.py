@@ -662,25 +662,27 @@ class SubclassesOf(TypeConstraint):
 class Convert(SubclassesOf):
   @memoized_property
   def _variance_symbol(self):
-    return '->{}'.format(self.klass_ctor.__name__)
+    return '->{}'.format(self.klass_type.__name__)
 
   has_default_value = True
 
   @memoized_property
   def default_value(self):
-    return self.klass_ctor()
+    return self.klass_create()
 
   def __init__(self, klass_ctor, klass_fun=None, **kwargs):
-    self.klass_ctor = klass_fun or klass_ctor
+    self.klass_type = klass_ctor
+    self.klass_create = klass_fun or klass_ctor
     super(Convert, self).__init__(klass_ctor, **kwargs)
 
   def validate_satisfied_by(self, obj):
+    """???/note that the point of this is to provide a default as well"""
     if super(Convert, self).satisfied_by_type(type(obj)):
       pass
     elif obj is None:
-      obj = self.klass_ctor()
+      obj = self.default_value
     else:
-      obj = self.klass_ctor(obj)
+      obj = self.klass_create(obj)
 
     return obj
 
