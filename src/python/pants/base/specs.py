@@ -8,7 +8,7 @@ import re
 from abc import abstractmethod
 
 from pants.util.meta import AbstractClass
-from pants.util.objects import Convert, datatype
+from pants.util.objects import Convert, NotNull, datatype
 
 
 class Spec(AbstractClass):
@@ -26,14 +26,8 @@ class Spec(AbstractClass):
     """Returns the normalized string representation of this spec."""
 
 
-class SingleAddress(datatype(['directory', 'name']), Spec):
+class SingleAddress(datatype([('directory', NotNull()), ('name', NotNull())]), Spec):
   """A Spec for a single address."""
-
-  def __new__(cls, directory, name):
-    if directory is None or name is None:
-      raise ValueError('A SingleAddress must have both a directory and name. Got: '
-                       '{}:{}'.format(directory, name))
-    return super(SingleAddress, cls).__new__(cls, directory, name)
 
   def to_spec_string(self):
     return '{}:{}'.format(self.directory, self.name)

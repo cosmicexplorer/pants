@@ -17,6 +17,8 @@ from twitter.common.collections import OrderedSet
 
 from pants.engine.selectors import Get, type_or_constraint_repr
 from pants.util.meta import AbstractClass
+from pants.util.objects import Convert
+from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import Exactly, datatype
 
 
@@ -172,24 +174,15 @@ class TaskRule(datatype(['output_constraint', 'input_selectors', 'input_gets', '
                                    self.func.__name__)
 
 
-class SingletonRule(datatype(['output_constraint', 'value']), Rule):
+class SingletonRule(datatype([
+    F('output_constraint', Convert(Exactly), has_default_value=False),
+    'value',
+]), Rule):
   """A default rule for a product, which is thus a singleton for that product."""
 
   @classmethod
   def from_instance(cls, obj):
     return cls(type(obj), obj)
-
-  def __new__(cls, output_type, value):
-    # Validate result type.
-    if isinstance(output_type, Exactly):
-      constraint = output_type
-    elif isinstance(output_type, type):
-      constraint = Exactly(output_type)
-    else:
-      raise TypeError("Expected an output_type for rule; got: {}".format(output_type))
-
-    # Create.
-    return super(SingletonRule, cls).__new__(cls, constraint, value)
 
   @property
   def input_selectors(self):

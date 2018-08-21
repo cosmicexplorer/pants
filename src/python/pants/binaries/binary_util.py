@@ -21,6 +21,8 @@ from pants.subsystem.subsystem import Subsystem
 from pants.util.contextutil import temporary_file
 from pants.util.dirutil import chmod_plus_x, safe_concurrent_creation, safe_open
 from pants.util.memo import memoized_method, memoized_property
+from pants.util.objects import Convert
+from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import datatype
 from pants.util.osutil import SUPPORTED_PLATFORM_NORMALIZED_NAMES
 
@@ -131,25 +133,14 @@ class BinaryRequest(datatype([
     return os.path.join(*binary_path_components)
 
 
-class BinaryFetchRequest(datatype(['download_path', 'urls'])):
+class BinaryFetchRequest(datatype([
+    'download_path',
+    F('urls', Convert(tuple), has_default_value=False)])):
   """Describes a request to download a file."""
 
   @memoized_property
   def file_name(self):
     return os.path.basename(self.download_path)
-
-  class NoDownloadUrlsError(ValueError): pass
-
-  def __new__(cls, download_path, urls):
-    this_object = super(BinaryFetchRequest, cls).__new__(
-      cls, download_path, tuple(urls))
-
-    if not this_object.urls:
-      raise cls.NoDownloadUrlsError(
-        "No urls were provided to {cls_name}: {obj!r}."
-        .format(cls_name=cls.__name__, obj=this_object))
-
-    return this_object
 
 
 class BinaryToolFetcher(object):
