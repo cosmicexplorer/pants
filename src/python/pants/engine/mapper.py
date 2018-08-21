@@ -10,7 +10,7 @@ from collections import OrderedDict
 from pants.build_graph.address import BuildFileAddress
 from pants.engine.objects import Serializable
 from pants.util.memo import memoized_property
-from pants.util.objects import Convert, datatype
+from pants.util.objects import datatype
 
 
 class MappingError(Exception):
@@ -152,40 +152,43 @@ class ResolveError(MappingError):
 
 class AddressMapper(datatype([
   'parser',
-  ('build_patterns', Convert(tuple), ['BUILD', 'BUILD.*']),
-  ('build_ignore_patterns', Convert(tuple)),
-  ('exclude_target_regexps', Convert(tuple)),
-  ('subproject_roots', Convert(tuple)),
+  'build_patterns',
+  'build_ignore_patterns',
+  'exclude_target_regexps',
+  'subproject_roots',
 ])):
   """Configuration to parse build files matching a filename pattern."""
-  # def __new__(cls,
-  #             parser,
-  #             build_patterns=None,
-  #             build_ignore_patterns=None,
-  #             exclude_target_regexps=None,
-  #             subproject_roots=None):
-  #   """Create an AddressMapper.
-  #   Both the set of files that define a mappable BUILD files and the parser used to parse those
-  #   files can be customized.  See the `pants.engine.parsers` module for example parsers.
-  #   :param parser: The BUILD file parser to use.
-  #   :type parser: An instance of :class:`pants.engine.parser.Parser`.
-  #   :param tuple build_patterns: A tuple of fnmatch-compatible patterns for identifying BUILD files
-  #                                used to resolve addresses.
-  #   :param list build_ignore_patterns: A list of path ignore patterns used when searching for BUILD files.
-  #   :param list exclude_target_regexps: A list of regular expressions for excluding targets.
-  #   """
-  #   build_patterns = tuple(build_patterns or ['BUILD', 'BUILD.*'])
-  #   build_ignore_patterns = tuple(build_ignore_patterns or [])
-  #   exclude_target_regexps = tuple(exclude_target_regexps or [])
-  #   subproject_roots = tuple(subproject_roots or [])
-  #   return super(AddressMapper, cls).__new__(
-  #       cls,
-  #       parser,
-  #       build_patterns,
-  #       build_ignore_patterns,
-  #       exclude_target_regexps,
-  #       subproject_roots
-  #     )
+
+  def __new__(cls,
+              parser,
+              build_patterns=None,
+              build_ignore_patterns=None,
+              exclude_target_regexps=None,
+              subproject_roots=None):
+    """Create an AddressMapper.
+
+    Both the set of files that define a mappable BUILD files and the parser used to parse those
+    files can be customized.  See the `pants.engine.parsers` module for example parsers.
+
+    :param parser: The BUILD file parser to use.
+    :type parser: An instance of :class:`pants.engine.parser.Parser`.
+    :param tuple build_patterns: A tuple of fnmatch-compatible patterns for identifying BUILD files
+                                 used to resolve addresses.
+    :param list build_ignore_patterns: A list of path ignore patterns used when searching for BUILD files.
+    :param list exclude_target_regexps: A list of regular expressions for excluding targets.
+    """
+    build_patterns = tuple(build_patterns or ['BUILD', 'BUILD.*'])
+    build_ignore_patterns = tuple(build_ignore_patterns or [])
+    exclude_target_regexps = tuple(exclude_target_regexps or [])
+    subproject_roots = tuple(subproject_roots or [])
+    return super(AddressMapper, cls).__new__(
+        cls,
+        parser,
+        build_patterns,
+        build_ignore_patterns,
+        exclude_target_regexps,
+        subproject_roots
+      )
 
   @memoized_property
   def exclude_patterns(self):
