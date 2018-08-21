@@ -83,6 +83,8 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     has_default_value = False
     type_constraint = None
 
+    # NB: We have multiple optional (and some non-optional) positional arguments, so we popleft()
+    # things off a deque.
     remaining_decl_elements = deque(tuple_decl)
 
     if not bool(remaining_decl_elements):
@@ -163,8 +165,10 @@ _none_type = type(None)
 
 
 # TODO: *need* to test this, and any other `TypeConstraint`s we define in this file.
-def optional(type_constraint):
-  if isinstance(type_constraint, type):
+def optional(type_constraint=None):
+  if type_constraint is None:
+    type_constraint = AnyClass
+  elif isinstance(type_constraint, type):
     type_constraint = Exactly(type_constraint)
   elif not isinstance(type_constraint, TypeConstraint):
     raise TypeError("type_constraint must be a TypeConstraint: was {!r} (type {!r})."
@@ -661,8 +665,8 @@ class Convert(SubclassesOf):
   def default_value(self):
     return self.klass_ctor()
 
-  def __init__(self, klass_ctor, **kwargs):
-    self.klass_ctor = klass_ctor
+  def __init__(self, klass_ctor, klass_fun=None, **kwargs):
+    self.klass_ctor = klass_fun or klass_ctor
     super(Convert, self).__init__(klass_ctor, **kwargs)
 
   def validate_satisfied_by(self, obj):
