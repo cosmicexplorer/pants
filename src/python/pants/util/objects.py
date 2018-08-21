@@ -170,12 +170,12 @@ def optional(type_constraint=None):
     type_constraint = AnyClass
   elif isinstance(type_constraint, type):
     type_constraint = Exactly(type_constraint)
-  elif not isinstance(type_constraint, TypeConstraint):
+  elif isinstance(type_constraint, TypeConstraint):
+    if _none_type in type_constraint.types:
+      return type_constraint
+  else:
     raise TypeError("type_constraint must be a TypeConstraint: was {!r} (type {!r})."
                     .format(type_constraint, type(type_constraint).__name__))
-
-  if _none_type in type_constraint.types:
-    return type_constraint
 
   base_constraint_type = type(type_constraint)
   class ConstraintAlsoAcceptingNone(base_constraint_type):
