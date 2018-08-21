@@ -274,7 +274,6 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           "kwargs={kwargs!r}."
           .format(arg=field_name, args=args, kwargs=kwargs),
           e)
-      print("checked_kwarg_values: {}".format(checked_kwarg_values), file=sys.stderr)
 
       checked_arg_values = []
       try:
@@ -304,7 +303,6 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           .format(n=len(args), num_fields=len(ordered_fields_by_name), args=args, kwargs=kwargs,
                   err=str(e)),
           e)
-      print("checked_arg_values: {}".format(checked_arg_values), file=sys.stderr)
 
       # Collect errors type-checking positional and keyword args while processing, then display them
       # all at once here.
@@ -336,9 +334,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       # specified. Some of these values may be changed through coercion if a TypeConstraint does so
       # in its validate_satisfied_by() method. However, unknown keyword args and too many positional
       # args are still handled by the call to the super constructor.
-      print("args: {}, kwargs: {}".format(args, kwargs), file=sys.stderr)
       posn_args, kw_args = cls._parse_args_kwargs(args, kwargs)
-      print("posn_args: {}, kw_args: {}".format(posn_args, kw_args), file=sys.stderr)
 
       try:
         return super(DataType, cls).__new__(cls, *posn_args, **kw_args)

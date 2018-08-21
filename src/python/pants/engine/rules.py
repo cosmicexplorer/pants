@@ -17,8 +17,6 @@ from twitter.common.collections import OrderedSet
 
 from pants.engine.selectors import Get, type_or_constraint_repr
 from pants.util.meta import AbstractClass
-from pants.util.objects import Convert
-from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import Exactly, datatype
 
 
@@ -138,16 +136,35 @@ class Rule(AbstractClass):
     """Collection of input selectors."""
 
 
-class TaskRule(datatype([
-    F('output_constraint', Convert(Exactly), has_default_value=False),
-    F('input_selectors', Convert(tuple), has_default_value=False),
-    'func',
-    ('input_gets', Convert(tuple)),
-]), Rule):
+class TaskRule(datatype(['output_constraint', 'input_selectors', 'input_gets', 'func']), Rule):
   """A Rule that runs a task function when all of its input selectors are satisfied.
 
   TODO: Make input_gets non-optional when more/all rules are using them.
   """
+
+  def __new__(cls, output_type, input_selectors, func, input_gets=None):
+    # Validate result type.
+    if isinstance(output_type, Exactly):
+      constraint = output_type
+    elif isinstance(output_type, type):
+      constraint = Exactly(output_type)
+    else:
+      raise TypeError("Expected an output_type for rule `{}`, got: {}".format(
+        func.__name__, output_type))
+
+    # Validate selectors.
+    if not isinstance(input_selectors, list):
+      raise TypeError("Expected a list of Selectors for rule `{}`, got: {}".format(
+        func.__name__, type(input_selectors)))
+
+    # Validate gets.
+    input_gets = [] if input_gets is None else input_gets
+    if not isinstance(input_gets, list):
+      raise TypeError("Expected a list of Gets for rule `{}`, got: {}".format(
+        func.__name__, type(input_gets)))
+
+    # Create.
+    return super(TaskRule, cls).__new__(cls, constraint, tuple(input_selectors), tuple(input_gets), func)
 
   def __str__(self):
     return '({}, {!r}, {})'.format(type_or_constraint_repr(self.output_constraint),

@@ -147,10 +147,11 @@ class ReportTestSuite(object):
 
 class ReportTestCase(datatype([
     'name',
-    ('time', Convert(float)),
     'failure',
     'error',
-    ('skipped', bool, False)])):
+    ('time', Convert(float)),
+    ('skipped', bool, False),
+])):
   """Data object for a JUnit test case"""
 
   @memoized_property
@@ -251,9 +252,9 @@ class JUnitHtmlReport(JUnitHtmlReportInterface):
 
       testcases.append(ReportTestCase(
         testcase.attrib['name'],
-        testcase.attrib.get('time', 0),
         failure,
         error,
+        testcase.attrib.get('time', 0),
         skipped
       ))
 

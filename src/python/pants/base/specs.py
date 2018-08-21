@@ -8,7 +8,7 @@ import re
 from abc import abstractmethod
 
 from pants.util.meta import AbstractClass
-from pants.util.objects import datatype
+from pants.util.objects import Convert, datatype
 
 
 class Spec(AbstractClass):
@@ -60,11 +60,12 @@ class AscendantAddresses(datatype(['directory']), Spec):
     return '{}^'.format(self.directory)
 
 
-class Specs(datatype(['dependencies', 'tags', ('exclude_patterns', tuple)])):
+class Specs(datatype([
+    'dependencies',
+    ('tags', Convert(tuple)),
+    ('exclude_patterns', Convert(tuple)),
+])):
   """A collection of Specs representing Spec subclasses, tags and regex filters."""
-
-  def __new__(cls, dependencies, tags=tuple(), exclude_patterns=tuple()):
-    return super(Specs, cls).__new__(cls, dependencies, tags, exclude_patterns)
 
   def exclude_patterns_memo(self):
     return [re.compile(pattern) for pattern in set(self.exclude_patterns or [])]
