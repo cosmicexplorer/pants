@@ -682,6 +682,16 @@ class AnyClass(TypeConstraint):
     return True
 
 
+class NotNull(TypeConstraint):
+
+  _variance_symbol = '@'
+
+  def __init__(self): pass
+
+  def satisfied_by_type(self, obj_type):
+    return obj_type is not _none_type
+
+
 class Nullable(TypeConstraint):
 
   has_default_value = True
