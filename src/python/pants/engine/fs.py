@@ -10,7 +10,9 @@ from pants.base.project_tree import Dir, File
 from pants.engine.rules import RootRule
 from pants.option.custom_types import GlobExpansionConjunction
 from pants.option.global_options import GlobMatchErrorBehavior
-from pants.util.objects import Collection, datatype
+from pants.util.objects import Collection, Convert
+from pants.util.objects import DatatypeFieldDecl as F
+from pants.util.objects import datatype
 
 
 class FileContent(datatype([('path', text_type), ('content', binary_type)])):
@@ -31,9 +33,10 @@ class Path(datatype([('path', text_type), 'stat'])):
 
 
 class PathGlobs(datatype([
-    'include',
-    'exclude',
-    ('glob_match_error_behavior', GlobMatchErrorBehavior),
+    F('include', Convert(tuple), has_default_value=False),
+    ('exclude', Convert(tuple)),
+    # TODO: would love some way to say "use this create() method I made specially for you to call".
+    ('glob_match_error_behavior', GlobMatchErrorBehavior, GlobMatchErrorBehavior.create()),
     ('conjunction', GlobExpansionConjunction),
 ])):
   """A wrapper around sets of filespecs to include and exclude.

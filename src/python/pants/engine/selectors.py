@@ -96,15 +96,11 @@ class Selector(AbstractClass):
     """The product that this selector produces."""
 
 
-class Select(datatype(['product', 'optional']), Selector):
+class Select(datatype(['product', ('optional', bool, False)]), Selector):
   """Selects the given Product for the Subject provided to the constructor.
 
   If optional=True and no matching product can be produced, will return None.
   """
-
-  def __new__(cls, product, optional=False):
-    obj = super(Select, cls).__new__(cls, product, optional)
-    return obj
 
   def __repr__(self):
     return '{}({}{})'.format(type(self).__name__,
