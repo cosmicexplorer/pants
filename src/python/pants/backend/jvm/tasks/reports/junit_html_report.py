@@ -18,7 +18,9 @@ from pants.base.mustache import MustacheRenderer
 from pants.util.dirutil import safe_mkdir_for, safe_walk
 from pants.util.memo import memoized_property
 from pants.util.meta import AbstractClass
-from pants.util.objects import Convert, datatype
+from pants.util.objects import Convert
+from pants.util.objects import DatatypeFieldDecl as F
+from pants.util.objects import datatype, optional
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -147,9 +149,10 @@ class ReportTestSuite(object):
 
 class ReportTestCase(datatype([
     'name',
-    'failure',
-    'error',
-    ('time', Convert(float)),
+    F('time', Convert(float), has_default_value=False),
+    ('failure', optional()),
+    ('error', optional()),
+
     ('skipped', bool, False),
 ])):
   """Data object for a JUnit test case"""
@@ -252,10 +255,10 @@ class JUnitHtmlReport(JUnitHtmlReportInterface):
 
       testcases.append(ReportTestCase(
         testcase.attrib['name'],
+        testcase.attrib.get('time', 0),
         failure,
         error,
-        testcase.attrib.get('time', 0),
-        skipped
+        skipped,
       ))
 
     for testsuite in root.iter('testsuite'):
