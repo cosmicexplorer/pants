@@ -13,8 +13,8 @@ from future.utils import PY2, text_type
 from twitter.common.collections import OrderedSet
 
 from pants.util.collections import safe_get_index
-from pants.util.memo import memoized, memoized_classproperty
-from pants.util.meta import AbstractClass
+from pants.util.memo import memoized, memoized_classproperty, memoized_property
+from pants.util.meta import AbstractClass, classproperty
 
 
 # TODO: add a field for the object's __doc__ string?
@@ -181,6 +181,11 @@ def optional(type_constraint=None):
   class ConstraintAlsoAcceptingNone(base_constraint_type):
     has_default_value = True
     default_value = None
+
+    @classproperty
+    def _variance_symbol(cls):
+      base = super(ConstraintAlsoAcceptingNone, cls)._variance_symbol
+      return '{}?'.format(base)
 
     def satisfied_by_type(self, obj_type):
       if obj_type is _none_type:
