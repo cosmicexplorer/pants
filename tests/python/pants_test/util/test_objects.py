@@ -692,7 +692,6 @@ field 'elements' was invalid: value 3 (with type 'int') must satisfy this type c
       .format('u' if PY2 else ''))
     with self.assertRaisesRegexp(TypeCheckError, expected_rx_falsy_value):
       SomeEnum(x='')
-    self.assertEqual(str(cm.exception), expected_msg)
 
   def test_optional(self):
     class OptionalAny(datatype([('x', optional(), None)])): pass
