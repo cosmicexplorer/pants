@@ -8,7 +8,7 @@ import re
 from abc import abstractmethod
 
 from pants.util.meta import AbstractClass
-from pants.util.objects import Convert, NotNull, datatype
+from pants.util.objects import datatype
 
 
 class Spec(AbstractClass):
@@ -26,8 +26,15 @@ class Spec(AbstractClass):
     """Returns the normalized string representation of this spec."""
 
 
-class SingleAddress(datatype([('directory', NotNull()), ('name', NotNull())]), Spec):
+# TODO: a NonNull type constraint that just checks for None as is done in __new__() here.
+class SingleAddress(datatype(['directory', 'name']), Spec):
   """A Spec for a single address."""
+
+  def __new__(cls, directory, name):
+    if directory is None or name is None:
+      raise ValueError('A SingleAddress must have both a directory and name. Got: '
+                       '{}:{}'.format(directory, name))
+    return super(SingleAddress, cls).__new__(cls, directory, name)
 
   def to_spec_string(self):
     return '{}:{}'.format(self.directory, self.name)
@@ -54,12 +61,11 @@ class AscendantAddresses(datatype(['directory']), Spec):
     return '{}^'.format(self.directory)
 
 
-class Specs(datatype([
-    'dependencies',
-    ('tags', Convert(tuple)),
-    ('exclude_patterns', Convert(tuple)),
-])):
+class Specs(datatype(['dependencies', 'tags', ('exclude_patterns', tuple)])):
   """A collection of Specs representing Spec subclasses, tags and regex filters."""
+
+  def __new__(cls, dependencies, tags=tuple(), exclude_patterns=tuple()):
+    return super(Specs, cls).__new__(cls, dependencies, tags, exclude_patterns)
 
   def exclude_patterns_memo(self):
     return [re.compile(pattern) for pattern in set(self.exclude_patterns or [])]
