@@ -15,7 +15,7 @@ from future.utils import PY2, PY3, text_type
 from pants.util.objects import Convert
 from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError,
-                                TypedDatatypeInstanceConstructionError, datatype, enum)
+                                TypedDatatypeInstanceConstructionError, datatype, enum, optional)
 from pants_test.base_test import BaseTest
 
 
@@ -693,3 +693,32 @@ field 'elements' was invalid: value 3 (with type 'int') must satisfy this type c
     with self.assertRaisesRegexp(TypeCheckError, expected_rx_falsy_value):
       SomeEnum(x='')
     self.assertEqual(str(cm.exception), expected_msg)
+
+  def test_optional(self):
+    class OptionalAny(datatype([('x', optional(), None)])): pass
+    self.assertTrue(OptionalAny().x is None)
+    self.assertTrue(OptionalAny(None).x is None)
+    self.assertEqual(OptionalAny(3).x, 3)
+
+
+    class OptionalTyped(datatype([('x', optional(int), None)])): pass
+    self.assertTrue(OptionalTyped().x is None)
+    self.assertEqual(OptionalTyped(3).x, 3)
+    with self.assertRaises(TypeCheckError):
+      OptionalTyped('asdf')
+
+    class OptionalExplicitConstraint(datatype([
+        ('x', optional(Exactly(int, text_type)), None),
+    ])): pass
+    self.assertTrue(OptionalExplicitConstraint().x is None)
+    self.assertEqual(OptionalExplicitConstraint(3).x, 3)
+    self.assertEqual(OptionalExplicitConstraint('asdf').x, 'asdf')
+    with self.assertRaises(TypeCheckError):
+      OptionalExplicitConstraint(True)
+
+    class OptionalNonNoneDefault(datatype([('x', optional(int), 3)])): pass
+    self.assertEqual(OptionalNonNoneDefault().x, 3)
+    self.assertTrue(OptionalNonNoneDefault(None).x is None)
+    self.assertEqual(OptionalNonNoneDefault(4).x, 4)
+    with self.assertRaises(TypeCheckError):
+      OptionalNonNoneDefault(True)
