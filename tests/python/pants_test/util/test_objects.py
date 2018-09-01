@@ -404,8 +404,9 @@ class TypedDatatypeTest(BaseTest):
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class WithInvalidTypeDefaultAndRawArg(datatype([('x', int, None, True)])): pass
     expected_msg = (
-      "default_value None for the field u'x' "
-      "must satisfy the provided type_constraint Exactly(int).")
+      "default_value None for the field {}'x' "
+      "must satisfy the provided type_constraint Exactly(int)."
+      .format('u' if PY2 else ''))
     self.assertIn(expected_msg, str(cm.exception))
 
     # This could just be a tuple, but the keyword in the F constructor adds clarity. This works
