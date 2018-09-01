@@ -729,6 +729,8 @@ class Convert(SubclassesOf):
   def __init__(self, klass_ctor, klass_fun=None, **kwargs):
     self.klass_type = klass_ctor
     self.klass_create = klass_fun or klass_ctor
+    # `klass_ctor` becomes a single-element `*types` list in
+    # `TypeConstraint.__init__(self, *types, **kwargs)`.
     super(Convert, self).__init__(klass_ctor, **kwargs)
 
   def validate_satisfied_by(self, obj):
