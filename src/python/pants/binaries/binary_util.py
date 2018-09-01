@@ -21,9 +21,7 @@ from pants.subsystem.subsystem import Subsystem
 from pants.util.contextutil import temporary_file
 from pants.util.dirutil import chmod_plus_x, safe_concurrent_creation, safe_open
 from pants.util.memo import memoized_method, memoized_property
-from pants.util.objects import Convert
-from pants.util.objects import DatatypeFieldDecl as F
-from pants.util.objects import datatype
+from pants.util.objects import Convert, datatype, non_empty
 from pants.util.osutil import SUPPORTED_PLATFORM_NORMALIZED_NAMES
 
 
@@ -135,7 +133,7 @@ class BinaryRequest(datatype([
 
 class BinaryFetchRequest(datatype([
     'download_path',
-    F('urls', Convert(tuple), has_default_value=False)])):
+    ('urls', non_empty(Convert(tuple)))])):
   """Describes a request to download a file."""
 
   @memoized_property
