@@ -718,7 +718,7 @@ class SubclassesOf(TypeConstraint):
 class Convert(SubclassesOf):
   @memoized_property
   def _variance_symbol(self):
-    return '->{}'.format(self.klass_type.__name__)
+    return '->'
 
   has_default_value = True
 
