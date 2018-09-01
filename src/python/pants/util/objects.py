@@ -12,8 +12,8 @@ from collections import OrderedDict, deque, namedtuple
 from future.utils import PY2, text_type
 from twitter.common.collections import OrderedSet
 
-from pants.util.memo import memoized, memoized_classproperty, memoized_property
-from pants.util.meta import AbstractClass, classproperty
+from pants.util.memo import memoized, memoized_classproperty
+from pants.util.meta import AbstractClass
 
 
 # TODO: add a field for the object's __doc__ string?
@@ -158,92 +158,6 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
                 the_type=type(maybe_decl).__name__))
 
     return parsed_decl
-
-
-_none_type = type(None)
-
-
-def _parse_type_constraint(type_constraint):
-  if type_constraint is None:
-    type_constraint = AnyClass()
-  elif isinstance(type_constraint, type):
-    type_constraint = Exactly(type_constraint)
-  elif not isinstance(type_constraint, TypeConstraint):
-    raise TypeError("type_constraint must be a TypeConstraint, or None: was {!r} (type {!r})."
-                    .format(type_constraint, type(type_constraint).__name__))
-
-  return type_constraint
-
-
-def optional(type_constraint=None):
-  """Return a TypeConstraint instance matching `type_constraint`, or the value None."""
-  type_constraint = _parse_type_constraint(type_constraint)
-  # Short-cirtcuit -- if the type_constraint already allows None, just return that.
-  if _none_type in type_constraint._types:
-    return type_constraint
-
-  base_constraint_type = type(type_constraint)
-  class ConstraintAlsoAcceptingNone(base_constraint_type):
-    has_default_value = True
-    default_value = None
-
-    def __init__(self):
-      self._types = (_none_type,) + type_constraint._types
-      self._desc = type_constraint._desc
-
-    def __repr__(self):
-      return 'optional({!r})'.format(type_constraint)
-
-    @classproperty
-    def _variance_symbol(cls):
-      base = super(ConstraintAlsoAcceptingNone, cls)._variance_symbol
-      return '{}?'.format(base)
-
-    def satisfied_by_type(self, obj_type):
-      if obj_type is _none_type:
-        return True
-      return type_constraint.satisfied_by_type(obj_type)
-
-  return ConstraintAlsoAcceptingNone()
-
-
-def non_empty(type_constraint=None):
-  type_constraint = _parse_type_constraint(type_constraint)
-  base_constraint_type = type(type_constraint)
-  class ConstraintCheckingEmpty(base_constraint_type):
-    has_default_value = False
-    default_value = None
-
-    def __init__(self):
-      self._types = type_constraint._types
-      self._desc = type_constraint._desc
-
-    def __repr__(self):
-      return 'non_empty({!r})'.format(type_constraint)
-
-    @classproperty
-    def _variance_symbol(cls):
-      base = super(ConstraintCheckingEmpty, cls)._variance_symbol
-      return '{}!'.format(base)
-
-    def satisfied_by_type(self, obj_type):
-      return type_constraint.satisfied_by_type(obj_type)
-
-    def satisfied_by(self, obj):
-      return type_constraint.satisfied_by(obj) and bool(obj)
-
-    def validate_satisfied_by(self, obj):
-      obj = type_constraint.validate_satisfied_by(obj)
-
-      if not bool(obj):
-        raise TypeConstraintError(
-          "value {!r} (with type {!r}) must be True when converted to bool() "
-          "in this type constraint: {!r}."
-          .format(obj, type(obj).__name__, self))
-
-      return obj
-
-  return ConstraintCheckingEmpty()
 
 
 # TODO: when we can restrict the python version to >= 3.6 in our python 3 shard, we can use the
@@ -713,62 +627,6 @@ class SubclassesOf(TypeConstraint):
 
   def satisfied_by_type(self, obj_type):
     return issubclass(obj_type, self._types)
-
-
-class Convert(SubclassesOf):
-  @memoized_property
-  def _variance_symbol(self):
-    return '->'
-
-  has_default_value = True
-
-  @memoized_property
-  def default_value(self):
-    return self.klass_create()
-
-  def __init__(self, klass_ctor, klass_fun=None, **kwargs):
-    self.klass_type = klass_ctor
-    self.klass_create = klass_fun or klass_ctor
-    # `klass_ctor` becomes a single-element `*types` list in
-    # `TypeConstraint.__init__(self, *types, **kwargs)`.
-    super(Convert, self).__init__(klass_ctor, **kwargs)
-
-  def validate_satisfied_by(self, obj):
-    """???/note that the point of this is to provide a default as well"""
-    if self.satisfied_by(obj):
-      pass
-    elif obj is None:
-      obj = self.default_value
-    else:
-      obj = self.klass_create(obj)
-
-    return obj
-
-
-class AnyClass(TypeConstraint):
-  _variance_symbol = '*'
-
-  def __init__(self, **kwargs):
-    self._types = ()
-    self._desc = kwargs.get('description', None)
-
-  def __repr__(self):
-    return 'AnyClass()'
-
-  def satisfied_by_type(self, _obj_type):
-    return True
-
-
-class NotNull(TypeConstraint):
-
-  _variance_symbol = '@'
-
-  def __init__(self, **kwargs):
-    self._types = ()
-    self._desc = kwargs.get('description', None)
-
-  def satisfied_by_type(self, obj_type):
-    return obj_type is not _none_type
 
 
 class Collection(object):
