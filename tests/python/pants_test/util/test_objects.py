@@ -330,7 +330,7 @@ class TypedDatatypeTest(BaseTest):
       class NonStrType(datatype([int])): pass
     expected_msg = (
       "The field declaration <type 'int'> must be a <type 'unicode'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'.")
-    self.assertIn(str(cm.exception), expected_msg)
+    self.assertIn(expected_msg, str(cm.exception))
 
     with self.assertRaises(TypeError) as cm:
       class NoFields(datatype()): pass
@@ -394,8 +394,9 @@ class TypedDatatypeTest(BaseTest):
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class WithInvalidTypeDefaultValue(datatype([('x', int, None)])): pass
     expected_msg = (
-      "default_value None for the field u'x' "
-      "must satisfy the provided type_constraint Exactly(int).")
+      "default_value None for the field {}'x' "
+      "must satisfy the provided type_constraint Exactly(int)."
+      .format('u' if PY2 else ''))
     self.assertIn(expected_msg, str(cm.exception))
 
     # Check that even if `has_default_value` is True, the default value is still checked against the
