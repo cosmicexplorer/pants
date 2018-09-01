@@ -167,20 +167,25 @@ _none_type = type(None)
 # TODO: *need* to test this, and any other `TypeConstraint`s we define in this file.
 def optional(type_constraint=None):
   if type_constraint is None:
-    type_constraint = AnyClass
+    type_constraint = AnyClass()
   elif isinstance(type_constraint, type):
     type_constraint = Exactly(type_constraint)
   elif isinstance(type_constraint, TypeConstraint):
     if _none_type in type_constraint.types:
       return type_constraint
   else:
-    raise TypeError("type_constraint must be a TypeConstraint: was {!r} (type {!r})."
+    raise TypeError("type_constraint must be a TypeConstraint, or None: was {!r} (type {!r})."
                     .format(type_constraint, type(type_constraint).__name__))
 
   base_constraint_type = type(type_constraint)
   class ConstraintAlsoAcceptingNone(base_constraint_type):
     has_default_value = True
     default_value = None
+
+    def __init__(self): pass
+
+    def __repr__(self):
+      return 'optional({!r})'.format(type_constraint)
 
     @classproperty
     def _variance_symbol(cls):
@@ -192,7 +197,7 @@ def optional(type_constraint=None):
         return True
       return type_constraint.satisfied_by_type(obj_type)
 
-  return ConstraintAlsoAcceptingNone
+  return ConstraintAlsoAcceptingNone()
 
 
 def datatype(field_decls, superclass_name=None, **kwargs):
@@ -689,6 +694,11 @@ class Convert(SubclassesOf):
 
 class AnyClass(TypeConstraint):
   _variance_symbol = '*'
+
+  def __init__(self): pass
+
+  def __repr__(self):
+    return 'AnyClass()'
 
   def satisfied_by_type(self, _obj_type):
     return True
