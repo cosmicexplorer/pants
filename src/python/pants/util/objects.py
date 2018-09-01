@@ -164,8 +164,8 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
 _none_type = type(None)
 
 
-# TODO: *need* to test this, and any other `TypeConstraint`s we define in this file.
 def optional(type_constraint=None):
+  """Return a TypeConstraint instance matching `type_constraint`, or the value None."""
   if type_constraint is None:
     type_constraint = AnyClass()
   elif isinstance(type_constraint, type):
@@ -200,6 +200,9 @@ def optional(type_constraint=None):
   return ConstraintAlsoAcceptingNone()
 
 
+# TODO: when we can restrict the python version to >= 3.6 in our python 3 shard, we can use the
+# backported dataclasses library as a backend to take advantage of cool python 3 things like type
+# hints (https://github.com/ericvsmith/dataclasses). Python 3.7+ provides dataclasses in the stdlib.
 def datatype(field_decls, superclass_name=None, **kwargs):
   """A wrapper for `namedtuple` that accounts for the type of the object in equality.
 
