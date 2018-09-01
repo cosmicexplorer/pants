@@ -37,7 +37,8 @@ class PathGlobs(datatype([
     ('exclude', Convert(tuple)),
     ('glob_match_error_behavior', Convert(GlobMatchErrorBehavior,
                                           klass_fun=GlobMatchErrorBehavior.create)),
-    ('conjunction', GlobExpansionConjunction),
+    ('conjunction', Convert(GlobExpansionConjunction,
+                            klass_fun=GlobExpansionConjunction.create)),
 ])):
   """A wrapper around sets of filespecs to include and exclude.
 
