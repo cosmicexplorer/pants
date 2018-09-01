@@ -256,27 +256,3 @@ class BuildDictionaryInfoExtracterTest(unittest.TestCase):
                                        [FunctionArg('bar', 'Bar details.', False, None),
                                         FunctionArg('baz', 'Baz details.', True, 42)])],
                       extracter.get_object_info())
-
-  # TODO: make this testing real!
-  def test_get_object_info_datatype_default(self):
-    class FooDatatype(datatype(['bar', ('baz', int, 42)])):
-      """Foo docstring."""
-
-      def __new__(cls, bar, baz=42):
-        """
-        :param bar: Bar details.
-        :param int baz: Baz details.
-        """
-        return super(FooDatatype, cls).__new__(cls, bar, baz)
-
-    bfa = BuildFileAliases(targets={},
-      objects={
-        'foo': FooDatatype
-      },
-      context_aware_object_factories={},
-    )
-    extracter = BuildDictionaryInfoExtracter(bfa)
-    self.assertEqual([BuildSymbolInfo('foo', 'Foo docstring.', [],
-                                       [FunctionArg('bar', 'Bar details.', False, None),
-                                        FunctionArg('baz', 'Baz details.', True, 42)])],
-                      extracter.get_object_info())
