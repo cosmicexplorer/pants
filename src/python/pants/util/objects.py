@@ -312,6 +312,8 @@ def datatype(field_decls, superclass_name=None, **kwargs):
             checked_arg_values.append(arg_value)
       except IndexError as e:
         # If we go out of range, the user has provided too many positional arguments.
+        # TODO: this is dead code, because ._replace() itself will raise a TypeError if too many
+        # positional arguments are provided!
         raise cls.make_type_error(
           "Too many positional arguments "
           "({n!r} > {num_fields!r}) were provided to the constructor: "
