@@ -657,11 +657,14 @@ field {unicode_literal}'some_value' was invalid (provided as positional argument
       "error: in constructor of type AnotherTypedDatatype: type check error:\\nUnrecognized keyword argument \'nonexistent_field\' provided to the constructor")
     self.assertIn(expected_msg, str(cm.exception))
 
+    with self.assertRaises(TypeError) as cm:
+      obj.copy(3, 4)
+
     with self.assertRaises(TypeCheckError) as cm:
       obj.copy(elements=3)
     expected_msg = (
       """error: in constructor of type AnotherTypedDatatype: type check error:
-field 'elements' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly(list).""")
+field 'elements' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: Exactly(list).""")
     self.assertEqual(str(cm.exception), expected_msg)
 
   def test_enum_class_creation_errors(self):
