@@ -290,8 +290,10 @@ def datatype(field_decls, superclass_name=None, **kwargs):
         raise cls.make_type_error(
           '\n'.join(arg_check_error_messages))
 
-      # If there are any unmentioned fields, get the default value, or let the super(__new__) raise.
-      # NB: If None is explicitly provided as the value, the default value will NOT be used!
+      # If there are any unmentioned fields, get the default value, or let the super().__new__()
+      # raise.
+      # NB: If None is explicitly provided as the value for a field, the default value for that
+      # field will NOT be used!
       all_keyword_args_including_default = checked_kwarg_values.copy()
       if remaining_field_name_dict:
         for field_name, field_decl in remaining_field_name_dict.items():
