@@ -322,7 +322,8 @@ class TypedDatatypeTest(BaseTest):
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class NonStrType(datatype([int])): pass
     expected_msg = (
-      "The field declaration <type 'int'> must be a <type 'unicode'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'.")
+      "The field declaration <type 'int'> must be a <type '{}'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
+      .format(text_type))
     self.assertIn(expected_msg, str(cm.exception))
 
     with self.assertRaises(TypeError) as cm:
@@ -337,13 +338,15 @@ class TypedDatatypeTest(BaseTest):
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class JustTypeField(datatype([text_type])): pass
     expected_msg = (
-      "The field declaration <type 'unicode'> must be a <type 'unicode'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'.")
+      "The field declaration <type '{}'> must be a <type '{}'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
+      .format(text_type, text_type))
     self.assertIn(str(cm.exception), expected_msg)
 
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class NonStringField(datatype([3])): pass
     expected_msg = (
-      "The field declaration 3 must be a <type 'unicode'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'int'.")
+      "The field declaration 3 must be a <type '{}'>, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'int'."
+      .format(text_type))
     self.assertIn(str(cm.exception), expected_msg)
 
     with self.assertRaises(ValueError) as cm:
