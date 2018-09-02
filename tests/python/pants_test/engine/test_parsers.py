@@ -301,8 +301,8 @@ class JsonEncoderTest(unittest.TestCase):
     except AssertionError:
       def convert_to_stripped_set(json_str):
         no_brackets = json_str.replace('{', '').replace('}', '')
-        distinct_lines = no_brackets.split(',')
-        return set(distinct_lines)
+        distinct_lines = set(l.strip() for l in no_brackets.split(','))
+        return distinct_lines
 
       self.assertEqual(convert_to_stripped_set(expected), convert_to_stripped_set(output))
 
