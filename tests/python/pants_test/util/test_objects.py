@@ -9,6 +9,7 @@ import pickle
 import re
 from abc import abstractmethod
 from builtins import object, str
+from collections import OrderedDict
 
 from future.utils import PY2, PY3, text_type
 
@@ -391,7 +392,7 @@ class TypedDatatypeTest(BaseTest):
       class WithInvalidTypeDefaultValue(datatype([('x', int, None)])): pass
     expected_msg = (
       "default_value None for the field {}'x' "
-      "must satisfy the provided type_constraint Exactly(int)."
+      "must satisfy the provided type_constraint MypyCompatibleType(int)."
       .format('u' if PY2 else ''))
     self.assertIn(expected_msg, str(cm.exception))
 
@@ -401,7 +402,7 @@ class TypedDatatypeTest(BaseTest):
       class WithInvalidTypeDefaultAndRawArg(datatype([('x', int, None, True)])): pass
     expected_msg = (
       "default_value None for the field {}'x' "
-      "must satisfy the provided type_constraint Exactly(int)."
+      "must satisfy the provided type_constraint MypyCompatibleType(int)."
       .format('u' if PY2 else ''))
     self.assertIn(expected_msg, str(cm.exception))
 
@@ -542,7 +543,7 @@ class TypedDatatypeTest(BaseTest):
       CamelCaseWrapper(nonneg_int=3)
     expected_msg = (
       """error: in constructor of type CamelCaseWrapper: type check error:
-field 'nonneg_int' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
+field 'nonneg_int' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: MypyCompatibleType(NonNegativeInt).""")
     self.assertEqual(expected_msg, str(cm.exception))
 
     # test that too many positional args fails
@@ -568,7 +569,7 @@ field 'nonneg_int' was invalid (provided as a keyword argument): value 3 (with t
     def compare_str(include_unicode=False):
       expected_message = (
         """error: in constructor of type SomeTypedDatatype: type check error:
-field {unicode_literal}'val' was invalid (provided as positional argument 0): value [] (with type 'list') must satisfy this type constraint: Exactly(int)."""
+field {unicode_literal}'val' was invalid (provided as positional argument 0): value [] (with type 'list') must satisfy this type constraint: MypyCompatibleType(int)."""
       .format(unicode_literal='u' if include_unicode else ''))
       self.assertEqual(str(cm.exception), expected_message)
     if PY2:
@@ -582,7 +583,7 @@ field {unicode_literal}'val' was invalid (provided as positional argument 0): va
     def compare_str(unicode_type_name, include_unicode=False):
       expected_message = (
         """error: in constructor of type AnotherTypedDatatype: type check error:
-field {unicode_literal}'elements' was invalid (provided as positional argument 1): value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
+field {unicode_literal}'elements' was invalid (provided as positional argument 1): value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: MypyCompatibleType(list)."""
       .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
       self.assertEqual(str(cm.exception), expected_message)
     if PY2:
@@ -596,8 +597,8 @@ field {unicode_literal}'elements' was invalid (provided as positional argument 1
     def compare_str(unicode_type_name, include_unicode=False):
       expected_message = (
         """error: in constructor of type AnotherTypedDatatype: type check error:
-field {unicode_literal}'string' was invalid (provided as positional argument 0): value 3 (with type 'int') must satisfy this type constraint: Exactly({type_name}).
-field {unicode_literal}'elements' was invalid (provided as positional argument 1): value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
+field {unicode_literal}'string' was invalid (provided as positional argument 0): value 3 (with type 'int') must satisfy this type constraint: MypyCompatibleType({type_name}).
+field {unicode_literal}'elements' was invalid (provided as positional argument 1): value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: MypyCompatibleType(list)."""
           .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
       self.assertEqual(str(cm.exception), expected_message)
     if PY2:
@@ -610,7 +611,7 @@ field {unicode_literal}'elements' was invalid (provided as positional argument 1
     def compare_str(unicode_type_name, include_unicode=False):
       expected_message = (
         """error: in constructor of type NonNegativeInt: type check error:
-field {unicode_literal}'an_int' was invalid (provided as positional argument 0): value {unicode_literal}'asdf' (with type '{type_name}') must satisfy this type constraint: Exactly(int)."""
+field {unicode_literal}'an_int' was invalid (provided as positional argument 0): value {unicode_literal}'asdf' (with type '{type_name}') must satisfy this type constraint: MypyCompatibleType(int)."""
           .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
       self.assertEqual(str(cm.exception), expected_message)
     if PY2:
@@ -662,7 +663,7 @@ field {unicode_literal}'some_value' was invalid (provided as positional argument
       obj.copy(elements=3)
     expected_msg = (
       """error: in constructor of type AnotherTypedDatatype: type check error:
-field 'elements' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: Exactly(list).""")
+field 'elements' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: MypyCompatibleType(list).""")
     self.assertEqual(str(cm.exception), expected_msg)
 
   def test_enum_class_creation_errors(self):
@@ -693,3 +694,22 @@ field 'elements' was invalid (provided as a keyword argument): value 3 (with typ
       .format('u' if PY2 else ''))
     with self.assertRaisesRegexp(TypeCheckError, expected_rx_falsy_value):
       SomeEnum(x='')
+
+  def test_mypy_compatibility(self):
+    class ExampleMypyCompatible(datatype(['x', ('y', int), ('z', text_type, 'wow')])): pass
+
+    if PY3:
+      import typing
+      self.assertIsInstance(ExampleMypyCompatible, typing.NamedTuple)
+      self.assertEqual(ExampleMypyCompatible._fields, ('x', 'y', 'z'))
+      self.assertEqual(ExampleMypyCompatible._field_types,
+                       OrderedDict([('y', int), ('z', text_type)]))
+      self.assertEqual(ExampleMypyCompatible._fields_defaults, {'z': 'wow'})
+      self.assertEqual(ExampleMypyCompatible(3, 4).z, 'wow')
+      self.assertEqual(repr(ExampleMypyCompatible(3, 4)),
+                       "ExampleMypyCompatible(x=3, y=4, z='wow')")
+    else:
+      self.assertTrue(issubclass(ExampleMypyCompatible, tuple))
+
+    class ExampleMypyIncompatible(datatype([('x', Exactly(int))])): pass
+    self.assertTrue(issubclass(ExampleMypyIncompatible, tuple))

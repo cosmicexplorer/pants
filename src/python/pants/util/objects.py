@@ -43,13 +43,7 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
         "field_name must be an instance of {!r}, but was instead {!r} (type {!r})."
         .format(text_type, field_name, type(field_name).__name__))
 
-    if type_constraint is None or isinstance(type_constraint, TypeConstraint):
-      pass
-    else:
-      raise cls.FieldDeclarationError(
-        "type_constraint for field {field!r} must be an instance of type or TypeConstraint, "
-        "but was instead {value!r} (type {the_type!r})."
-        .format(field=field_name, value=type_constraint, the_type=type(type_constraint).__name__))
+    type_constraint = TypeConstraint.parse_from_datatype_field_decl(type_constraint)
 
     if not isinstance(has_default_value, bool):
       raise cls.FieldDeclarationError(
@@ -100,10 +94,8 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
         if type_constraint.has_default_value:
           has_default_value = True
           default_value = type_constraint.default_value
-      elif type_spec is None:
+      elif type_spec is None or isinstance(type_spec, type):
         type_constraint = type_spec
-      elif isinstance(type_spec, type):
-        type_constraint = Exactly(type_spec)
       else:
         raise cls.FieldDeclarationError(
           "type_spec for field {field!r} must be an instance of type or TypeConstraint, if given, "
@@ -160,56 +152,59 @@ class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     return parsed_decl
 
 
-# TODO: when we can restrict the python version to >= 3.6 in our python 3 shard, we can use the
-# backported dataclasses library as a backend to take advantage of cool python 3 things like type
-# hints (https://github.com/ericvsmith/dataclasses). Python 3.7+ provides dataclasses in the stdlib.
-def datatype(field_decls, superclass_name=None, **kwargs):
-  """A wrapper for `namedtuple` that accounts for the type of the object in equality.
-
-  Field declarations can be a string, which declares a field with that name and
-  no type checking. Field declarations can also be a tuple `('field_name',
-  field_type)`, which declares a field named `field_name` which is type-checked
-  at construction. If a type is given, the value provided to the constructor for
-  that field must be exactly that type (i.e. `type(x) == field_type`), and not
-  e.g. a subclass.
-
-  :param field_decls: Iterable of field declarations.
-  :return: A type object which can then be subclassed.
-  :raises: :class:`TypeError`
-  """
-  parsed_field_list = []
-
-  seen_default_value_decl = False
-  for maybe_decl in field_decls:
-    parsed_decl = DatatypeFieldDecl.parse(maybe_decl)
-    # After the first argument with a default value, the rest (rightwards) must each have a default
-    # as well.
-    if seen_default_value_decl:
-      if not parsed_decl.has_default_value:
-        raise DatatypeFieldDecl.FieldDeclarationError(
-          "datatype field declaration {!r} (parsed into {!r}) must have a default value, "
-          "because it follows a declaration with a default value in the field declarations "
-          "{!r} (the preceding parsed arguments were: {!r})."
-          .format(maybe_decl, parsed_decl, field_decls, parsed_field_list))
-    else:
-      seen_default_value_decl = parsed_decl.has_default_value
-    # namedtuple() already checks field name uniqueness, so we defer to it checking that here.
-    parsed_field_list.append(parsed_decl)
-
-  if not superclass_name:
-    superclass_name = '_anonymous_namedtuple_subclass'
-
-  field_name_list = [p.field_name for p in parsed_field_list]
+def _datatype_py2(parsed_field_decls, superclass_name, **kwargs):
+  field_name_list = [p.field_name for p in parsed_field_decls]
   namedtuple_cls = namedtuple(superclass_name, field_name_list, **kwargs)
 
   # Now we know that the elements of `field_name_list` (the field names) are unique, because the
   # namedtuple() constructor will have ensured that.
-  ordered_fields_by_name = OrderedDict((p.field_name, p) for p in parsed_field_list)
+  ordered_fields_by_name = OrderedDict((p.field_name, p) for p in parsed_field_decls)
 
   class DataType(namedtuple_cls):
-    @classmethod
-    def make_type_error(cls, msg, *args, **kwargs):
-      return TypeCheckError(cls.__name__, msg, *args, **kwargs)
+
+    def __new__(cls, *args, **kwargs):
+      # NB: We manually parse `args` and `kwargs` here in order to apply any default values the user
+      # may have specified in the call to datatype(), and we need to do that before calling the
+      # super constructor, because the super constructor requires every argument to be
+      # specified. Some of these values may be changed through coercion if a TypeConstraint does so
+      # in its validate_satisfied_by() method. However, unknown keyword args and too many positional
+      # args are still handled by the call to the super constructor.
+      posn_args, kw_args = cls._parse_args_kwargs(args, kwargs)
+
+      try:
+        return super(DataType, cls).__new__(cls, *posn_args, **kw_args)
+      except TypeError as e:
+        raise cls.make_type_error(str(e), e)
+
+    def __repr__(self):
+      args_formatted = []
+      for field_name in ordered_fields_by_name.keys():
+        field_value = getattr(self, field_name)
+        args_formatted.append("{}={!r}".format(field_name, field_value))
+      return '{class_name}({args_joined})'.format(
+        class_name=type(self).__name__,
+        args_joined=', '.join(args_formatted))
+
+    def __str__(self):
+      elements_formatted = []
+      for field_name, decl_for_field in ordered_fields_by_name.items():
+        type_constraint_for_field = decl_for_field.type_constraint
+        field_value = getattr(self, field_name)
+        if not type_constraint_for_field:
+          elements_formatted.append(
+            # TODO: consider using the repr of arguments in this method.
+            "{field_name}={field_value}"
+            .format(field_name=field_name,
+                    field_value=field_value))
+        else:
+          elements_formatted.append(
+            "{field_name}<{type_constraint}>={field_value}"
+            .format(field_name=field_name,
+                    type_constraint=decl_for_field.type_constraint,
+                    field_value=field_value))
+      return '{class_name}({typed_tagged_elements})'.format(
+        class_name=type(self).__name__,
+        typed_tagged_elements=', '.join(elements_formatted))
 
     @classmethod
     def _parse_args_kwargs(cls, args, kwargs):
@@ -304,24 +299,116 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       # arg.
       return (checked_arg_values, all_keyword_args_including_default)
 
+  return DataType
+
+
+def _datatype_py3(parsed_field_decls, superclass_name, field_types, field_defaults, **kwargs):
+  """???"""
+  import typing
+  field_decl_list = [
+    (p.field_name, field_types.get(p.field_name, None))
+    for p in parsed_field_decls
+  ]
+  namedtuple_cls = typing.NamedTuple(superclass_name, field_decl_list, **kwargs)
+
+  class DataType(namedtuple_cls):
+    _field_defaults = field_defaults
+
+  field_names = tuple(n for n, _ in field_decl_list)
+  assert(field_names == DataType._fields)
+
+  return DataType
+
+
+def _select_tuple_impl(parsed_field_decls, superclass_name, **kwargs):
+  """???"""
+  if PY2:
+    impl_cls = _datatype_py2(parsed_field_decls, superclass_name, **kwargs)
+  else:
+    tuple_field_types = {}
+    tuple_field_defaults = {}
+
+    for p in parsed_field_decls:
+      constraint = p.type_constraint
+      if constraint:
+        # A datatype() call is compatible with _datatype_py3() if all type constraints are literal
+        # types, or None. If this could be expanded to cover all uses of TypeConstraint we can get
+        # static type checking for free.
+        if isinstance(constraint, MypyCompatibleType):
+          tuple_field_types[p.field_name] = constraint.single_type
+        elif isinstance(constraint, TypeConstraint):
+          impl_cls = _datatype_py2(parsed_field_decls, superclass_name, **kwargs)
+          break
+        else:
+          # NB: This should never happen, as DatatypeFieldDecl parsing ensures type_constraint is
+          # None, a TypeConstraint, or a type.
+          raise DatatypeFieldDecl.FieldDeclarationError(
+            "The type constraint for field {field!r} must be an instance of type or "
+            "TypeConstraint, if given, but was instead {value!r} (type {the_type!r})."
+            .format(field=p.field_name, value=constraint, the_type=type(constraint).__name__))
+      if p.has_default_value:
+        tuple_field_defaults[p.field_name] = p.default_value
+    else:
+      impl_cls = _datatype_py3(parsed_field_decls, superclass_name,
+                               tuple_field_types, tuple_field_defaults,
+                               **kwargs)
+
+  return impl_cls
+
+
+# TODO: when we can restrict the python version to >= 3.6 in our python 3 shard, we can use the
+# backported dataclasses library as a backend to take advantage of cool python 3 things like type
+# hints (https://github.com/ericvsmith/dataclasses). Python 3.7+ provides dataclasses in the stdlib.
+def datatype(field_decls, superclass_name=None, **kwargs):
+  """A wrapper for `namedtuple` that accounts for the type of the object in equality.
+
+  Field declarations can be a string, which declares a field with that name and
+  no type checking. Field declarations can also be a tuple `('field_name',
+  field_type)`, which declares a field named `field_name` which is type-checked
+  at construction. If a type is given, the value provided to the constructor for
+  that field must be exactly that type (i.e. `type(x) == field_type`), and not
+  e.g. a subclass.
+
+  :param field_decls: Iterable of field declarations.
+  :return: A type object which can then be subclassed.
+  :raises: :class:`TypeError`
+  """
+  parsed_field_list = []
+
+  seen_default_value_decl = False
+  for maybe_decl in field_decls:
+    parsed_decl = DatatypeFieldDecl.parse(maybe_decl)
+    # After the first argument with a default value, the rest (rightwards) must each have a default
+    # as well.
+    if seen_default_value_decl:
+      if not parsed_decl.has_default_value:
+        raise DatatypeFieldDecl.FieldDeclarationError(
+          "datatype field declaration {!r} (parsed into {!r}) must have a default value, "
+          "because it follows a declaration with a default value in the field declarations "
+          "{!r} (the preceding parsed arguments were: {!r})."
+          .format(maybe_decl, parsed_decl, field_decls, parsed_field_list))
+    else:
+      seen_default_value_decl = parsed_decl.has_default_value
+    # namedtuple() already checks field name uniqueness, so we defer to it checking that here.
+    parsed_field_list.append(parsed_decl)
+
+  if not superclass_name:
+    superclass_name = '_anonymous_namedtuple_subclass'
+
+  intermediate_tuple_class = _select_tuple_impl(parsed_field_list, superclass_name, **kwargs)
+
+  class DataType(intermediate_tuple_class):
+    @classmethod
+    def make_type_error(cls, msg, *args, **kwargs):
+      return TypeCheckError(cls.__name__, msg, *args, **kwargs)
+
     def __new__(cls, *args, **kwargs):
       # TODO: Ideally we could execute this exactly once per `cls` but it should be a
       # relatively cheap check.
       if not hasattr(cls.__eq__, '_eq_override_canary'):
         raise cls.make_type_error('Should not override __eq__.')
 
-      # NB: We manually parse `args` and `kwargs` here in order to apply any default values the user
-      # may have specified in the call to datatype(), and we need to do that before calling the
-      # super constructor, because the super constructor requires every argument to be
-      # specified. Some of these values may be changed through coercion if a TypeConstraint does so
-      # in its validate_satisfied_by() method. However, unknown keyword args and too many positional
-      # args are still handled by the call to the super constructor.
-      posn_args, kw_args = cls._parse_args_kwargs(args, kwargs)
-
-      try:
-        return super(DataType, cls).__new__(cls, *posn_args, **kw_args)
-      except TypeError as e:
-        raise cls.make_type_error(str(e), e)
+      return super(DataType, cls).__new__(cls, *args, **kwargs)
 
     def __eq__(self, other):
       if self is other:
@@ -366,36 +453,6 @@ def datatype(field_decls, superclass_name=None, **kwargs):
     def __getnewargs__(self):
       '''Return self as a plain tuple.  Used by copy and pickle.'''
       return tuple(self._super_iter())
-
-    def __repr__(self):
-      args_formatted = []
-      for field_name in ordered_fields_by_name.keys():
-        field_value = getattr(self, field_name)
-        args_formatted.append("{}={!r}".format(field_name, field_value))
-      return '{class_name}({args_joined})'.format(
-        class_name=type(self).__name__,
-        args_joined=', '.join(args_formatted))
-
-    def __str__(self):
-      elements_formatted = []
-      for field_name, decl_for_field in ordered_fields_by_name.items():
-        type_constraint_for_field = decl_for_field.type_constraint
-        field_value = getattr(self, field_name)
-        if not type_constraint_for_field:
-          elements_formatted.append(
-            # TODO: consider using the repr of arguments in this method.
-            "{field_name}={field_value}"
-            .format(field_name=field_name,
-                    field_value=field_value))
-        else:
-          elements_formatted.append(
-            "{field_name}<{type_constraint}>={field_value}"
-            .format(field_name=field_name,
-                    type_constraint=decl_for_field.type_constraint,
-                    field_value=field_value))
-      return '{class_name}({typed_tagged_elements})'.format(
-        class_name=type(self).__name__,
-        typed_tagged_elements=', '.join(elements_formatted))
 
   # Return a new type with the given name, inheriting from the DataType class
   # just defined, with an empty class body.
@@ -515,6 +572,24 @@ class TypeConstraint(AbstractClass):
   default_value = None
   has_default_value = False
 
+  class TypeConstraintCreationError(TypeError): pass
+
+  @classmethod
+  def parse_from_datatype_field_decl(cls, type_spec, **kwargs):
+    if type_spec is None:
+      type_constraint = None
+    elif isinstance(type_spec, type):
+      type_constraint = MypyCompatibleType(type_spec, **kwargs)
+    elif isinstance(type_spec, cls):
+      type_constraint = type_spec
+    else:
+      raise cls.TypeConstraintCreationError(
+        "type_spec must be an instance of type or TypeConstraint, or None, but was instead "
+        "{value!r} (type {the_type!r})."
+        .format(value=type_spec, the_type=type(type_spec).__name__))
+
+    return type_constraint
+
   def __init__(self, *types, **kwargs):
     """Creates a type constraint centered around the given types.
 
@@ -620,6 +695,13 @@ class Exactly(TypeConstraint):
       return self.types[0].__name__
     else:
       return repr(self)
+
+
+class MypyCompatibleType(Exactly):
+
+  def __init__(self, single_base_type, **kwargs):
+    super(MypyCompatibleType, self).__init__(single_base_type, **kwargs)
+    self.single_type = single_base_type
 
 
 class SubclassesOf(TypeConstraint):
