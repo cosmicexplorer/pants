@@ -314,6 +314,27 @@ def _datatype_py3(parsed_field_decls, superclass_name, field_types, field_defaul
   class DataType(namedtuple_cls):
     _field_defaults = field_defaults
 
+    def __new__(cls, *args, **kwargs):
+      this_object = super(DataType, cls).__new__(cls, *args, **kwargs)
+
+      arg_check_error_messages = []
+      update_dict = {}
+      for p in parsed_field_decls:
+        constraint = p.type_constraint
+        if constraint:
+          value = getattr(this_object, p.field_name)
+          try:
+            update_dict[p.field_name] = constraint.validate_satisfied_by(value)
+          except TypeConstraintError as e:
+            arg_check_error_messages.append(
+              "field {name!r}={value!r} was invalid: {err}"
+              .format(name=p.field_name, value=value, err=e))
+
+      if arg_check_error_messages:
+        raise cls.make_type_error('\n'.join(arg_check_error_messages))
+
+      return this_object.copy(**update_dict)
+
   field_names = tuple(n for n, _ in field_decl_list)
   assert(field_names == DataType._fields)
 

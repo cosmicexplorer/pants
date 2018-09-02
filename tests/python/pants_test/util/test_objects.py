@@ -708,6 +708,19 @@ field 'elements' was invalid (provided as a keyword argument): value 3 (with typ
       self.assertEqual(ExampleMypyCompatible(3, 4).z, 'wow')
       self.assertEqual(repr(ExampleMypyCompatible(3, 4)),
                        "ExampleMypyCompatible(x=3, y=4, z='wow')")
+
+      # Ensure we still check type constraints for these.
+      expected_rx = re.escape(
+        """error: in constructor of type ExampleMypyCompatible: type check error:
+field 'y' was invalid (provided as a keyword argument): value True (with type 'bool') must satisfy this type constraint: MypyCompatibleType(int).""")
+      with self.assertRaisesRegexp(TypeCheckError, expected_rx):
+        ExampleMypyCompatible(3, True)
+      expected_rx = re.escape(
+        """error: in constructor of type ExampleMypyCompatible: type check error:
+field 'z' was invalid (provided as a keyword argument): value 5 (with type 'int') must satisfy this type constraint: MypyCompatibleType({})."""
+        .format(text_type))
+      with self.assertRaisesRegexp(TypeCheckError, expected_rx):
+        ExampleMypyCompatible(3, 4, 5)
     else:
       self.assertTrue(issubclass(ExampleMypyCompatible, tuple))
 
