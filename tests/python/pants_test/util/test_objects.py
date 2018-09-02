@@ -322,8 +322,8 @@ class TypedDatatypeTest(BaseTest):
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class NonStrType(datatype([int])): pass
     expected_msg = (
-      "The field declaration <type 'int'> must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
-      .format(text_type))
+      "The field declaration {} must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
+      .format(int, text_type))
     self.assertIn(expected_msg, str(cm.exception))
 
     with self.assertRaises(TypeError) as cm:
