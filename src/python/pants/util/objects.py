@@ -17,7 +17,7 @@ from pants.util.meta import AbstractClass
 
 
 try:
-  from dataclasses import make_dataclass
+  from dataclasses import make_dataclass, field
 except ImportError:
   make_dataclass = None
 
@@ -316,13 +316,15 @@ def _datatype_try_dataclass(parsed_field_decls, superclass_name, **kwargs):
   for p in parsed_field_decls:
     constraint = p.type_constraint
     if constraint:
-        # A datatype() call is compatible with _datatype_dataclass() if all type constraints are
+      # A datatype() call is compatible with _datatype_dataclass() if all type constraints are
       # literal
       # types, or None. If this could be expanded to cover all uses of TypeConstraint we can get
       # static type checking for free.
       if isinstance(constraint, MypyCompatibleType):
         tuple_field_types[p.field_name] = constraint.single_type
       elif isinstance(constraint, TypeConstraint):
+        # Break out early -- we do not understand this type constraint, so fall back to the vanilla
+        # option.
         impl_cls = _datatype_py2(parsed_field_decls, superclass_name, **kwargs)
         break
       else:
@@ -334,16 +336,29 @@ def _datatype_try_dataclass(parsed_field_decls, superclass_name, **kwargs):
           .format(field=p.field_name, value=constraint, the_type=type(constraint).__name__))
     if p.has_default_value:
       tuple_field_defaults[p.field_name] = p.default_value
+
   else:
-    field_decl_list = [
-      (p.field_name, field_types.get(p.field_name, None))
-      for p in parsed_field_decls
-    ]
-    namedtuple_cls = make_dataclass(superclass_name, field_decl_list, **kwargs)
+    all_field_names_list = []
+    dataclass_fields = []
+    for p in parsed_field_decls:
+      type_maybe = field_types.get(p.field_name, None)
+      if p.has_default_value:
+        cur_decl = (p.field_name, type_maybe, field(init=p.default_value))
+      elif type_maybe:
+        cur_decl = (p.field_name, type_maybe)
+      else:
+        cur_decl = p.field_name
+
+      all_field_names_list.append(p.field_name)
+      dataclass_fields.append(cur_decl)
+
+    namedtuple_cls = make_dataclass(superclass_name, dataclass_fields, **kwargs)
 
     class DataType(namedtuple_cls):
       _field_defaults = field_defaults
 
+      # TODO: do we still need to check our own type constraints at runtime if we have a static type
+      # checker?
       def __new__(cls, *args, **kwargs):
         this_object = super(DataType, cls).__new__(cls, *args, **kwargs)
 
@@ -365,8 +380,7 @@ def _datatype_try_dataclass(parsed_field_decls, superclass_name, **kwargs):
 
         return this_object.copy(**update_dict)
 
-    field_names = tuple(n for n, _ in field_decl_list)
-    assert(field_names == DataType._fields)
+    assert(tuple(all_field_names) == DataType._fields)
     impl_cls = DataType
 
   return impl_cls
