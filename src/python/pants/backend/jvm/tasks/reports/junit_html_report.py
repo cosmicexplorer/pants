@@ -154,7 +154,8 @@ class ReportTestCase(datatype([
     ('failure', None, None),
     ('error', None, None),
     # TODO: a `Convert` wrapper which automatically knows to use bool() as the default value.
-    ('skipped', bool, False)])):
+    ('skipped', bool, False),
+])):
   """Data object for a JUnit test case"""
 
   def __new__(cls, name, time, *args, **kwargs):
