@@ -305,6 +305,7 @@ def _datatype_py2(parsed_field_decls, superclass_name, **kwargs):
 def _datatype_py3(parsed_field_decls, superclass_name, field_types, field_defaults, **kwargs):
   """???"""
   import typing
+
   field_decl_list = [
     (p.field_name, field_types.get(p.field_name, None))
     for p in parsed_field_decls
@@ -343,9 +344,7 @@ def _datatype_py3(parsed_field_decls, superclass_name, field_types, field_defaul
 
 def _select_tuple_impl(parsed_field_decls, superclass_name, **kwargs):
   """???"""
-  if PY2:
-    impl_cls = _datatype_py2(parsed_field_decls, superclass_name, **kwargs)
-  else:
+  try:
     tuple_field_types = {}
     tuple_field_defaults = {}
 
@@ -373,6 +372,8 @@ def _select_tuple_impl(parsed_field_decls, superclass_name, **kwargs):
       impl_cls = _datatype_py3(parsed_field_decls, superclass_name,
                                tuple_field_types, tuple_field_defaults,
                                **kwargs)
+  except ImportError:
+    impl_cls = _datatype_py2(parsed_field_decls, superclass_name, **kwargs)
 
   return impl_cls
 
