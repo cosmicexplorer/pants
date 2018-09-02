@@ -380,7 +380,8 @@ class TypedDatatypeTest(BaseTest):
     with self.assertRaises(F.FieldDeclarationError) as cm:
       class InvalidTypeSpec(datatype([('a_field', 2)])): pass
     expected_msg = (
-      "type_spec for field u'a_field' must be an instance of type or TypeConstraint, if given, but was instead 2 (type 'int').")
+      "type_spec for field {}'a_field' must be an instance of type or TypeConstraint, if given, but was instead 2 (type 'int')."
+      .format('u' if PY2 else ''))
     self.assertIn(str(cm.exception), expected_msg)
 
   def test_class_construction_default_value(self):
