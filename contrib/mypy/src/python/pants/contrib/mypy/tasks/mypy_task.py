@@ -41,6 +41,10 @@ class MypyTask(ResolveRequirementsTaskBase):
     register('--mypy-version', default='0.550', help='The version of mypy to use.')
     register('--config-file', default=None,
              help='Path mypy configuration file, relative to buildroot.')
+    register('--py2-mode', type=bool, default=False, advanced=True, fingerprint=True,
+             help='???')
+    register('--ignore-missing-imports', type=bool, default=False, advanced=True, fingerprint=True,
+             help='???')
 
   @classmethod
   def supports_passthru_args(cls):
@@ -122,6 +126,10 @@ class MypyTask(ResolveRequirementsTaskBase):
 
       # Construct the mypy command line.
       cmd = ['--python-version={}'.format(interpreter_for_targets.identity.python)]
+      if self.get_options().py2_mode:
+        cmd.append('--py2')
+      if self.get_options().ignore_missing_imports:
+        cmd.append('--ignore-missing-imports')
       if self.get_options().config_file:
         cmd.append('--config-file={}'.format(os.path.join(get_buildroot(),
                                                           self.get_options().config_file)))
