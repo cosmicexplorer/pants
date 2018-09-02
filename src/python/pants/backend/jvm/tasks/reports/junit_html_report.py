@@ -157,8 +157,8 @@ class ReportTestCase(datatype([
     ('skipped', bool, False)])):
   """Data object for a JUnit test case"""
 
-  def __new__(cls, name, time, **kwargs):
-    return super(ReportTestCase, cls).__new__(cls, name, float(time), **kwargs)
+  def __new__(cls, name, time, *args, **kwargs):
+    return super(ReportTestCase, cls).__new__(cls, name, float(time), *args, **kwargs)
 
   @memoized_property
   def icon_class(self):
