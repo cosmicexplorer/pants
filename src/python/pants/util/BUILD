@@ -104,6 +104,7 @@ python_library(
   name = 'objects',
   sources = ['objects.py'],
   dependencies = [
+    '3rdparty/python:dataclasses',
     '3rdparty/python:future',
     ':memo',
     ':meta',

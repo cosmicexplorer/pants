@@ -16,6 +16,12 @@ from pants.util.memo import memoized, memoized_classproperty
 from pants.util.meta import AbstractClass
 
 
+try:
+  from dataclasses import make_dataclass
+except ImportError:
+  make_dataclass = None
+
+
 # TODO: add a field for the object's __doc__ string?
 class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
     'field_name',
@@ -302,78 +308,66 @@ def _datatype_py2(parsed_field_decls, superclass_name, **kwargs):
   return DataType
 
 
-def _datatype_py3(parsed_field_decls, superclass_name, field_types, field_defaults, **kwargs):
+def _datatype_try_dataclass(parsed_field_decls, superclass_name, **kwargs):
   """???"""
-  import typing
+  tuple_field_types = {}
+  tuple_field_defaults = {}
 
-  field_decl_list = [
-    (p.field_name, field_types.get(p.field_name, None))
-    for p in parsed_field_decls
-  ]
-  namedtuple_cls = typing.NamedTuple(superclass_name, field_decl_list, **kwargs)
+  for p in parsed_field_decls:
+    constraint = p.type_constraint
+    if constraint:
+        # A datatype() call is compatible with _datatype_dataclass() if all type constraints are
+      # literal
+      # types, or None. If this could be expanded to cover all uses of TypeConstraint we can get
+      # static type checking for free.
+      if isinstance(constraint, MypyCompatibleType):
+        tuple_field_types[p.field_name] = constraint.single_type
+      elif isinstance(constraint, TypeConstraint):
+        impl_cls = _datatype_py2(parsed_field_decls, superclass_name, **kwargs)
+        break
+      else:
+        # NB: This should never happen, as DatatypeFieldDecl parsing ensures type_constraint is
+        # None, a TypeConstraint, or a type.
+        raise DatatypeFieldDecl.FieldDeclarationError(
+          "The type constraint for field {field!r} must be an instance of type or "
+          "TypeConstraint, if given, but was instead {value!r} (type {the_type!r})."
+          .format(field=p.field_name, value=constraint, the_type=type(constraint).__name__))
+    if p.has_default_value:
+      tuple_field_defaults[p.field_name] = p.default_value
+  else:
+    field_decl_list = [
+      (p.field_name, field_types.get(p.field_name, None))
+      for p in parsed_field_decls
+    ]
+    namedtuple_cls = make_dataclass(superclass_name, field_decl_list, **kwargs)
 
-  class DataType(namedtuple_cls):
-    _field_defaults = field_defaults
+    class DataType(namedtuple_cls):
+      _field_defaults = field_defaults
 
-    def __new__(cls, *args, **kwargs):
-      this_object = super(DataType, cls).__new__(cls, *args, **kwargs)
+      def __new__(cls, *args, **kwargs):
+        this_object = super(DataType, cls).__new__(cls, *args, **kwargs)
 
-      arg_check_error_messages = []
-      update_dict = {}
-      for p in parsed_field_decls:
-        constraint = p.type_constraint
-        if constraint:
-          value = getattr(this_object, p.field_name)
-          try:
-            update_dict[p.field_name] = constraint.validate_satisfied_by(value)
-          except TypeConstraintError as e:
-            arg_check_error_messages.append(
-              "field {name!r}={value!r} was invalid: {err}"
-              .format(name=p.field_name, value=value, err=e))
+        arg_check_error_messages = []
+        update_dict = {}
+        for p in parsed_field_decls:
+          constraint = p.type_constraint
+          if constraint:
+            value = getattr(this_object, p.field_name)
+            try:
+              update_dict[p.field_name] = constraint.validate_satisfied_by(value)
+            except TypeConstraintError as e:
+              arg_check_error_messages.append(
+                "field {name!r}={value!r} was invalid: {err}"
+                .format(name=p.field_name, value=value, err=e))
 
-      if arg_check_error_messages:
-        raise cls.make_type_error('\n'.join(arg_check_error_messages))
+        if arg_check_error_messages:
+          raise cls.make_type_error('\n'.join(arg_check_error_messages))
 
-      return this_object.copy(**update_dict)
+        return this_object.copy(**update_dict)
 
-  field_names = tuple(n for n, _ in field_decl_list)
-  assert(field_names == DataType._fields)
-
-  return DataType
-
-
-def _select_tuple_impl(parsed_field_decls, superclass_name, **kwargs):
-  """???"""
-  try:
-    tuple_field_types = {}
-    tuple_field_defaults = {}
-
-    for p in parsed_field_decls:
-      constraint = p.type_constraint
-      if constraint:
-        # A datatype() call is compatible with _datatype_py3() if all type constraints are literal
-        # types, or None. If this could be expanded to cover all uses of TypeConstraint we can get
-        # static type checking for free.
-        if isinstance(constraint, MypyCompatibleType):
-          tuple_field_types[p.field_name] = constraint.single_type
-        elif isinstance(constraint, TypeConstraint):
-          impl_cls = _datatype_py2(parsed_field_decls, superclass_name, **kwargs)
-          break
-        else:
-          # NB: This should never happen, as DatatypeFieldDecl parsing ensures type_constraint is
-          # None, a TypeConstraint, or a type.
-          raise DatatypeFieldDecl.FieldDeclarationError(
-            "The type constraint for field {field!r} must be an instance of type or "
-            "TypeConstraint, if given, but was instead {value!r} (type {the_type!r})."
-            .format(field=p.field_name, value=constraint, the_type=type(constraint).__name__))
-      if p.has_default_value:
-        tuple_field_defaults[p.field_name] = p.default_value
-    else:
-      impl_cls = _datatype_py3(parsed_field_decls, superclass_name,
-                               tuple_field_types, tuple_field_defaults,
-                               **kwargs)
-  except ImportError:
-    impl_cls = _datatype_py2(parsed_field_decls, superclass_name, **kwargs)
+    field_names = tuple(n for n, _ in field_decl_list)
+    assert(field_names == DataType._fields)
+    impl_cls = DataType
 
   return impl_cls
 
@@ -417,7 +411,10 @@ def datatype(field_decls, superclass_name=None, **kwargs):
   if not superclass_name:
     superclass_name = '_anonymous_namedtuple_subclass'
 
-  intermediate_tuple_class = _select_tuple_impl(parsed_field_list, superclass_name, **kwargs)
+  if make_dataclass is not None:
+    intermediate_tuple_class = _datatype_try_dataclass(parsed_field_list, superclass_name, **kwargs)
+  else:
+    intermediate_tuple_class = _datatype_py2(parsed_field_list, superclass_name, **kwargs)
 
   class DataType(intermediate_tuple_class):
     @classmethod
