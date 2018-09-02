@@ -706,6 +706,7 @@ field 'elements' was invalid (provided as a keyword argument): value 3 (with typ
                        OrderedDict([('y', int), ('z', text_type)]))
       self.assertEqual(ExampleMypyCompatible._fields_defaults, {'z': 'wow'})
       self.assertEqual(ExampleMypyCompatible(3, 4).z, 'wow')
+      self.assertEqual(ExampleMypyCompatible(3, 4, 'hey').z, 'hey')
       self.assertEqual(repr(ExampleMypyCompatible(3, 4)),
                        "ExampleMypyCompatible(x=3, y=4, z='wow')")
 
