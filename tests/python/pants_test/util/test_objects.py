@@ -12,7 +12,6 @@ from builtins import object, str
 
 from future.utils import PY2, PY3, text_type
 
-from pants.util.objects import Convert
 from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError,
                                 TypedDatatypeInstanceConstructionError, datatype, enum)
@@ -161,12 +160,6 @@ class WithDefaultValueTuple(datatype([('an_int', int, 3)])): pass
 
 # `F` is what we imported `pants.util.objects.DatatypeFieldDecl` as.
 class WithJustDefaultValueExplicitFieldDecl(datatype([F('a_bool', Exactly(bool), True)])): pass
-
-
-class WithDefaultValueNumericExplicitFieldDecl(datatype([F('a_tuple', Convert(tuple))])): pass
-
-
-class WithDefaultValueNoneExplicitFieldDecl(datatype([F('a_bool', Convert(bool))])): pass
 
 
 class SomeBaseClass(object):
