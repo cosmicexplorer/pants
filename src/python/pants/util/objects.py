@@ -706,11 +706,17 @@ class SubclassesOf(TypeConstraint):
     return issubclass(obj_type, self._types)
 
 
-def convert_default(type_spec, default_value=None, assume_none_default=True):
+def convert_default(type_spec, **kwargs):
+  """???/makes it easier to do the common python pattern of default=None, then checking for it."""
   assert(isinstance(type_spec, type))
 
-  if default_value is None:
+  if 'default_value' in kwargs:
+    default_value = kwargs.pop('default_value')
+  else:
     default_value = type_spec()
+
+  assume_none_default = kwargs.pop('assume_none_default', True)
+  assert(isinstance(assume_none_default, bool))
 
   if assume_none_default:
     default_value_to_use = None
@@ -739,6 +745,7 @@ def convert_default(type_spec, default_value=None, assume_none_default=True):
 
 
 def convert(type_spec, create_func=None, should_have_default=True):
+  """???"""
   if not isinstance(should_have_default, bool):
     raise TypeError('???')
 

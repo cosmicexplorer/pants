@@ -15,7 +15,8 @@ from future.utils import PY3, text_type
 from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError,
                                 TypeConstraintError, TypedDatatypeInstanceConstructionError,
-                                convert, datatype, enum, non_empty, not_none, optional)
+                                convert, convert_default, datatype, enum, non_empty, not_none,
+                                optional)
 from pants_test.test_base import TestBase
 
 
@@ -739,6 +740,18 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
     self.assertEqual(ConvertFieldClass(x=[]).__getnewargs__(), ((), (), SomeEnum.create()))
     self.assertEqual(ConvertFieldClass(x=[1,2], y=[3, 4], z=2).__getnewargs__(),
                      ((1, 2), (3, 4), SomeEnum(2)))
+
+  def test_convert_default(self):
+    class ConvertDefaultFieldClass(datatype([
+        ('x', convert_default(tuple)),
+        ('y', convert_default(list, assume_none_default=False)),
+    ])): pass
+    self.assertEqual(ConvertDefaultFieldClass().__getnewargs__(), ((), []))
+    self.assertEqual(ConvertDefaultFieldClass(x=None).__getnewargs__(), ((), []))
+    self.assertEqual(ConvertDefaultFieldClass(x=[1, 2]).__getnewargs__(), ((1, 2), []))
+    with self.assertRaises(TypeError):
+      ConvertDefaultFieldClass(y=None)
+    self.assertEqual(ConvertDefaultFieldClass(y=(1, 2)).__getnewargs__(), ((), [1, 2]))
 
   def test_convert_enum(self):
     class ConvertEnumWithDefault(datatype([
