@@ -426,9 +426,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
             errs='\n'.join(arg_check_error_messages)))
         raise self.make_type_error(msg)
 
-      # return self._supertype_keyword_only_constructor(**field_dict)
-      self_type = type(self)
-      return super(DataType, self_type).__new__(self_type, **field_dict)
+      return self._supertype_keyword_only_constructor(**field_dict)
 
     def copy(self, **kwargs):
       """???/made into its own method for better error messages (with the method name in them)"""

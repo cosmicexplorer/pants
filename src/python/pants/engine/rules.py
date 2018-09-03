@@ -18,7 +18,7 @@ from twitter.common.collections import OrderedSet
 from pants.engine.selectors import Get, type_or_constraint_repr
 from pants.util.meta import AbstractClass
 from pants.util.objects import DatatypeFieldDecl as F
-from pants.util.objects import Exactly, convert, datatype
+from pants.util.objects import Exactly, convert, convert_default, datatype
 
 
 logger = logging.getLogger(__name__)
@@ -138,7 +138,7 @@ class Rule(AbstractClass):
 
 
 class TaskRule(datatype([
-    ('output_constraint', convert(Exactly, should_have_default=False)),
+    ('output_constraint', convert(Exactly, create_func=Exactly, should_have_default=False)),
     ('input_selectors', convert(tuple, should_have_default=False)),
     'func',
     ('input_gets', convert_default(tuple)),
@@ -148,11 +148,11 @@ class TaskRule(datatype([
   TODO: Make input_gets non-optional when more/all rules are using them.
   """
 
-  def __new__(cls, func, *args, **kwargs):
+  def __new__(cls, output_constraint, input_selectors, func, input_gets=None):
     """???"""
     func_name = func.__name__
     try:
-      return super(TaskRule, cls).__new__(cls, func=func, *args, **kwargs)
+      return super(TaskRule, cls).__new__(cls, output_constraint, input_selectors, func, input_gets)
     except TypeError as e:
       raise cls.make_type_error("error in rule `{}`: {}"
                                 .format(func_name, str(e)))
