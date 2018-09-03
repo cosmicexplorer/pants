@@ -18,7 +18,8 @@ from pants.base.mustache import MustacheRenderer
 from pants.util.dirutil import safe_mkdir_for, safe_walk
 from pants.util.memo import memoized_property
 from pants.util.meta import AbstractClass
-from pants.util.objects import datatype
+from pants.util.objects import DatatypeFieldDecl as F
+from pants.util.objects import convert, datatype, optional
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -147,18 +148,12 @@ class ReportTestSuite(object):
 
 class ReportTestCase(datatype([
     'name',
-    # TODO: a `Convert` wrapper which wraps the input in float() if it's not already a float.
-    'time',
-    # TODO: an `optional(type_constraint=None)` type constraint factory which matches values
-    # matching the given constraint, as well as None.
-    ('failure', None, None),
-    ('error', None, None),
-    # TODO: a `Convert` wrapper which automatically knows to use bool() as the default value.
-    ('skipped', bool, False)])):
+    ('time', convert(float, should_have_default=False)),
+    ('failure', optional()),
+    ('error', optional()),
+    F('skipped', bool, default_value=False),
+])):
   """Data object for a JUnit test case"""
-
-  def __new__(cls, name, time, *args, **kwargs):
-    return super(ReportTestCase, cls).__new__(cls, name, float(time), *args, **kwargs)
 
   @memoized_property
   def icon_class(self):
@@ -261,7 +256,7 @@ class JUnitHtmlReport(JUnitHtmlReportInterface):
         testcase.attrib.get('time', 0),
         failure,
         error,
-        skipped
+        skipped,
       ))
 
     for testsuite in root.iter('testsuite'):

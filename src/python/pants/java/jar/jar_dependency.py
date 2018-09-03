@@ -134,15 +134,9 @@ class JarDependency(datatype([
 
   def copy(self, **replacements):
     """Returns a clone of this JarDependency with the given replacements kwargs overlaid."""
-    cls = type(self)
-    kwargs = self._asdict()
-    for key, val in replacements.items():
-      if key == 'excludes':
-        val = JarDependency._prepare_excludes(val)
-      kwargs[key] = val
-    org = kwargs.pop('org')
-    base_name = kwargs.pop('base_name')
-    return cls(org, base_name, **kwargs)
+    if 'excludes' in replacements:
+      replacements['excludes'] = self._prepare_excludes(replacements['excludes'])
+    return super(JarDependency, self).copy(**replacements)
 
   def __str__(self):
     return 'JarDependency({})'.format(self.coordinate)

@@ -11,7 +11,8 @@ from future.utils import binary_type, text_type
 from pants.engine.fs import DirectoryDigest
 from pants.engine.rules import RootRule, rule
 from pants.engine.selectors import Select
-from pants.util.objects import Exactly, TypeCheckError, datatype
+from pants.util.objects import DatatypeFieldDecl as F
+from pants.util.objects import Exactly, TypeCheckError, convert, convert_default, datatype, optional
 
 
 logger = logging.getLogger(__name__)
@@ -19,70 +20,49 @@ logger = logging.getLogger(__name__)
 _default_timeout_seconds = 15 * 60
 
 
+def _parse_env_to_tuple(env=None):
+  if env is None:
+    env = ()
+  elif isinstance(env, dict):
+    env = tuple(item for pair in env.items() for item in pair)
+  else:
+    raise TypeError(
+      "env was invalid: value {!r} (with type '{}') must be a dict or None."
+      .format(env, type(env).__name__))
+
+  return env
+
+
 class ExecuteProcessRequest(datatype([
-  ('argv', tuple),
-  ('input_files', DirectoryDigest),
-  ('description', text_type),
-  ('env', tuple),
-  ('output_files', tuple),
-  ('output_directories', tuple),
-  # NB: timeout_seconds covers the whole remote operation including queuing and setup.
-  ('timeout_seconds', Exactly(float, int)),
-  ('jdk_home', Exactly(text_type, type(None))),
+    ('argv', tuple),
+    ('input_files', DirectoryDigest),
+    ('description', text_type),
+    F('env', convert(tuple, create_func=_parse_env_to_tuple), default_value=None),
+    ('output_files', convert_default(tuple)),
+    ('output_directories', convert_default(tuple)),
+    # NB: timeout_seconds covers the whole remote operation including queuing and setup.
+    F('timeout_seconds', Exactly(float, int), default_value=_default_timeout_seconds),
+    ('jdk_home', optional(text_type)),
 ])):
   """Request for execution with args and snapshots to extract."""
 
-  def __new__(
-    cls,
-    argv,
-    input_files,
-    description,
-    env=None,
-    output_files=(),
-    output_directories=(),
-    timeout_seconds=_default_timeout_seconds,
-    jdk_home=None,
-  ):
-    if env is None:
-      env = ()
-    else:
-      if not isinstance(env, dict):
-        raise TypeCheckError(
-          cls.__name__,
-          "arg 'env' was invalid: value {} (with type {}) must be a dict".format(
-            env,
-            type(env)
-          )
-        )
-      env = tuple(item for pair in env.items() for item in pair)
 
-    return super(ExecuteProcessRequest, cls).__new__(
-      cls,
-      argv=argv,
-      env=env,
-      input_files=input_files,
-      description=description,
-      output_files=output_files,
-      output_directories=output_directories,
-      timeout_seconds=timeout_seconds,
-      jdk_home=jdk_home,
-    )
-
-
-class ExecuteProcessResult(datatype([('stdout', binary_type),
-                                     ('stderr', binary_type),
-                                     ('output_directory_digest', DirectoryDigest)
-                                     ])):
+class ExecuteProcessResult(datatype([
+    ('stdout', binary_type),
+    ('stderr', binary_type),
+    ('output_directory_digest', DirectoryDigest),
+])):
   """Result of successfully executing a process.
 
   Requesting one of these will raise an exception if the exit code is non-zero."""
 
 
-class FallibleExecuteProcessResult(datatype([('stdout', binary_type),
-                                             ('stderr', binary_type),
-                                             ('exit_code', int),
-                                             ('output_directory_digest', DirectoryDigest)
-                                             ])):
+class FallibleExecuteProcessResult(datatype([
+    ('stdout', binary_type),
+    ('stderr', binary_type),
+    ('exit_code', int),
+    ('output_directory_digest', DirectoryDigest),
+])):
   """Result of executing a process.
 
   Requesting one of these will not raise an exception if the exit code is non-zero."""

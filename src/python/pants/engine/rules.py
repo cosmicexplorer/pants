@@ -17,7 +17,8 @@ from twitter.common.collections import OrderedSet
 
 from pants.engine.selectors import Get, type_or_constraint_repr
 from pants.util.meta import AbstractClass
-from pants.util.objects import Exactly, datatype
+from pants.util.objects import DatatypeFieldDecl as F
+from pants.util.objects import Exactly, convert, datatype
 
 
 logger = logging.getLogger(__name__)
@@ -136,35 +137,25 @@ class Rule(AbstractClass):
     """Collection of input selectors."""
 
 
-class TaskRule(datatype(['output_constraint', 'input_selectors', 'input_gets', 'func']), Rule):
+class TaskRule(datatype([
+    ('output_constraint', convert(Exactly, should_have_default=False)),
+    ('input_selectors', convert(tuple, should_have_default=False)),
+    'func',
+    ('input_gets', convert_default(tuple)),
+]), Rule):
   """A Rule that runs a task function when all of its input selectors are satisfied.
 
   TODO: Make input_gets non-optional when more/all rules are using them.
   """
 
-  def __new__(cls, output_type, input_selectors, func, input_gets=None):
-    # Validate result type.
-    if isinstance(output_type, Exactly):
-      constraint = output_type
-    elif isinstance(output_type, type):
-      constraint = Exactly(output_type)
-    else:
-      raise TypeError("Expected an output_type for rule `{}`, got: {}".format(
-        func.__name__, output_type))
-
-    # Validate selectors.
-    if not isinstance(input_selectors, list):
-      raise TypeError("Expected a list of Selectors for rule `{}`, got: {}".format(
-        func.__name__, type(input_selectors)))
-
-    # Validate gets.
-    input_gets = [] if input_gets is None else input_gets
-    if not isinstance(input_gets, list):
-      raise TypeError("Expected a list of Gets for rule `{}`, got: {}".format(
-        func.__name__, type(input_gets)))
-
-    # Create.
-    return super(TaskRule, cls).__new__(cls, constraint, tuple(input_selectors), tuple(input_gets), func)
+  def __new__(cls, func, *args, **kwargs):
+    """???"""
+    func_name = func.__name__
+    try:
+      return super(TaskRule, cls).__new__(cls, func=func, *args, **kwargs)
+    except TypeError as e:
+      raise cls.make_type_error("error in rule `{}`: {}"
+                                .format(func_name, str(e)))
 
   def __str__(self):
     return '({}, {!r}, {})'.format(type_or_constraint_repr(self.output_constraint),
@@ -172,24 +163,15 @@ class TaskRule(datatype(['output_constraint', 'input_selectors', 'input_gets', '
                                    self.func.__name__)
 
 
-class SingletonRule(datatype(['output_constraint', 'value']), Rule):
+class SingletonRule(datatype([
+    ('output_constraint', convert(Exactly, should_have_default=False)),
+    'value',
+]), Rule):
   """A default rule for a product, which is thus a singleton for that product."""
 
   @classmethod
   def from_instance(cls, obj):
     return cls(type(obj), obj)
-
-  def __new__(cls, output_type, value):
-    # Validate result type.
-    if isinstance(output_type, Exactly):
-      constraint = output_type
-    elif isinstance(output_type, type):
-      constraint = Exactly(output_type)
-    else:
-      raise TypeError("Expected an output_type for rule; got: {}".format(output_type))
-
-    # Create.
-    return super(SingletonRule, cls).__new__(cls, constraint, value)
 
   @property
   def input_selectors(self):

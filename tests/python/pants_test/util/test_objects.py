@@ -10,15 +10,16 @@ import re
 from abc import abstractmethod
 from builtins import object, str
 
-from future.utils import PY2, PY3, text_type
+from future.utils import PY3, text_type
 
 from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError,
-                                TypedDatatypeInstanceConstructionError, datatype, enum)
-from pants_test.base_test import BaseTest
+                                TypeConstraintError, TypedDatatypeInstanceConstructionError,
+                                convert, datatype, enum, non_empty, not_none, optional)
+from pants_test.test_base import TestBase
 
 
-class TypeConstraintTestBase(BaseTest):
+class TypeConstraintTestBase(TestBase):
   class A(object):
     pass
 
@@ -155,11 +156,13 @@ class WithExplicitTypeConstraint(datatype([('a_string', text_type), ('an_int', E
 class MixedTyping(datatype(['value', ('name', text_type)])): pass
 
 
-class WithDefaultValueTuple(datatype([('an_int', int, 3)])): pass
+class WithDefaultValueTuple(datatype([F('an_int', int, default_value=3)])): pass
 
 
 # `F` is what we imported `pants.util.objects.DatatypeFieldDecl` as.
-class WithJustDefaultValueExplicitFieldDecl(datatype([F('a_bool', Exactly(bool), True)])): pass
+class WithJustDefaultValueExplicitFieldDecl(datatype([
+    F('a_bool', Exactly(bool), default_value=True),
+])): pass
 
 
 class SomeBaseClass(object):
@@ -207,7 +210,7 @@ class ReturnsNotImplemented(object):
 class SomeEnum(enum('x', [1, 2])): pass
 
 
-class DatatypeTest(BaseTest):
+class DatatypeTest(TestBase):
 
   def test_eq_with_not_implemented_super(self):
     class DatatypeSuperNotImpl(datatype(['val']), ReturnsNotImplemented, tuple):
@@ -262,9 +265,15 @@ class DatatypeTest(BaseTest):
     self.assertEqual({'val': 1}, bar(1)._asdict())
 
   def test_replace_non_iterable(self):
-    bar = datatype(['val', 'zal'])
+    bar_class = datatype(['val', 'zal'])
 
-    self.assertEqual(bar(1, 3), bar(1, 2)._replace(zal=3))
+    bar_orig = bar_class(1, 2)
+    bar_modified = bar_class(1, 3)
+
+    self.assertEqual(bar_modified, bar_orig._replace(zal=3))
+    self.assertIsNot(bar_modified, bar_orig._replace(zal=3))
+    self.assertEqual(bar_modified, bar_orig.copy(zal=3))
+    self.assertIsNot(bar_modified, bar_orig.copy(zal=3))
 
   def test_properties_not_assignable(self):
     bar = datatype(['val'])
@@ -311,7 +320,9 @@ class DatatypeTest(BaseTest):
       bar(other=1)
 
 
-class TypedDatatypeTest(BaseTest):
+class TypedDatatypeTest(TestBase):
+
+  unicode_literal = '' if PY3 else 'u'
 
   def test_class_construction_errors(self):
     # NB: datatype subclasses declared at top level are the success cases
@@ -377,50 +388,67 @@ class TypedDatatypeTest(BaseTest):
     expected_msg = "Encountered duplicate field name: 'field_a'"
     self.assertEqual(str(cm.exception), expected_msg)
 
-    with self.assertRaises(F.FieldDeclarationError) as cm:
+    expected_rx_str = re.escape(
+      "type_constraint for field 'a_field' must be an instance of `type` or `TypeConstraint`, "
+      "or else None, but was instead 2 (type 'int').")
+    with self.assertRaisesRegexp(F.FieldDeclarationError, expected_rx_str):
       class InvalidTypeSpec(datatype([('a_field', 2)])): pass
-    expected_msg = (
-      "type_spec for field {}'a_field' must be an instance of type or TypeConstraint, if given, but was instead 2 (type 'int')."
-      .format('u' if PY2 else ''))
-    self.assertIn(str(cm.exception), expected_msg)
 
   def test_class_construction_default_value(self):
     with self.assertRaises(ValueError) as cm:
       class WithEmptyTuple(datatype([()])): pass
 
-    with self.assertRaises(F.FieldDeclarationError) as cm:
-      class WithInvalidTypeDefaultValue(datatype([('x', int, None)])): pass
-    expected_msg = (
-      "default_value None for the field {}'x' "
-      "must satisfy the provided type_constraint Exactly(int)."
-      .format('u' if PY2 else ''))
-    self.assertIn(expected_msg, str(cm.exception))
-
-    # Check that even if `has_default_value` is True, the default value is still checked against the
+    # Check that the default value is still checked against the
     # `type_constraint` at datatype() call time.
-    with self.assertRaises(F.FieldDeclarationError) as cm:
-      class WithInvalidTypeDefaultAndRawArg(datatype([('x', int, None, True)])): pass
-    expected_msg = (
-      "default_value None for the field {}'x' "
-      "must satisfy the provided type_constraint Exactly(int)."
-      .format('u' if PY2 else ''))
-    self.assertIn(expected_msg, str(cm.exception))
+    expected_rx_str = re.escape("int() argument must be a string or a number, not 'NoneType'")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+      class WithInvalidTypeDefaultValue(datatype([
+          # TODO: ???/precedence
+          F('x', convert(int), default_value=None),
+      ])): pass
+
+    class WithKnownDefaultValueFromTypeConstraint(datatype([('x', convert(int))])): pass
+    self.assertEqual(WithKnownDefaultValueFromTypeConstraint().x, 0)
+    self.assertEqual(WithKnownDefaultValueFromTypeConstraint(4).x, 4)
+    self.assertEqual(WithKnownDefaultValueFromTypeConstraint(True).x, 1)
+    with self.assertRaises(TypeError):
+      WithKnownDefaultValueFromTypeConstraint(None)
+
+    class BrokenTypeConstraint(Exactly):
+      has_default_value = True
+
+      def __init__(self, type_to_wrap, default_value):
+        super(BrokenTypeConstraint, self).__init__(type_to_wrap)
+        self.default_value = default_value
+
+      def __repr__(self):
+        return '{}({})'.format(type(self).__name__, self.types[0])
+
+    expected_rx_str = re.escape(
+      "default_value 3 for the field 'x' must satisfy the provided type_constraint "
+      "BrokenTypeConstraint({})."
+      .format(text_type))
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+      class WithBrokenTypeConstraint(datatype([('x', BrokenTypeConstraint(text_type, 3))])): pass
 
     # This could just be a tuple, but the keyword in the F constructor adds clarity. This works
     # because of the expanded type constraint.
     class WithCheckedDefaultValue(datatype([
-        F('x', Exactly(int, type(None)), None, has_default_value=True)]
+        F('x', Exactly(int, type(None)), default_value=None)]
     )): pass
     self.assertEqual(WithCheckedDefaultValue().x, None)
     self.assertEqual(WithCheckedDefaultValue(3).x, 3)
     self.assertEqual(WithCheckedDefaultValue(x=3).x, 3)
 
     with self.assertRaises(ValueError):
-      class WithTooManyElementsTuple(datatype([('x', int, None, True, None)])): pass
+      class WithTooManyElementsTuple(datatype([('x', int, None)])): pass
 
     with self.assertRaises(TypeError):
-      class WithTooManyKwargsTuple(datatype([
-          F('x', int, None, True, has_default_value=False)
+      class WithTooManyPositionalArgsForFieldDecl(datatype([F('x', int, None)])): pass
+
+    with self.assertRaises(TypeError):
+      class WithUnknownKwargForFieldDecl(datatype([
+          F('x', int, None, should_have_default=False)
       ])): pass
 
   def test_instance_construction_default_value(self):
@@ -437,19 +465,12 @@ class TypedDatatypeTest(BaseTest):
     some_object = WithExplicitTypeConstraint(text_type('asdf'), 45)
     self.assertEqual(some_object.a_string, 'asdf')
     self.assertEqual(some_object.an_int, 45)
-    def compare_repr(include_unicode = False):
-      expected_message = "WithExplicitTypeConstraint(a_string={unicode_literal}'asdf', an_int=45)"\
-        .format(unicode_literal='u' if include_unicode else '')
-      self.assertEqual(repr(some_object), expected_message)
-    def compare_str(unicode_type_name):
-      expected_message = "WithExplicitTypeConstraint(a_string<={}>=asdf, an_int<=int>=45)".format(unicode_type_name)
-      self.assertEqual(str(some_object), expected_message)
-    if PY2:
-      compare_str('unicode')
-      compare_repr(include_unicode=True)
-    else:
-      compare_str('str')
-      compare_repr()
+    expected_repr = ("WithExplicitTypeConstraint(a_string={unicode_literal}'asdf', an_int=45)"
+                     .format(unicode_literal=self.unicode_literal))
+    self.assertEqual(repr(some_object), expected_repr)
+    expected_str = ("WithExplicitTypeConstraint(a_string<={}>=asdf, an_int<=int>=45)"
+                    .format(text_type.__name__))
+    self.assertEqual(str(some_object), expected_str)
 
     some_nonneg_int = NonNegativeInt(an_int=3)
     self.assertEqual(3, some_nonneg_int.an_int)
@@ -468,19 +489,12 @@ class TypedDatatypeTest(BaseTest):
 
     mixed_type_obj = MixedTyping(value=3, name=text_type('asdf'))
     self.assertEqual(3, mixed_type_obj.value)
-    def compare_repr(include_unicode = False):
-      expected_message = "MixedTyping(value=3, name={unicode_literal}'asdf')" \
-        .format(unicode_literal='u' if include_unicode else '')
-      self.assertEqual(repr(mixed_type_obj), expected_message)
-    def compare_str(unicode_type_name):
-      expected_message = "MixedTyping(value=3, name<={}>=asdf)".format(unicode_type_name)
-      self.assertEqual(str(mixed_type_obj), expected_message)
-    if PY2:
-      compare_str('unicode')
-      compare_repr(include_unicode=True)
-    else:
-      compare_str('str')
-      compare_repr()
+
+    expected_repr = ("MixedTyping(value=3, name={unicode_literal}'asdf')"
+                     .format(unicode_literal=self.unicode_literal))
+    self.assertEqual(repr(mixed_type_obj), expected_repr)
+    expected_str = "MixedTyping(value=3, name<={}>=asdf)".format(text_type.__name__)
+    self.assertEqual(str(mixed_type_obj), expected_str)
 
     subclass_constraint_obj = WithSubclassTypeConstraint(SomeDatatypeClass())
     self.assertEqual('asdf', subclass_constraint_obj.some_value.something())
@@ -492,132 +506,91 @@ class TypedDatatypeTest(BaseTest):
 
   def test_mixin_type_construction(self):
     obj_with_mixin = TypedWithMixin(text_type(' asdf '))
-    def compare_repr(include_unicode = False):
-      expected_message = "TypedWithMixin(val={unicode_literal}' asdf ')" \
-        .format(unicode_literal='u' if include_unicode else '')
-      self.assertEqual(repr(obj_with_mixin), expected_message)
-    def compare_str(unicode_type_name):
-      expected_message = "TypedWithMixin(val<={}>= asdf )".format(unicode_type_name)
-      self.assertEqual(str(obj_with_mixin), expected_message)
-    if PY2:
-      compare_str('unicode')
-      compare_repr(include_unicode=True)
-    else:
-      compare_str('str')
-      compare_repr()
+
+    expected_repr = ("TypedWithMixin(val={unicode_literal}' asdf ')"
+                     .format(unicode_literal=self.unicode_literal))
+    self.assertEqual(repr(obj_with_mixin), expected_repr)
+
+    expected_str = "TypedWithMixin(val<={}>= asdf )".format(text_type.__name__)
+    self.assertEqual(str(obj_with_mixin), expected_str)
+
     self.assertEqual(obj_with_mixin.as_str(), ' asdf ')
     self.assertEqual(obj_with_mixin.stripped(), 'asdf')
 
   def test_instance_construction_errors(self):
-    with self.assertRaises(TypeError) as cm:
+    # test that kwargs with keywords that aren't field names fail the same way
+    expected_rx_str = re.escape(
+      "error: in constructor of type SomeTypedDatatype: type check error:\\n__new__() got an unexpected keyword argument 'something'")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       SomeTypedDatatype(something=3)
-    # self.assertEqual(str(ex_base), "KeyError('something',)")
-    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\\nUnrecognized keyword argument \'something\' provided to the constructor: args=(),\\nkwargs={\'something\': 3}."
-    ex_str = str(cm.exception)
-    self.assertIn(KeyError.__name__, ex_str)
-    self.assertIn(expected_msg, ex_str)
 
     # not providing all the fields
-    with self.assertRaises(TypeError) as cm:
-      SomeTypedDatatype()
     expected_msg_ending = (
       "__new__() missing 1 required positional argument: 'val'"
       if PY3 else
       "__new__() takes exactly 2 arguments (1 given)"
     )
-    expected_msg = "error: in constructor of type SomeTypedDatatype: type check error:\\n"
-    ex_str = str(cm.exception)
-    self.assertIn(TypeError.__name__, ex_str)
-    self.assertIn(expected_msg, ex_str)
-    self.assertIn(expected_msg_ending, ex_str)
-
-    # unrecognized fields
-    with self.assertRaises(TypeError) as cm:
-      SomeTypedDatatype(3, 4)
-    expected_msg = """error: in constructor of type SomeTypedDatatype: type check error:\\nToo many positional arguments (2 > 1) were provided to the constructor: args=(3, 4),\\nkwargs={}. list index out of range"""
-    ex_str = str(cm.exception)
-    self.assertIn(IndexError.__name__, ex_str)
-    self.assertIn(expected_msg, ex_str)
-
-    with self.assertRaises(TypedDatatypeInstanceConstructionError) as cm:
-      CamelCaseWrapper(nonneg_int=3)
-    expected_msg = (
-      """error: in constructor of type CamelCaseWrapper: type check error:
-field 'nonneg_int' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
-    self.assertEqual(expected_msg, str(cm.exception))
+    expected_rx_str = re.escape(
+      "error: in constructor of type SomeTypedDatatype: type check error:\\n{}"
+      .format(expected_msg_ending))
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+      SomeTypedDatatype()
 
     # test that too many positional args fails
-    with self.assertRaises(TypeError) as cm:
-      CamelCaseWrapper(4, 5)
-    expected_msg = """error: in constructor of type CamelCaseWrapper: type check error:\\nToo many positional arguments (2 > 1) were provided to the constructor: args=(4, 5),\\nkwargs={}. list index out of range"""
-    ex_str = str(cm.exception)
-    self.assertIn(IndexError.__name__, ex_str)
-    self.assertIn(expected_msg, ex_str)
+    expected_msg_ending = (
+      "__new__() takes 2 positional arguments but 3 were given"
+      if PY3 else
+      "__new__() takes exactly 2 arguments (3 given)"
+    )
+    expected_rx_str = re.escape(
+      "error: in constructor of type SomeTypedDatatype: type check error:\\n{}"
+      .format(expected_msg_ending))
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+      SomeTypedDatatype(3, 4)
+
+    expected_rx_str = re.escape(
+      """error: in constructor of type CamelCaseWrapper: type check error:
+field 'nonneg_int' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+      CamelCaseWrapper(nonneg_int=3)
 
     # test that kwargs with keywords that aren't field names fail the same way
-    with self.assertRaises(TypeError) as cm:
+    expected_rx_str = re.escape(
+      "error: in constructor of type CamelCaseWrapper: type check error:\\n__new__() got an unexpected keyword argument 'a'")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       CamelCaseWrapper(4, a=3)
-    expected_msg = "error: in constructor of type CamelCaseWrapper: type check error:\\nUnrecognized keyword argument \'a\' provided to the constructor: args=(4,),\\nkwargs={\'a\': 3}."
-    ex_str = str(cm.exception)
-    self.assertIn(KeyError.__name__, ex_str)
-    self.assertIn(expected_msg, ex_str)
 
   def test_type_check_errors(self):
     # single type checking failure
-    with self.assertRaises(TypeError) as cm:
-      SomeTypedDatatype([])
-    def compare_str(include_unicode=False):
-      expected_message = (
+    expected_rx_str = re.escape(
         """error: in constructor of type SomeTypedDatatype: type check error:
-field {unicode_literal}'val' was invalid (provided as positional argument 0): value [] (with type 'list') must satisfy this type constraint: Exactly(int)."""
-      .format(unicode_literal='u' if include_unicode else ''))
-      self.assertEqual(str(cm.exception), expected_message)
-    if PY2:
-      compare_str(include_unicode=True)
-    else:
-      compare_str()
+field 'val' was invalid: value [] (with type 'list') must satisfy this type constraint: Exactly(int).""")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+      SomeTypedDatatype([])
 
     # type checking failure with multiple arguments (one is correct)
-    with self.assertRaises(TypeCheckError) as cm:
+    expected_rx_str = re.escape(
+      """error: in constructor of type AnotherTypedDatatype: type check error:
+field 'elements' was invalid: value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
+      .format(type_name=text_type.__name__, unicode_literal=self.unicode_literal))
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       AnotherTypedDatatype(text_type('correct'), text_type('should be list'))
-    def compare_str(unicode_type_name, include_unicode=False):
-      expected_message = (
-        """error: in constructor of type AnotherTypedDatatype: type check error:
-field {unicode_literal}'elements' was invalid (provided as positional argument 1): value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
-      .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
-      self.assertEqual(str(cm.exception), expected_message)
-    if PY2:
-      compare_str('unicode', include_unicode=True)
-    else:
-      compare_str('str')
 
     # type checking failure on both arguments
-    with self.assertRaises(TypeCheckError) as cm:
+    expected_rx_str = re.escape(
+      """error: in constructor of type AnotherTypedDatatype: type check error:
+field 'string' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly({type_name}).
+field 'elements' was invalid: value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
+      .format(type_name=text_type.__name__, unicode_literal=self.unicode_literal))
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       AnotherTypedDatatype(3, text_type('should be list'))
-    def compare_str(unicode_type_name, include_unicode=False):
-      expected_message = (
-        """error: in constructor of type AnotherTypedDatatype: type check error:
-field {unicode_literal}'string' was invalid (provided as positional argument 0): value 3 (with type 'int') must satisfy this type constraint: Exactly({type_name}).
-field {unicode_literal}'elements' was invalid (provided as positional argument 1): value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
-          .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
-      self.assertEqual(str(cm.exception), expected_message)
-    if PY2:
-      compare_str('unicode', include_unicode=True)
-    else:
-      compare_str('str')
 
-    with self.assertRaises(TypeCheckError) as cm:
+    expected_rx_str = re.escape(
+      """error: in constructor of type NonNegativeInt: type check error:
+field 'an_int' was invalid: value {unicode_literal}'asdf' (with type '{type_name}') must satisfy this type constraint: Exactly(int)."""
+      .format(type_name=text_type.__name__, unicode_literal=self.unicode_literal))
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       NonNegativeInt(text_type('asdf'))
-    def compare_str(unicode_type_name, include_unicode=False):
-      expected_message = (
-        """error: in constructor of type NonNegativeInt: type check error:
-field {unicode_literal}'an_int' was invalid (provided as positional argument 0): value {unicode_literal}'asdf' (with type '{type_name}') must satisfy this type constraint: Exactly(int)."""
-          .format(type_name=unicode_type_name, unicode_literal='u' if include_unicode else ''))
-      self.assertEqual(str(cm.exception), expected_message)
-    if PY2:
-      compare_str('unicode', include_unicode=True)
-    else:
-      compare_str('str')
 
     with self.assertRaises(TypeCheckError) as cm:
       NonNegativeInt(-3)
@@ -626,18 +599,11 @@ field {unicode_literal}'an_int' was invalid (provided as positional argument 0):
 value is negative: -3.""")
     self.assertEqual(str(cm.exception), expected_msg)
 
-    with self.assertRaises(TypeCheckError) as cm:
+    expected_rx_str = re.escape(
+      """error: in constructor of type WithSubclassTypeConstraint: type check error:
+field 'some_value' was invalid: value 3 (with type 'int') must satisfy this type constraint: SubclassesOf(SomeBaseClass).""")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       WithSubclassTypeConstraint(3)
-    def compare_str(include_unicode=False):
-      expected_message = (
-        """error: in constructor of type WithSubclassTypeConstraint: type check error:
-field {unicode_literal}'some_value' was invalid (provided as positional argument 0): value 3 (with type 'int') must satisfy this type constraint: SubclassesOf(SomeBaseClass)."""
-          .format(unicode_literal='u' if include_unicode else ''))
-      self.assertEqual(str(cm.exception), expected_message)
-    if PY2:
-      compare_str(include_unicode=True)
-    else:
-      compare_str()
 
   def test_copy(self):
     obj = AnotherTypedDatatype(string='some_string', elements=[1, 2, 3])
@@ -650,21 +616,27 @@ field {unicode_literal}'some_value' was invalid (provided as positional argument
   def test_copy_failure(self):
     obj = AnotherTypedDatatype(string='some string', elements=[1,2,3])
 
-    with self.assertRaises(TypeCheckError) as cm:
-      obj.copy(nonexistent_field=3)
-    expected_msg = (
-      "error: in constructor of type AnotherTypedDatatype: type check error:\\nUnrecognized keyword argument \'nonexistent_field\' provided to the constructor")
-    self.assertIn(expected_msg, str(cm.exception))
-
-    with self.assertRaises(TypeError) as cm:
-      obj.copy(3, 4)
-
-    with self.assertRaises(TypeCheckError) as cm:
-      obj.copy(elements=3)
-    expected_msg = (
+    expected_rx_str = re.escape(
       """error: in constructor of type AnotherTypedDatatype: type check error:
-field 'elements' was invalid (provided as a keyword argument): value 3 (with type 'int') must satisfy this type constraint: Exactly(list).""")
-    self.assertEqual(str(cm.exception), expected_msg)
+Replacing fields {kw} of object AnotherTypedDatatype(string={unicode_literal}'some string', elements=[1, 2, 3]) failed:
+Field 'nonexistent_field' was not recognized: KeyError('nonexistent_field')."""
+      .format(kw=str({str('nonexistent_field'): 3}),
+              unicode_literal=self.unicode_literal))
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+      obj.copy(nonexistent_field=3)
+
+    expected_rx_str = re.escape("copy() takes exactly 1 argument (2 given)")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+      obj.copy(3)
+
+    expected_rx_str = re.escape(
+      """error: in constructor of type AnotherTypedDatatype: type check error:
+Replacing fields {kw} of object AnotherTypedDatatype(string={unicode_literal}'some string', elements=[1, 2, 3]) failed:
+Type checking error for field 'elements': value 3 (with type 'int') must satisfy this type constraint: Exactly(list)."""
+      .format(kw=str({str('elements'): 3}),
+              unicode_literal=self.unicode_literal))
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
+      obj.copy(elements=3)
 
   def test_enum_class_creation_errors(self):
     expected_rx = re.escape(
@@ -690,7 +662,119 @@ field 'elements' was invalid (provided as a keyword argument): value 3 (with typ
       SomeEnum(x=3)
 
     expected_rx_falsy_value = re.escape(
-      "Value {}'' for 'x' must be one of: OrderedSet([1, 2])."
-      .format('u' if PY2 else ''))
+      "Value {unicode_literal}'' for 'x' must be one of: OrderedSet([1, 2])."
+      .format(unicode_literal=self.unicode_literal))
     with self.assertRaisesRegexp(TypeCheckError, expected_rx_falsy_value):
       SomeEnum(x='')
+
+  def test_optional(self):
+    class OptionalAny(datatype([('x', optional())])): pass
+    self.assertTrue(OptionalAny().x is None)
+    self.assertTrue(OptionalAny(None).x is None)
+    self.assertEqual(OptionalAny(3).x, 3)
+
+    class OptionalTyped(datatype([('x', optional(int))])): pass
+    self.assertTrue(OptionalTyped().x is None)
+    self.assertEqual(OptionalTyped(3).x, 3)
+    with self.assertRaises(TypeCheckError):
+      OptionalTyped('asdf')
+
+    class OptionalExplicitConstraint(datatype([
+        ('x', optional(Exactly(int, text_type))),
+    ])): pass
+    self.assertTrue(OptionalExplicitConstraint().x is None)
+    self.assertEqual(OptionalExplicitConstraint(3).x, 3)
+    self.assertEqual(OptionalExplicitConstraint('asdf').x, 'asdf')
+    with self.assertRaises(TypeCheckError):
+      OptionalExplicitConstraint(True)
+
+    class OptionalNonNoneDefault(datatype([F('x', optional(int), default_value=3)])): pass
+    self.assertEqual(OptionalNonNoneDefault().x, 3)
+    self.assertTrue(OptionalNonNoneDefault(None).x is None)
+    self.assertEqual(OptionalNonNoneDefault(4).x, 4)
+    with self.assertRaises(TypeCheckError):
+      OptionalNonNoneDefault(True)
+
+  def test_non_empty(self):
+    class NonEmptyFields(datatype([
+        ('x', not_none()),
+        ('y', non_empty(list)),
+        F('z', non_empty(int, predicate=(lambda x: x > 0)), default_value=3),
+    ])): pass
+
+    with self.assertRaises(TypeError):
+      NonEmptyFields()
+    with self.assertRaises(TypeError):
+      NonEmptyFields(3)
+    with self.assertRaises(TypeCheckError):
+      NonEmptyFields(None)
+    with self.assertRaises(TypeCheckError):
+      NonEmptyFields(3, [])
+    with self.assertRaises(TypeCheckError):
+      NonEmptyFields(3, (1, 2))
+    with self.assertRaises(TypeCheckError):
+      NonEmptyFields(3, [1], 'not_an_int')
+    with self.assertRaises(TypeCheckError):
+      NonEmptyFields(3, [1], 0)
+
+    default_fields_obj = NonEmptyFields(x=0, y=[1, 2])
+    self.assertEqual(default_fields_obj.__getnewargs__(), (0, [1, 2], 3))
+
+    self.assertEqual(NonEmptyFields(x=0, y=[1, 2], z=5).z, 5)
+
+  def test_convert(self):
+    class ConvertFieldClass(datatype([
+        ('x', convert(tuple, should_have_default=False)),
+        ('y', convert(tuple)),
+        ('z', SomeEnum.convert_type_constraint()),
+    ])): pass
+
+    with self.assertRaises(TypeError):
+      ConvertFieldClass()
+    with self.assertRaises(TypeError):
+      ConvertFieldClass(None)
+    with self.assertRaises(TypeError):
+      ConvertFieldClass([], [], 3)
+
+    self.assertEqual(ConvertFieldClass(x=[]).__getnewargs__(), ((), (), SomeEnum.create()))
+    self.assertEqual(ConvertFieldClass(x=[1,2], y=[3, 4], z=2).__getnewargs__(),
+                     ((1, 2), (3, 4), SomeEnum(2)))
+
+  def test_convert_enum(self):
+    class ConvertEnumWithDefault(datatype([
+        ('enum_field', SomeEnum.convert_type_constraint()),
+    ])): pass
+    self.assertEqual(ConvertEnumWithDefault().enum_field.x, 1)
+    self.assertEqual(ConvertEnumWithDefault(None).enum_field.x, 1)
+    self.assertEqual(ConvertEnumWithDefault(2).enum_field.x, 2)
+    with self.assertRaises(TypeError):
+      ConvertEnumWithDefault(3)
+
+    class ConvertEnumNoDefault(datatype([
+        ('enum_field', SomeEnum.convert_type_constraint(should_have_default=False)),
+    ])): pass
+
+    with self.assertRaises(TypeError):
+      ConvertEnumNoDefault()
+    with self.assertRaises(TypeError):
+      ConvertEnumNoDefault(3)
+    self.assertEqual(ConvertEnumWithDefault(None).enum_field.x, 1)
+    self.assertEqual(ConvertEnumNoDefault(1).enum_field.x, 1)
+    self.assertEqual(ConvertEnumNoDefault(2).enum_field.x, 2)
+
+  def test_convert_with_factories(self):
+    class ConvertWithFactoryClass(datatype([
+        ('x', non_empty(convert(tuple))),
+        ('y', optional(convert(tuple))),
+    ])): pass
+
+    with self.assertRaises(TypeError):
+      ConvertWithFactoryClass()
+    with self.assertRaises(TypeError):
+      ConvertWithFactoryClass(None)
+    with self.assertRaises(TypeCheckError):
+      ConvertWithFactoryClass(())
+
+    self.assertEqual(ConvertWithFactoryClass((1,)).y, None)
+    self.assertEqual(ConvertWithFactoryClass((1,), None).y, None)
+    self.assertEqual(ConvertWithFactoryClass((1,), [1, 2]).y, (1, 2))

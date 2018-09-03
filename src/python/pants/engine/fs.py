@@ -4,13 +4,17 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+from textwrap import dedent
+
 from future.utils import binary_type, text_type
 
 from pants.base.project_tree import Dir, File
 from pants.engine.rules import RootRule
 from pants.option.custom_types import GlobExpansionConjunction
 from pants.option.global_options import GlobMatchErrorBehavior
-from pants.util.objects import Collection, datatype
+from pants.util.objects import Collection
+from pants.util.objects import DatatypeFieldDecl as F
+from pants.util.objects import convert, datatype
 
 
 class FileContent(datatype([('path', text_type), ('content', binary_type)])):
@@ -31,20 +35,10 @@ class Path(datatype([('path', text_type), 'stat'])):
 
 
 class PathGlobs(datatype([
-    # TODO: a `Convert` wrapper which can be used to wrap inputs in tuple(), and optionally accepts
-    # a `klass_fun` argument which is called on inputs that don't match the first argument
-    # `klass_ctor` (which could also be allowed to be a type constraint). That would allow the
-    # following commented-out code to entirely replace the __new__() override here.
-    # F('include', Convert(tuple), has_default_value=False),
-    # ('exclude', Convert(tuple)),
-    # ('glob_match_error_behavior', Convert(GlobMatchErrorBehavior,
-    #                                       klass_fun=GlobMatchErrorBehavior.create)),
-    # ('conjunction', Convert(GlobExpansionConjunction,
-    #                         klass_fun=GlobExpansionConjunction.create)),
-    'include',
-    'exclude',
-    ('glob_match_error_behavior', GlobMatchErrorBehavior),
-    ('conjunction', GlobExpansionConjunction),
+    ('include', convert(tuple, should_have_default=False)),
+    ('exclude', convert(tuple)),
+    ('glob_match_error_behavior', GlobMatchErrorBehavior.convert_type_constraint()),
+    ('conjunction', GlobExpansionConjunction.convert_type_constraint()),
 ])):
   """A wrapper around sets of filespecs to include and exclude.
 
@@ -54,20 +48,14 @@ class PathGlobs(datatype([
   be aware of any changes to this object's definition.
   """
 
-  def __new__(cls, include, exclude=(), glob_match_error_behavior=None, conjunction=None):
-    """Given various file patterns create a PathGlobs object (without using filesystem operations).
+PathGlobs.__new__.__doc__ = dedent(
+  """Given various file patterns create a PathGlobs object (without using filesystem operations).
 
     :param include: A list of filespecs to include.
     :param exclude: A list of filespecs to exclude.
     :param glob_match_error_behavior: The value to pass to GlobMatchErrorBehavior.create()
     :rtype: :class:`PathGlobs`
-    """
-    return super(PathGlobs, cls).__new__(
-      cls,
-      include=tuple(include),
-      exclude=tuple(exclude),
-      glob_match_error_behavior=GlobMatchErrorBehavior.create(glob_match_error_behavior),
-      conjunction=GlobExpansionConjunction.create(conjunction))
+    """)
 
 
 class PathGlobsAndRoot(datatype([('path_globs', PathGlobs), ('root', text_type)])):

@@ -11,6 +11,7 @@ from builtins import str
 import six
 
 from pants.util.meta import AbstractClass
+from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import Exactly, datatype
 
 
@@ -96,7 +97,10 @@ class Selector(AbstractClass):
     """The product that this selector produces."""
 
 
-class Select(datatype(['product', ('optional', bool, False)]), Selector):
+class Select(datatype([
+    'product',
+    F('optional', bool, default_value=False),
+]), Selector):
   """Selects the given Product for the Subject provided to the constructor.
 
   If optional=True and no matching product can be produced, will return None.

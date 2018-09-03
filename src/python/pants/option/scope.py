@@ -6,13 +6,14 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 from collections import namedtuple
 
+from pants.util.objects import SubclassesOf, datatype, optional
+
 
 GLOBAL_SCOPE = ''
 GLOBAL_SCOPE_CONFIG_SECTION = 'GLOBAL'
 
 
-# FIXME: convert this to a datatype?
-class ScopeInfo(namedtuple('_ScopeInfo', ['scope', 'category', 'optionable_cls'])):
+class ScopeInfo(datatype(['scope', 'category', ('optionable_cls', optional(SubclassesOf(type)))])):
   """Information about a scope."""
 
   # Symbolic constants for different categories of scope.
@@ -36,7 +37,3 @@ class ScopeInfo(namedtuple('_ScopeInfo', ['scope', 'category', 'optionable_cls']
 
   def _optionable_cls_attr(self, name, default=None):
     return getattr(self.optionable_cls, name) if self.optionable_cls else default
-
-
-# Allow the optionable_cls to default to None.
-ScopeInfo.__new__.__defaults__ = (None, )
