@@ -13,7 +13,7 @@ from builtins import object, str
 from future.utils import PY3, text_type
 
 from pants.util.objects import DatatypeFieldDecl as F
-from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError, convert,
+from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeError, convert,
                                 convert_default, datatype, enum, non_empty, not_none, optional)
 from pants_test.test_base import TestBase
 
@@ -288,7 +288,7 @@ class DatatypeTest(TestBase):
     class OverridesEq(datatype(['myval'])):
       def __eq__(self, other):
         return other.myval == self.myval
-    with self.assertRaises(TypeCheckError) as tce:
+    with self.assertRaises(TypeError) as tce:
       OverridesEq(1)
     self.assertIn('Should not override __eq__.', str(tce.exception))
 
@@ -329,7 +329,7 @@ class TypedDatatypeTest(TestBase):
 
     # If the type_name can't be converted into a suitable identifier, throw a
     # ValueError.
-    with self.assertRaises(F.FieldDeclarationError) as cm:
+    with self.assertRaises(ValueError) as cm:
       class NonStrType(datatype([int])): pass
     expected_msg = (
       "The field declaration {} must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
@@ -345,14 +345,14 @@ class TypedDatatypeTest(TestBase):
     )
     self.assertEqual(str(cm.exception), expected_msg)
 
-    with self.assertRaises(F.FieldDeclarationError) as cm:
+    with self.assertRaises(ValueError) as cm:
       class JustTypeField(datatype([text_type])): pass
     expected_msg = (
       "The field declaration {} must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
       .format(text_type, text_type))
     self.assertIn(str(cm.exception), expected_msg)
 
-    with self.assertRaises(F.FieldDeclarationError) as cm:
+    with self.assertRaises(ValueError) as cm:
       class NonStringField(datatype([3])): pass
     expected_msg = (
       "The field declaration 3 must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'int'."
@@ -390,7 +390,7 @@ class TypedDatatypeTest(TestBase):
     expected_rx_str = re.escape(
       "type_constraint for field 'a_field' must be an instance of `type` or `TypeConstraint`, "
       "or else None, but was instead 2 (type 'int').")
-    with self.assertRaisesRegexp(F.FieldDeclarationError, expected_rx_str):
+    with self.assertRaisesRegexp(ValueError, expected_rx_str):
       class InvalidTypeSpec(datatype([('a_field', 2)])): pass
 
   def test_class_construction_default_value(self):
@@ -591,7 +591,7 @@ field 'an_int' was invalid: value {unicode_literal}'asdf' (with type '{type_name
     with self.assertRaisesRegexp(TypeError, expected_rx_str):
       NonNegativeInt(text_type('asdf'))
 
-    with self.assertRaises(TypeCheckError) as cm:
+    with self.assertRaises(TypeError) as cm:
       NonNegativeInt(-3)
     expected_msg = (
       """error: in constructor of type NonNegativeInt: type check error:
@@ -634,7 +634,7 @@ Replacing fields {kw} of object AnotherTypedDatatype(string={unicode_literal}'so
 Type checking error for field 'elements': value 3 (with type 'int') must satisfy this type constraint: Exactly(list)."""
       .format(kw=str({str('elements'): 3}),
               unicode_literal=self.unicode_literal))
-    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       obj.copy(elements=3)
 
   def test_enum_class_creation_errors(self):
@@ -653,17 +653,17 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
   def test_enum_instance_creation_errors(self):
     expected_rx = re.escape(
       "Value 3 for 'x' must be one of: OrderedSet([1, 2]).")
-    with self.assertRaisesRegexp(TypeCheckError, expected_rx):
+    with self.assertRaisesRegexp(TypeError, expected_rx):
       SomeEnum.create(3)
-    with self.assertRaisesRegexp(TypeCheckError, expected_rx):
+    with self.assertRaisesRegexp(TypeError, expected_rx):
       SomeEnum(3)
-    with self.assertRaisesRegexp(TypeCheckError, expected_rx):
+    with self.assertRaisesRegexp(TypeError, expected_rx):
       SomeEnum(x=3)
 
     expected_rx_falsy_value = re.escape(
       "Value {unicode_literal}'' for 'x' must be one of: OrderedSet([1, 2])."
       .format(unicode_literal=self.unicode_literal))
-    with self.assertRaisesRegexp(TypeCheckError, expected_rx_falsy_value):
+    with self.assertRaisesRegexp(TypeError, expected_rx_falsy_value):
       SomeEnum(x='')
 
   def test_optional(self):
@@ -675,7 +675,7 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
     class OptionalTyped(datatype([('x', optional(int))])): pass
     self.assertTrue(OptionalTyped().x is None)
     self.assertEqual(OptionalTyped(3).x, 3)
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       OptionalTyped('asdf')
 
     class OptionalExplicitConstraint(datatype([
@@ -684,14 +684,14 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
     self.assertTrue(OptionalExplicitConstraint().x is None)
     self.assertEqual(OptionalExplicitConstraint(3).x, 3)
     self.assertEqual(OptionalExplicitConstraint('asdf').x, 'asdf')
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       OptionalExplicitConstraint(True)
 
     class OptionalNonNoneDefault(datatype([F('x', optional(int), default_value=3)])): pass
     self.assertEqual(OptionalNonNoneDefault().x, 3)
     self.assertTrue(OptionalNonNoneDefault(None).x is None)
     self.assertEqual(OptionalNonNoneDefault(4).x, 4)
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       OptionalNonNoneDefault(True)
 
   def test_non_empty(self):
@@ -705,15 +705,15 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
       NonEmptyFields()
     with self.assertRaises(TypeError):
       NonEmptyFields(3)
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       NonEmptyFields(None)
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       NonEmptyFields(3, [])
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       NonEmptyFields(3, (1, 2))
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       NonEmptyFields(3, [1], 'not_an_int')
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       NonEmptyFields(3, [1], 0)
 
     default_fields_obj = NonEmptyFields(x=0, y=[1, 2])
@@ -783,7 +783,7 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
       ConvertWithFactoryClass()
     with self.assertRaises(TypeError):
       ConvertWithFactoryClass(None)
-    with self.assertRaises(TypeCheckError):
+    with self.assertRaises(TypeError):
       ConvertWithFactoryClass(())
 
     self.assertEqual(ConvertWithFactoryClass((1,)).y, None)
