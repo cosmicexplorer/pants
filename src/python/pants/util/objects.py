@@ -728,7 +728,10 @@ def convert_default(type_spec, **kwargs):
     create_func = type_spec
     default_value_to_use = default_value
 
-  class ConvertDefault(SubclassesOf):
+  type_constraint_base_class = kwargs.pop('type_constraint_base_class', SubclassesOf)
+  assert(issubclass(type_constraint_base_class, TypeConstraint))
+
+  class ConvertDefault(type_constraint_base_class):
     has_default_value = True
     default_value = default_value_to_use
 
