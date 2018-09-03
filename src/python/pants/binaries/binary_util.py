@@ -133,7 +133,8 @@ class BinaryRequest(datatype([
 
 class BinaryFetchRequest(datatype([
     'download_path',
-    ('urls', non_empty(convert(tuple)))])):
+    ('urls', non_empty(convert(tuple))),
+])):
   """Describes a request to download a file."""
 
   @memoized_property

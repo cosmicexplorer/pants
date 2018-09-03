@@ -163,7 +163,7 @@ def _parse_type_constraint(type_constraint):
 
 def optional(type_constraint=None, allow_default=True):
   """Return a TypeConstraint instance matching `type_constraint`, or the value None."""
-  # TODO: do this better?
+  # TODO: do this better? Test this?
   orig_repr = (
     "optional(type_constraint={type_constraint!r}, allow_default={allow_default!r})"
     .format(type_constraint=type_constraint, allow_default=allow_default))
@@ -384,7 +384,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       return OrderedDict(zip(self._fields, self._super_iter()))
 
     @memoized_classproperty
-    def _supertype_keyword_only_constructor(cls):
+    def _supertype_keyword_only_cached_constructor(cls):
       def ctor(**kw):
         return super(DataType, cls).__new__(cls, **kw)
       return ctor
@@ -426,7 +426,7 @@ def datatype(field_decls, superclass_name=None, **kwargs):
             errs='\n'.join(arg_check_error_messages)))
         raise self.make_type_error(msg)
 
-      return self._supertype_keyword_only_constructor(**field_dict)
+      return self._supertype_keyword_only_cached_constructor(**field_dict)
 
     def copy(self, **kwargs):
       """???/made into its own method for better error messages (with the method name in them)"""
@@ -470,11 +470,9 @@ def datatype(field_decls, superclass_name=None, **kwargs):
   # Return a new type with the given name, inheriting from the DataType class
   # just defined, with an empty class body.
   try:  # Python3
-    generated_datatype_class = type(superclass_name, (DataType,), {})
+    return type(superclass_name, (DataType,), {})
   except TypeError:  # Python2
-    generated_datatype_class = type(superclass_name.encode('utf-8'), (DataType,), {})
-
-  return generated_datatype_class
+    return type(superclass_name.encode('utf-8'), (DataType,), {})
 
 
 def enum(field_name, all_values):
@@ -588,8 +586,9 @@ class TypeConstraint(AbstractClass):
   :class:`SubclassesOf`.
   """
 
-  default_value = None
+  # TODO: ???
   has_default_value = False
+  default_value = None
 
   def __init__(self, *types, **kwargs):
     """Creates a type constraint centered around the given types.
