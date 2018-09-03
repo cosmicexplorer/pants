@@ -13,10 +13,8 @@ from builtins import object, str
 from future.utils import PY3, text_type
 
 from pants.util.objects import DatatypeFieldDecl as F
-from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError,
-                                TypeConstraintError, TypedDatatypeInstanceConstructionError,
-                                convert, convert_default, datatype, enum, non_empty, not_none,
-                                optional)
+from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError, convert,
+                                convert_default, datatype, enum, non_empty, not_none, optional)
 from pants_test.test_base import TestBase
 
 
@@ -396,7 +394,7 @@ class TypedDatatypeTest(TestBase):
       class InvalidTypeSpec(datatype([('a_field', 2)])): pass
 
   def test_class_construction_default_value(self):
-    with self.assertRaises(ValueError) as cm:
+    with self.assertRaises(ValueError):
       class WithEmptyTuple(datatype([()])): pass
 
     # Check that the default value is still checked against the

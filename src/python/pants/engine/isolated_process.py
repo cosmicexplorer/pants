@@ -12,7 +12,7 @@ from pants.engine.fs import DirectoryDigest
 from pants.engine.rules import RootRule, rule
 from pants.engine.selectors import Select
 from pants.util.objects import DatatypeFieldDecl as F
-from pants.util.objects import Exactly, TypeCheckError, convert, convert_default, datatype, optional
+from pants.util.objects import Exactly, convert, convert_default, datatype, optional
 
 
 logger = logging.getLogger(__name__)

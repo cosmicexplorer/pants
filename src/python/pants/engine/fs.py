@@ -12,9 +12,7 @@ from pants.base.project_tree import Dir, File
 from pants.engine.rules import RootRule
 from pants.option.custom_types import GlobExpansionConjunction
 from pants.option.global_options import GlobMatchErrorBehavior
-from pants.util.objects import Collection
-from pants.util.objects import DatatypeFieldDecl as F
-from pants.util.objects import convert, datatype
+from pants.util.objects import Collection, convert, datatype
 
 
 class FileContent(datatype([('path', text_type), ('content', binary_type)])):

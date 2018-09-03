@@ -11,7 +11,7 @@ from pants.build_graph.address import BuildFileAddress
 from pants.engine.objects import Serializable
 from pants.engine.parser import Parser
 from pants.util.memo import memoized_property
-from pants.util.objects import SubclassesOf, convert, convert_default, datatype
+from pants.util.objects import SubclassesOf, convert_default, datatype
 
 
 class MappingError(Exception):

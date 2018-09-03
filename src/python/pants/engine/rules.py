@@ -17,7 +17,6 @@ from twitter.common.collections import OrderedSet
 
 from pants.engine.selectors import Get, type_or_constraint_repr
 from pants.util.meta import AbstractClass
-from pants.util.objects import DatatypeFieldDecl as F
 from pants.util.objects import Exactly, convert, convert_default, datatype
 
 
@@ -138,7 +137,7 @@ class Rule(AbstractClass):
 
 
 class TaskRule(datatype([
-    ('output_constraint', convert(Exactly, create_func=Exactly, should_have_default=False)),
+    ('output_constraint', convert(Exactly, should_have_default=False)),
     ('input_selectors', convert(tuple, should_have_default=False)),
     'func',
     ('input_gets', convert_default(tuple)),

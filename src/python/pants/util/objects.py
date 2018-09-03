@@ -12,8 +12,7 @@ from collections import Iterable, OrderedDict, deque, namedtuple
 from future.utils import PY2, text_type
 from twitter.common.collections import OrderedSet
 
-from pants.util.memo import (memoized, memoized_classmethod, memoized_classproperty,
-                             memoized_property)
+from pants.util.memo import memoized, memoized_classmethod, memoized_classproperty
 from pants.util.meta import AbstractClass, classproperty
 
 
