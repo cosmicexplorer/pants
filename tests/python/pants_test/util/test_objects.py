@@ -390,7 +390,7 @@ class TypedDatatypeTest(TestBase):
     self.assertEqual(str(cm.exception), expected_msg)
 
   def test_class_construction_default_value(self):
-    with self.assertRaises(ValueError):
+    with self.assertRaisesRegexp(ValueError, re.escape("Empty tuple () passed to datatype().")):
       class WithEmptyTuple(datatype([()])): pass
 
     # Check that the default value is still checked against the
@@ -398,7 +398,6 @@ class TypedDatatypeTest(TestBase):
     expected_rx_str = re.escape("int() argument must be a string or a number, not 'NoneType'")
     with self.assertRaisesRegexp(TypeError, expected_rx_str):
       class WithInvalidTypeDefaultValue(datatype([
-          # TODO: ???/precedence
           F('x', convert(int), default_value=None),
       ])): pass
 
@@ -406,7 +405,9 @@ class TypedDatatypeTest(TestBase):
     self.assertEqual(WithKnownDefaultValueFromTypeConstraint().x, 0)
     self.assertEqual(WithKnownDefaultValueFromTypeConstraint(4).x, 4)
     self.assertEqual(WithKnownDefaultValueFromTypeConstraint(True).x, 1)
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape("int() argument must be a string or a number, not 'NoneType'")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       WithKnownDefaultValueFromTypeConstraint(None)
 
     class BrokenTypeConstraint(Exactly):
@@ -435,13 +436,26 @@ class TypedDatatypeTest(TestBase):
     self.assertEqual(WithCheckedDefaultValue(3).x, 3)
     self.assertEqual(WithCheckedDefaultValue(x=3).x, 3)
 
-    with self.assertRaises(ValueError):
+    expected_rx_str = re.escape(
+      "There are too many elements of the tuple ({unicode_literal}'x', <type 'int'>, None) passed to datatype(). The tuple must have between 1 and 2 elements. The remaining elements were: [None]."
+      .format(unicode_literal=self.unicode_literal))
+    with self.assertRaisesRegexp(ValueError, expected_rx_str):
       class WithTooManyElementsTuple(datatype([('x', int, None)])): pass
 
-    with self.assertRaises(TypeError):
+    expected_msg_ending = (
+      "__new__() takes 3 positional arguments but 4 were given"
+      if PY3 else
+      "__new__() takes at most 3 arguments (4 given)"
+    )
+    with self.assertRaisesRegexp(TypeError, re.escape(expected_msg_ending)):
       class WithTooManyPositionalArgsForFieldDecl(datatype([F('x', int, None)])): pass
 
-    with self.assertRaises(TypeError):
+    expected_msg_ending = (
+      "__new__() takes 3 positional arguments but 5 were given"
+      if PY3 else
+      "__new__() takes at most 3 arguments (5 given)"
+    )
+    with self.assertRaisesRegexp(TypeError, re.escape(expected_msg_ending)):
       class WithUnknownKwargForFieldDecl(datatype([
           F('x', int, None, should_have_default=False)
       ])): pass
@@ -516,7 +530,7 @@ class TypedDatatypeTest(TestBase):
     # test that kwargs with keywords that aren't field names fail the same way
     expected_msg = (
       "error: in constructor of type SomeTypedDatatype: type check error:\\n__new__() got an unexpected keyword argument 'something'")
-    with self.assertRaises(TypeError) as cm:
+    with self.assertRaises(TypeCheckError) as cm:
       SomeTypedDatatype(something=3)
     self.assertIn(expected_msg, str(cm.exception))
 
@@ -529,7 +543,7 @@ class TypedDatatypeTest(TestBase):
     expected_msg = (
       "error: in constructor of type SomeTypedDatatype: type check error:\\n{}"
       .format(expected_msg_ending))
-    with self.assertRaises(TypeError) as cm:
+    with self.assertRaises(TypeCheckError) as cm:
       SomeTypedDatatype()
     self.assertIn(expected_msg, str(cm.exception))
 
@@ -542,21 +556,21 @@ class TypedDatatypeTest(TestBase):
     expected_msg = (
       "error: in constructor of type SomeTypedDatatype: type check error:\\n{}"
       .format(expected_msg_ending))
-    with self.assertRaises(TypeError) as cm:
+    with self.assertRaises(TypeCheckError) as cm:
       SomeTypedDatatype(3, 4)
     self.assertIn(expected_msg, str(cm.exception))
 
     expected_msg = (
       """error: in constructor of type CamelCaseWrapper: type check error:
 field 'nonneg_int' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
-    with self.assertRaises(TypeError) as cm:
+    with self.assertRaises(TypeCheckError) as cm:
       CamelCaseWrapper(nonneg_int=3)
-    self.assertIn(expected_msg, str(cm.exception))
+    self.assertEqual(expected_msg, str(cm.exception))
 
     # test that kwargs with keywords that aren't field names fail the same way
     expected_msg = (
       "error: in constructor of type CamelCaseWrapper: type check error:\\n__new__() got an unexpected keyword argument 'a'")
-    with self.assertRaises(TypeError) as cm:
+    with self.assertRaises(TypeCheckError) as cm:
       CamelCaseWrapper(4, a=3)
     self.assertIn(expected_msg, str(cm.exception))
 
