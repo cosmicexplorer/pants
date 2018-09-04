@@ -331,12 +331,12 @@ class TypedDatatypeTest(TestBase):
     # NB: datatype subclasses declared at top level are the success cases
     # here by not failing on import.
 
-    with self.assertRaises(TypeError) as cm:
+    with self.assertRaises(F.FieldDeclarationError) as cm:
       class NonStrType(datatype([int])): pass
     expected_msg = (
       "The field declaration {} must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
       .format(int, text_type))
-    self.assertIn(expected_msg, str(cm.exception))
+    self.assertEqual(expected_msg, str(cm.exception))
 
     with self.assertRaises(TypeError) as cm:
       class NoFields(datatype()): pass
@@ -347,12 +347,12 @@ class TypedDatatypeTest(TestBase):
     )
     self.assertEqual(str(cm.exception), expected_msg)
 
-    with self.assertRaises(TypeError) as cm:
+    with self.assertRaises(F.FieldDeclarationError) as cm:
       class NonStringField(datatype([3])): pass
     expected_msg = (
       "The field declaration 3 must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'int'."
       .format(text_type))
-    self.assertIn(str(cm.exception), expected_msg)
+    self.assertEqual(str(cm.exception), expected_msg)
 
     with self.assertRaises(ValueError) as cm:
       class NonStringTypeField(datatype([(32, int)])): pass
