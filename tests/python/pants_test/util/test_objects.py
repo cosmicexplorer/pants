@@ -395,8 +395,12 @@ class TypedDatatypeTest(TestBase):
 
     # Check that the default value is still checked against the
     # `type_constraint` at datatype() call time.
-    expected_rx_str = re.escape("int() argument must be a string or a number, not 'NoneType'")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    expected_err_msg = (
+      "int() argument must be a string, a bytes-like object or a number, not 'NoneType'"
+      if PY3 else
+      "int() argument must be a string or a number, not 'NoneType'"
+    )
+    with self.assertRaisesRegexp(TypeError, re.escape(expected_err_msg)):
       class WithInvalidTypeDefaultValue(datatype([
           F('x', convert(int), default_value=None),
       ])): pass
