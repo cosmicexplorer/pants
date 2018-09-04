@@ -653,10 +653,13 @@ Field 'nonexistent_field' was not recognized: KeyError('nonexistent_field')."""
       obj.copy(nonexistent_field=3)
     self.assertEqual(str(cm.exception), expected_msg)
 
-    expected_msg = "copy() takes exactly 1 argument (2 given)"
-    with self.assertRaises(TypeError) as cm:
+    expected_msg = (
+      "copy() takes 1 positional argument but 2 were given"
+      if PY3 else
+      "copy() takes exactly 1 argument (2 given)"
+    )
+    with self.assertRaisesRegexp(TypeError, re.escape(expected_msg)):
       obj.copy(3)
-    self.assertEqual(str(cm.exception), expected_msg)
 
     expected_msg = (
       """error: in constructor of type AnotherTypedDatatype: type check error:
@@ -747,7 +750,7 @@ field 'x' was invalid: value True (with type 'bool') must satisfy this type cons
     ])): pass
 
     expected_msg_ending = (
-      "__new__() missing 2 required positional arguments: 'val'"
+      "__new__() missing 2 required positional arguments: 'x' and 'y'"
       if PY3 else
       "__new__() takes at least 3 arguments (1 given)"
     )
@@ -803,7 +806,7 @@ field 'z' was invalid: value 0 (with type 'int', from original object 0) must be
     ])): pass
 
     expected_msg_ending = (
-      "__new__() missing 1 required positional argument: 'val'"
+      "__new__() missing 1 required positional argument: 'x'"
       if PY3 else
       "__new__() takes at least 2 arguments (1 given)"
     )
@@ -866,7 +869,7 @@ Value 3 for 'x' must be one of: OrderedSet([1, 2]).""")
     ])): pass
 
     expected_msg_ending = (
-      "__new__() missing 1 required positional argument: 'val'"
+      "__new__() missing 1 required positional argument: 'enum_field'"
       if PY3 else
       "__new__() takes exactly 2 arguments (1 given)"
     )
@@ -890,7 +893,7 @@ Value 3 for 'x' must be one of: OrderedSet([1, 2]).""")
     ])): pass
 
     expected_msg_ending = (
-      "__new__() missing 1 required positional argument: 'val'"
+      "__new__() missing 1 required positional argument: 'x'"
       if PY3 else
       "__new__() takes at least 2 arguments (1 given)"
     )
