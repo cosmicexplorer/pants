@@ -410,8 +410,12 @@ class TypedDatatypeTest(TestBase):
     self.assertEqual(WithKnownDefaultValueFromTypeConstraint(4).x, 4)
     self.assertEqual(WithKnownDefaultValueFromTypeConstraint(True).x, 1)
 
-    expected_rx_str = re.escape("int() argument must be a string or a number, not 'NoneType'")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    expected_err_msg = (
+      "int() argument must be a string, a bytes-like object or a number, not 'NoneType'"
+      if PY3 else
+      "int() argument must be a string or a number, not 'NoneType'"
+    )
+    with self.assertRaisesRegexp(TypeError, re.escape(expected_err_msg)):
       WithKnownDefaultValueFromTypeConstraint(None)
 
     class BrokenTypeConstraint(Exactly):
