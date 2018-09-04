@@ -139,6 +139,8 @@ class SomeMixin(object):
     return self.as_str().strip()
 
 
+# These datatype() calls with strings or tuples for fields are interpreted into a DatatypeFieldDecl
+# by DatatypeFieldDecl.parse().
 class TypedWithMixin(datatype([('val', text_type)]), SomeMixin):
   """Example of using `datatype()` with a mixin."""
 
@@ -155,10 +157,12 @@ class WithExplicitTypeConstraint(datatype([('a_string', text_type), ('an_int', E
 class MixedTyping(datatype(['value', ('name', text_type)])): pass
 
 
-class WithDefaultValueTuple(datatype([F('an_int', int, default_value=3)])): pass
-
-
 # `F` is what we imported `pants.util.objects.DatatypeFieldDecl` as.
+class WithDefaultValueTuple(datatype([
+    F('an_int', int, default_value=3),
+])): pass
+
+
 class WithJustDefaultValueExplicitFieldDecl(datatype([
     F('a_bool', Exactly(bool), default_value=True),
 ])): pass
@@ -288,7 +292,7 @@ class DatatypeTest(TestBase):
     class OverridesEq(datatype(['myval'])):
       def __eq__(self, other):
         return other.myval == self.myval
-    with self.assertRaises(TypeError) as tce:
+    with self.assertRaises(TypeCheckError) as tce:
       OverridesEq(1)
     self.assertIn('Should not override __eq__.', str(tce.exception))
 
@@ -378,11 +382,12 @@ class TypedDatatypeTest(TestBase):
     expected_msg = "Encountered duplicate field name: 'field_a'"
     self.assertEqual(str(cm.exception), expected_msg)
 
-    expected_rx_str = re.escape(
+    expected_msg = (
       "type_constraint for field 'a_field' must be an instance of `type` or `TypeConstraint`, "
       "or else None, but was instead 2 (type 'int').")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeError) as cm:
       class InvalidTypeSpec(datatype([('a_field', 2)])): pass
+    self.assertEqual(str(cm.exception), expected_msg)
 
   def test_class_construction_default_value(self):
     with self.assertRaises(ValueError):
@@ -509,10 +514,11 @@ class TypedDatatypeTest(TestBase):
 
   def test_instance_construction_errors(self):
     # test that kwargs with keywords that aren't field names fail the same way
-    expected_rx_str = re.escape(
+    expected_msg = (
       "error: in constructor of type SomeTypedDatatype: type check error:\\n__new__() got an unexpected keyword argument 'something'")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeError) as cm:
       SomeTypedDatatype(something=3)
+    self.assertIn(expected_msg, str(cm.exception))
 
     # not providing all the fields
     expected_msg_ending = (
@@ -520,11 +526,12 @@ class TypedDatatypeTest(TestBase):
       if PY3 else
       "__new__() takes exactly 2 arguments (1 given)"
     )
-    expected_rx_str = re.escape(
+    expected_msg = (
       "error: in constructor of type SomeTypedDatatype: type check error:\\n{}"
       .format(expected_msg_ending))
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeError) as cm:
       SomeTypedDatatype()
+    self.assertIn(expected_msg, str(cm.exception))
 
     # test that too many positional args fails
     expected_msg_ending = (
@@ -532,23 +539,26 @@ class TypedDatatypeTest(TestBase):
       if PY3 else
       "__new__() takes exactly 2 arguments (3 given)"
     )
-    expected_rx_str = re.escape(
+    expected_msg = (
       "error: in constructor of type SomeTypedDatatype: type check error:\\n{}"
       .format(expected_msg_ending))
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeError) as cm:
       SomeTypedDatatype(3, 4)
+    self.assertIn(expected_msg, str(cm.exception))
 
-    expected_rx_str = re.escape(
+    expected_msg = (
       """error: in constructor of type CamelCaseWrapper: type check error:
 field 'nonneg_int' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly(NonNegativeInt).""")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeError) as cm:
       CamelCaseWrapper(nonneg_int=3)
+    self.assertIn(expected_msg, str(cm.exception))
 
     # test that kwargs with keywords that aren't field names fail the same way
-    expected_rx_str = re.escape(
+    expected_msg = (
       "error: in constructor of type CamelCaseWrapper: type check error:\\n__new__() got an unexpected keyword argument 'a'")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeError) as cm:
       CamelCaseWrapper(4, a=3)
+    self.assertIn(expected_msg, str(cm.exception))
 
   def test_type_check_errors(self):
     # single type checking failure
