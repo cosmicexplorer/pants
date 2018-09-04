@@ -133,7 +133,11 @@ class JarDependency(datatype([
     return not self.intransitive
 
   def copy(self, **replacements):
-    """Returns a clone of this JarDependency with the given replacements kwargs overlaid."""
+    """Returns a clone of this JarDependency with the given replacements kwargs overlaid.
+
+    NB: this method maintains the same contract as described in the `_replace()` method in the
+    anonymous class returned by `datatype()`.
+    """
     if 'excludes' in replacements:
       replacements['excludes'] = self._prepare_excludes(replacements['excludes'])
     return super(JarDependency, self).copy(**replacements)

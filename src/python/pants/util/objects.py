@@ -388,7 +388,8 @@ def datatype(field_decls, superclass_name=None, **kwargs):
   field_name_list = [p.field_name for p in parsed_field_list]
 
   namedtuple_cls = namedtuple(superclass_name, field_name_list, **kwargs)
-
+  # Python makes it very easy to add default values for arguments -- these defaults will apply
+  # regardless of whether the arguments to __new__() are specified positionally or by keyword.
   if default_values:
     namedtuple_cls.__new__.__defaults__ = tuple(default_values)
 
@@ -476,6 +477,11 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       try:
         return super(DataType, self).__hash__()
       except TypeError as e:
+        # This gives at least a little more context into what failed. If a datatype() is intended to
+        # be hashable, it needs to ensure its fields are `tuple` or another hashable collection
+        # instead of e.g. `list` (e.g. with `convert(tuple)`). This wrapped error message can help
+        # to find the specific datatype() class which needs to be fixed to ensure its fields are
+        # hashable.
         raise self.make_type_error("Hash failed: {}".format(e), e)
 
     # NB: As datatype is not iterable, we need to override both __iter__ and all of the
