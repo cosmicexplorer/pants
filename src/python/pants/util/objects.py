@@ -473,7 +473,10 @@ def datatype(field_decls, superclass_name=None, **kwargs):
       return not (self == other)
 
     def __hash__(self):
-      return super(DataType, self).__hash__()
+      try:
+        return super(DataType, self).__hash__()
+      except TypeError as e:
+        raise self.make_type_error("Hash failed: {}".format(e), e)
 
     # NB: As datatype is not iterable, we need to override both __iter__ and all of the
     # namedtuple methods that expect self to be iterable.
@@ -687,7 +690,14 @@ class AnyClass(TypeConstraint):
 _none_type = type(None)
 
 
-def _parse_type_constraint(type_constraint):
+def parse_type_constraint(type_constraint):
+  """Interpret the argument into a TypeConstraint instance.
+
+  :param type_constraint: If None, return AnyClass(). If a type, return Exactly(<type>). Otherwise,
+                          must be an instance of a TypeConstraint subclass.
+  :returns: :class:`TypeConstraint`
+  :raises: :class:`TypeError` if `type_constraint` could not be interpreted.
+  """
   if type_constraint is None:
     type_constraint = AnyClass()
   elif isinstance(type_constraint, type):
@@ -700,29 +710,36 @@ def _parse_type_constraint(type_constraint):
   return type_constraint
 
 
+# TODO: consider applying @memoized to these TypeConstraint factories?
 def optional(type_constraint=None, allow_default=True):
   """Return a TypeConstraint instance matching `type_constraint`, or the value None.
 
+  This method always returns a TypeConstraint instance with a default value of None.
+
   If called with no arguments, this returns a type constraint which accepts any value as input, and
   has the default value None.
-  """
-  orig_repr = (
-    "optional(type_constraint={type_constraint!r}, allow_default={allow_default!r})"
-    .format(type_constraint=type_constraint, allow_default=allow_default))
 
-  type_constraint = _parse_type_constraint(type_constraint)
+  :param type_constraint: Interpreted into a TypeConstraint by `parse_type_constraint()`.
+  :param bool allow_default: Whether the returned type constraint should have a default value.
+  :returns: :class:`TypeConstraint`
+  """
+  if not isinstance(allow_default, bool):
+    raise TypeError("allow_default must be a bool: was {!r} (type '{}')."
+                    .format(allow_default, type(allow_default).__name__))
+
+  # TODO: we don't need to introduce an intermediate AnyClass() for the result of optional() -- we
+  # could just return an anonymous AnyClass() subclass with a default value specified.
+  type_constraint = parse_type_constraint(type_constraint)
   base_constraint_type = type(type_constraint)
   class ConstraintAlsoAcceptingNone(base_constraint_type):
 
-    has_default_value = True
-    default_value = None
+    has_default_value = allow_default
+    if has_default_value:
+      default_value = None
 
     def __init__(self):
       self._types = (_none_type,) + type_constraint._types
       self._desc = type_constraint._desc
-
-    def __repr__(self):
-      return orig_repr
 
     @memoized_classproperty
     def _variance_symbol(cls):
@@ -748,10 +765,16 @@ def optional(type_constraint=None, allow_default=True):
 def non_empty(type_constraint=None, predicate=bool):
   """Return a TypeConstraint instance matching `type_constraint`, if `predicate` returns True.
 
+  This method always returns a TypeConstraint instance without a default value.
+
   If called with no arguments, returns a TypeConstraint instance matching any object for which
   bool() returns True.
+
+  :param type_constraint: Interpreted into a TypeConstraint by `parse_type_constraint()`.
+  :param predicate: Function accepting a single argument and returning True or False.
+  :returns: :class:`TypeConstraint`
   """
-  type_constraint = _parse_type_constraint(type_constraint)
+  type_constraint = parse_type_constraint(type_constraint)
   base_constraint_type = type(type_constraint)
   class ConstraintCheckingEmpty(base_constraint_type):
     has_default_value = False
@@ -803,7 +826,21 @@ def not_none(type_constraint=None):
 
 
 def convert(type_spec, create_func=None, should_have_default=True):
-  """???"""
+  """Return a TypeConstraint instance matching `type_spec`, or applying `create_func` to the object.
+
+  :param type_spec: Interpreted into a TypeConstraint. If it is already a TypeConstraint, use that,
+                    otherwise a single type or an iterable of types are coerced into arguments for
+                    SubclassesOf(...).
+  :param create_func: Function to apply (single argument) to inputs not matching `type_spec`. Called
+                      with 0 arguments to produce the default value if `should_have_default` is True
+                      and `type_spec` is not a TypeConstraint with a default value. If `create_func`
+                      is not given, but `type_spec` is a type or iterable of types, `create_func` is
+                      set to the constructor for the single type or the first of the iterable of
+                      types.
+  :param bool should_have_default: Whether to produce a TypeConstraint instance with a default
+                                   value.
+  :returns: :class:`TypeConstraint`
+  """
   if not isinstance(should_have_default, bool):
     raise TypeError("should_have_default must be a bool: was {!r} (type '{}')."
                     .format(should_have_default, type(should_have_default).__name__))
@@ -840,14 +877,12 @@ def convert(type_spec, create_func=None, should_have_default=True):
 
   base_constraint_type = type(type_constraint)
   class Convert(base_constraint_type):
-    has_default_value = should_have_default
 
+    has_default_value = should_have_default
     if has_default_value:
       default_value = default_value_to_use
-    else:
-      @classproperty
-      def default_value(cls):
-        raise NotImplementedError('???')
+
+    types = type_constraint.types
 
     @memoized_classproperty
     def _variance_symbol(cls):
@@ -855,7 +890,7 @@ def convert(type_spec, create_func=None, should_have_default=True):
       return '@{}'.format(base_sym)
 
     def __init__(self):
-      self._types = type_constraint._types
+      self._types = type_constraint.types
       self._desc = type_constraint._desc
 
     def satisfied_by_type(self, obj_type):
@@ -866,19 +901,39 @@ def convert(type_spec, create_func=None, should_have_default=True):
 
     def validate_satisfied_by(self, obj):
       if self.satisfied_by(obj):
-        # TODO: describe the protocol, and require it or fix it (for validate_satisfied_by())!!!
         return None
-      else:
-        obj = create_func(obj)
-
-      return obj
+      new_value = create_func(obj)
+      assert(type_constraint.validate_satisfied_by(new_value) is None)
+      return new_value
 
   return Convert()
 
 
 def convert_default(type_spec, **kwargs):
-  """???/makes it easier to do the common python pattern of default=None, then checking for it."""
-  assert(isinstance(type_spec, type))
+  """Return a TypeConstraint instance matching `type_spec`, or resolving to a default value.
+
+  This factory makes it extremely concise to do the common python pattern of default=None, then
+  explicitly checking for None, without having to do any of this checking manually in the
+  constructor.
+
+  :param type type_spec: A type to match/convert to.
+  :param default_value: If this argument is provided by keyword, it will be used as the default
+                        value for the resulting type constraint. If this argument is not provided,
+                        `type_spec` is evaluated with 0 arguments to produce the default value. This
+                        differs from the `default_value` field in DatatypeFieldDecl because it may
+                        not set the constructor argument's default value, depending on the value of
+                        `assume_none_default`.
+  :param bool assume_none_default: If True, the default value of the resulting type constraint is
+                                   None, and a value of None is always converted into the default
+                                   value. If False, the `type_spec` must be able to handle the
+                                   argument None.
+  :param type type_constraint_base_class: The type constraint class to specialize. Defaults to
+                                          SubclassesOf.
+  :returns: :class:`TypeConstraint`
+  """
+  if not isinstance(type_spec, type):
+    raise TypeError("type_spec must be a type: was {!r} (type '{}')."
+                    .format(type_spec, type(type_spec).__name__))
 
   if 'default_value' in kwargs:
     default_value = kwargs.pop('default_value')
@@ -886,7 +941,9 @@ def convert_default(type_spec, **kwargs):
     default_value = type_spec()
 
   assume_none_default = kwargs.pop('assume_none_default', True)
-  assert(isinstance(assume_none_default, bool))
+  if not isinstance(assume_none_default, bool):
+    raise TypeError("assume_none_default must be a bool: was {!r} (type '{}')."
+                    .format(assume_none_default, type(assume_none_default).__name__))
 
   if assume_none_default:
     default_value_to_use = None
@@ -899,20 +956,23 @@ def convert_default(type_spec, **kwargs):
     default_value_to_use = default_value
 
   type_constraint_base_class = kwargs.pop('type_constraint_base_class', SubclassesOf)
-  assert(issubclass(type_constraint_base_class, TypeConstraint))
+  if not issubclass(type_constraint_base_class, TypeConstraint):
+    raise TypeError("type_constraint_base_class must subclass TypeConstraint: was {!r}."
+                    .format(type_constraint_base_class))
 
   class ConvertDefault(type_constraint_base_class):
     has_default_value = True
     default_value = default_value_to_use
 
-    def __init__(self):
-      super(ConvertDefault, self).__init__(type_spec)
+    def __init__(self, **kwargs):
+      super(ConvertDefault, self).__init__(type_spec, **kwargs)
 
     def validate_satisfied_by(self, obj):
       if self.satisfied_by(obj):
         return None
-      else:
-        return create_func(obj)
+      new_value = create_func(obj)
+      assert(super(ConvertDefault, self).validate_satisfied_by(new_value) is None)
+      return new_value
 
   return ConvertDefault()
 
