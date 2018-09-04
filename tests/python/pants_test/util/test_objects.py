@@ -562,48 +562,53 @@ field 'nonneg_int' was invalid: value 3 (with type 'int') must satisfy this type
 
   def test_type_check_errors(self):
     # single type checking failure
-    expected_rx_str = re.escape(
+    expected_msg = (
         """error: in constructor of type SomeTypedDatatype: type check error:
 field 'val' was invalid: value [] (with type 'list') must satisfy this type constraint: Exactly(int).""")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeCheckError) as cm:
       SomeTypedDatatype([])
+    self.assertEqual(str(cm.exception), expected_msg)
 
     # type checking failure with multiple arguments (one is correct)
-    expected_rx_str = re.escape(
+    expected_msg = (
       """error: in constructor of type AnotherTypedDatatype: type check error:
 field 'elements' was invalid: value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
       .format(type_name=text_type.__name__, unicode_literal=self.unicode_literal))
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeCheckError) as cm:
       AnotherTypedDatatype(text_type('correct'), text_type('should be list'))
+    self.assertEqual(str(cm.exception), expected_msg)
 
     # type checking failure on both arguments
-    expected_rx_str = re.escape(
+    expected_msg = (
       """error: in constructor of type AnotherTypedDatatype: type check error:
 field 'string' was invalid: value 3 (with type 'int') must satisfy this type constraint: Exactly({type_name}).
 field 'elements' was invalid: value {unicode_literal}'should be list' (with type '{type_name}') must satisfy this type constraint: Exactly(list)."""
       .format(type_name=text_type.__name__, unicode_literal=self.unicode_literal))
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeError) as cm:
       AnotherTypedDatatype(3, text_type('should be list'))
+    self.assertEqual(str(cm.exception), expected_msg)
 
-    expected_rx_str = re.escape(
+    expected_msg = (
       """error: in constructor of type NonNegativeInt: type check error:
 field 'an_int' was invalid: value {unicode_literal}'asdf' (with type '{type_name}') must satisfy this type constraint: Exactly(int)."""
       .format(type_name=text_type.__name__, unicode_literal=self.unicode_literal))
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeCheckError) as cm:
       NonNegativeInt(text_type('asdf'))
+    self.assertEqual(str(cm.exception), expected_msg)
 
-    with self.assertRaises(TypeError) as cm:
-      NonNegativeInt(-3)
     expected_msg = (
       """error: in constructor of type NonNegativeInt: type check error:
 value is negative: -3.""")
+    with self.assertRaises(TypeCheckError) as cm:
+      NonNegativeInt(-3)
     self.assertEqual(str(cm.exception), expected_msg)
 
-    expected_rx_str = re.escape(
+    expected_msg = (
       """error: in constructor of type WithSubclassTypeConstraint: type check error:
 field 'some_value' was invalid: value 3 (with type 'int') must satisfy this type constraint: SubclassesOf(SomeBaseClass).""")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeCheckError) as cm:
       WithSubclassTypeConstraint(3)
+    self.assertEqual(str(cm.exception), expected_msg)
 
   def test_copy(self):
     obj = AnotherTypedDatatype(string='some_string', elements=[1, 2, 3])
