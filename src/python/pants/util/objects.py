@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import sys
 from abc import abstractmethod
 from builtins import object, zip
-from collections import Iterable, OrderedDict, deque, namedtuple
+from collections import OrderedDict, deque, namedtuple
 
 from future.utils import PY2, text_type
 from twitter.common.collections import OrderedSet
@@ -829,8 +829,7 @@ def convert(type_spec, create_func=None, should_have_default=True):
   """Return a TypeConstraint instance matching `type_spec`, or applying `create_func` to the object.
 
   :param type_spec: Interpreted into a TypeConstraint. If it is already a TypeConstraint, use that,
-                    otherwise a single type or an iterable of types are coerced into arguments for
-                    SubclassesOf(...).
+                    otherwise a single type is coerced into `SubclassesOf(<type>)`.
   :param create_func: Function to apply (single argument) to inputs not matching `type_spec`. Called
                       with 0 arguments to produce the default value if `should_have_default` is True
                       and `type_spec` is not a TypeConstraint with a default value. If `create_func`
@@ -849,17 +848,14 @@ def convert(type_spec, create_func=None, should_have_default=True):
     if not create_func:
       create_func = type_spec
     type_constraint = SubclassesOf(type_spec)
-  elif isinstance(type_spec, Iterable):
-    realized_specs = tuple(type_spec)
-    for s in realized_specs:
-      if not isinstance(s, type):
-        raise TypeError('???')
-    if not create_func:
-      create_func = realized_specs[0]
-    type_constraint = SubclassesOf(*realized_specs)
   elif isinstance(type_spec, TypeConstraint):
     if not create_func:
-      raise ValueError('???/need a create_func with a TypeConstraint')
+      raise ValueError(
+        "`create_func` must be provided if `type_spec` is a TypeConstraint:\n"
+        "`type_spec was: {!r} (type '{}').\n"
+        "`create_func` was: {!r} (type '{}')."
+        .format(type_spec, type(type_spec).__name__,
+                create_func, type(create_func).__name__))
     type_constraint = type_spec
   else:
     raise TypeError(
@@ -868,12 +864,15 @@ def convert(type_spec, create_func=None, should_have_default=True):
       .format(type_spec, type(type_spec).__name__))
 
   if should_have_default:
-    if create_func:
-      default_value_to_use = create_func()
-    elif type_constraint.has_default_value:
+    if type_constraint.has_default_value:
       default_value_to_use = type_constraint.default_value
+    elif create_func:
+      default_value_to_use = create_func()
     else:
-      raise ValueError('???/invalid inputs to convert()')
+      raise ValueError(
+        "If `create_func` is not provided, `type_spec` must be a TypeConstraint instance "
+        "with a default value. `type_spec` was: {!r} (type '{}')."
+        .format(type_spec, type(type_spec).__name__))
 
   base_constraint_type = type(type_constraint)
   class Convert(base_constraint_type):
