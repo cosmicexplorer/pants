@@ -148,7 +148,7 @@ class TaskRule(datatype([
   """
 
   def __new__(cls, output_constraint, input_selectors, func, input_gets=None):
-    """???"""
+    """Extract the rule name from `func` and ensure any type check errors display that name."""
     func_name = func.__name__
     try:
       return super(TaskRule, cls).__new__(cls, output_constraint, input_selectors, func, input_gets)
