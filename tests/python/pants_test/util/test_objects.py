@@ -13,8 +13,8 @@ from builtins import object, str
 from future.utils import PY3, text_type
 
 from pants.util.objects import DatatypeFieldDecl as F
-from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, convert, convert_default,
-                                datatype, enum, non_empty, not_none, optional)
+from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeCheckError, convert,
+                                convert_default, datatype, enum, non_empty, not_none, optional)
 from pants_test.test_base import TestBase
 
 
@@ -606,27 +606,30 @@ field 'some_value' was invalid: value 3 (with type 'int') must satisfy this type
   def test_copy_failure(self):
     obj = AnotherTypedDatatype(string='some string', elements=[1,2,3])
 
-    expected_rx_str = re.escape(
+    expected_msg = (
       """error: in constructor of type AnotherTypedDatatype: type check error:
 Replacing fields {kw} of object AnotherTypedDatatype(string={unicode_literal}'some string', elements=[1, 2, 3]) failed:
 Field 'nonexistent_field' was not recognized: KeyError('nonexistent_field')."""
       .format(kw=str({str('nonexistent_field'): 3}),
               unicode_literal=self.unicode_literal))
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeCheckError) as cm:
       obj.copy(nonexistent_field=3)
+    self.assertEqual(str(cm.exception), expected_msg)
 
-    expected_rx_str = re.escape("copy() takes exactly 1 argument (2 given)")
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    expected_msg = "copy() takes exactly 1 argument (2 given)"
+    with self.assertRaises(TypeError) as cm:
       obj.copy(3)
+    self.assertEqual(str(cm.exception), expected_msg)
 
-    expected_rx_str = re.escape(
+    expected_msg = (
       """error: in constructor of type AnotherTypedDatatype: type check error:
 Replacing fields {kw} of object AnotherTypedDatatype(string={unicode_literal}'some string', elements=[1, 2, 3]) failed:
 Type checking error for field 'elements': value 3 (with type 'int') must satisfy this type constraint: Exactly(list)."""
       .format(kw=str({str('elements'): 3}),
               unicode_literal=self.unicode_literal))
-    with self.assertRaisesRegexp(TypeError, expected_rx_str):
+    with self.assertRaises(TypeCheckError) as cm:
       obj.copy(elements=3)
+    self.assertEqual(str(cm.exception), expected_msg)
 
   def test_enum_class_creation_errors(self):
     expected_rx = re.escape(
@@ -644,17 +647,17 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
   def test_enum_instance_creation_errors(self):
     expected_rx = re.escape(
       "Value 3 for 'x' must be one of: OrderedSet([1, 2]).")
-    with self.assertRaisesRegexp(TypeError, expected_rx):
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx):
       SomeEnum.create(3)
-    with self.assertRaisesRegexp(TypeError, expected_rx):
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx):
       SomeEnum(3)
-    with self.assertRaisesRegexp(TypeError, expected_rx):
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx):
       SomeEnum(x=3)
 
     expected_rx_falsy_value = re.escape(
       "Value {unicode_literal}'' for 'x' must be one of: OrderedSet([1, 2])."
       .format(unicode_literal=self.unicode_literal))
-    with self.assertRaisesRegexp(TypeError, expected_rx_falsy_value):
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_falsy_value):
       SomeEnum(x='')
 
   def test_optional(self):
