@@ -16,564 +16,6 @@ from pants.util.memo import memoized, memoized_classmethod, memoized_classproper
 from pants.util.meta import AbstractClass, classproperty
 
 
-class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
-    'field_name',
-    'type_constraint',
-    'default_value',
-    # If the `default_value` is None, setting this argument to True is also required to
-    # differentiate from just not providing a `default_value`.
-    'has_default_value',
-])):
-  """Description of a field, used in calls to datatype().
-
-  All elements of the list passed to datatype() are parsed into instances of this class by the
-  parse() classmethod.
-  """
-
-  class FieldDeclarationError(TypeError): pass
-
-  def __new__(cls, field_name, type_constraint=None, **kwargs):
-
-    # TODO: would we ever want field names to conform to any pattern for any reason?
-    # A field name must always be provided, and must be the appropriate text type for the python
-    # version.
-    if not isinstance(field_name, text_type):
-      raise cls.FieldDeclarationError(
-        "field_name must be an instance of {!r}, but was instead {!r} (type {!r})."
-        .format(text_type, field_name, type(field_name).__name__))
-
-    if 'default_value' in kwargs:
-      has_default_value = True
-      default_value = kwargs.pop('default_value')
-    else:
-      has_default_value = False
-      default_value = None
-    if kwargs:
-      raise cls.FieldDeclarationError("Unrecognized keyword arguments: {!r}".format(kwargs))
-
-    if type_constraint is None:
-      pass
-    elif isinstance(type_constraint, TypeConstraint):
-      if not has_default_value and type_constraint.has_default_value:
-        has_default_value = True
-        default_value = type_constraint.default_value
-    elif isinstance(type_constraint, type):
-      type_constraint = Exactly(type_constraint)
-    else:
-      raise cls.FieldDeclarationError(
-        "type_constraint for field '{field}' must be an instance of `type` or `TypeConstraint`, "
-        "or else None, but was instead {value!r} (type {the_type!r})."
-        .format(field=field_name, value=type_constraint, the_type=type(type_constraint).__name__))
-
-    # The default value for the field must obey the field's type constraint, if both are
-    # provided. This will error at datatype class creation time if not.
-    if has_default_value and (type_constraint is not None):
-      try:
-        maybe_new_default_value = type_constraint.validate_satisfied_by(default_value)
-        if maybe_new_default_value is not None:
-          default_value = maybe_new_default_value
-      except TypeConstraintError as e:
-        raise cls.FieldDeclarationError(
-          "default_value {default_value!r} for the field '{field_name}' must satisfy the provided "
-          "type_constraint {tc!r}. {err}"
-          .format(default_value=default_value,
-                  field_name=field_name,
-                  tc=type_constraint,
-                  err=str(e)),
-          e)
-
-    return super(DatatypeFieldDecl, cls).__new__(
-      cls, field_name, type_constraint, default_value, has_default_value)
-
-  @classmethod
-  def _parse_tuple(cls, tuple_decl):
-    """Interpret the elements of a tuple (by position) into a field declaration."""
-    # TODO: document what tuples we accept!
-    type_spec = None
-    type_spec = None
-
-    # NB: We have multiple optional (and some non-optional) positional arguments, so we popleft()
-    # things off a deque.
-    remaining_decl_elements = deque(tuple_decl)
-
-    if not bool(remaining_decl_elements):
-      raise ValueError("Empty tuple {!r} passed to datatype().".format(tuple_decl))
-
-    field_name = text_type(remaining_decl_elements.popleft())
-
-    # A type constraint may optionally be provided, either as a TypeConstraint instance, or as a
-    # type, which is shorthand for Exactly(<type>).
-    if bool(remaining_decl_elements):
-      type_spec = remaining_decl_elements.popleft()
-
-    if bool(remaining_decl_elements):
-      raise ValueError(
-        "There are too many elements of the tuple {!r} passed to datatype(). "
-        "The tuple must have between 1 and 2 elements. The remaining elements were: {!r}."
-        .format(tuple_decl, list(remaining_decl_elements)))
-
-    return cls(field_name=field_name, type_constraint=type_spec)
-
-  @classmethod
-  def parse(cls, maybe_decl):
-    """The type of `maybe_decl` can be thought of as:
-
-    str | DatatypeFieldDecl | (field_name: str, type?: (TypeConstraint | type))
-
-    for convenience.
-    """
-    if isinstance(maybe_decl, cls):
-      # If already a DatatypeFieldDecl instance, just return it.
-      parsed_decl = maybe_decl
-    elif isinstance(maybe_decl, text_type):
-      # A string alone is interpreted as an untyped field of that name.
-      parsed_decl = cls(field_name=maybe_decl)
-    elif isinstance(maybe_decl, tuple):
-      # A tuple may be provided, whose elements are interpreted into a DatatypeFieldDecl.
-      parsed_decl = cls._parse_tuple(maybe_decl)
-    else:
-      # Unrecognized input.
-      raise cls.FieldDeclarationError(
-        "The field declaration {value!r} must be a {str_type!r}, tuple, "
-        "or {this_type!r} instance, but its type was: {the_type!r}."
-        .format(value=maybe_decl,
-                str_type=text_type,
-                this_type=cls.__name__,
-                the_type=type(maybe_decl).__name__))
-
-    return parsed_decl
-
-
-_none_type = type(None)
-
-
-def _parse_type_constraint(type_constraint):
-  if type_constraint is None:
-    type_constraint = AnyClass()
-  elif isinstance(type_constraint, type):
-    type_constraint = Exactly(type_constraint)
-  elif not isinstance(type_constraint, TypeConstraint):
-    raise TypeError("type_constraint must be a `type`, a `TypeConstraint`, or None: "
-                    "was {!r} (type {!r})."
-                    .format(type_constraint, type(type_constraint).__name__))
-
-  return type_constraint
-
-
-def optional(type_constraint=None, allow_default=True):
-  """Return a TypeConstraint instance matching `type_constraint`, or the value None."""
-  # TODO: do this better? Test this?
-  orig_repr = (
-    "optional(type_constraint={type_constraint!r}, allow_default={allow_default!r})"
-    .format(type_constraint=type_constraint, allow_default=allow_default))
-
-  type_constraint = _parse_type_constraint(type_constraint)
-  base_constraint_type = type(type_constraint)
-  class ConstraintAlsoAcceptingNone(base_constraint_type):
-    has_default_value = True
-    default_value = None
-
-    def __init__(self):
-      self._types = (_none_type,) + type_constraint._types
-      self._desc = type_constraint._desc
-
-    def __repr__(self):
-      return orig_repr
-
-    @memoized_classproperty
-    def _variance_symbol(cls):
-      base = super(ConstraintAlsoAcceptingNone, cls)._variance_symbol
-      return '{}?'.format(base)
-
-    def satisfied_by_type(self, obj_type):
-      if obj_type is _none_type:
-        return True
-      return type_constraint.satisfied_by_type(obj_type)
-
-    def satisfied_by(self, obj):
-      return (obj is None) or type_constraint.satisfied_by(obj)
-
-    def validate_satisfied_by(self, obj):
-      """???"""
-      if obj is None:
-        return None
-      return type_constraint.validate_satisfied_by(obj)
-
-  return ConstraintAlsoAcceptingNone()
-
-
-def non_empty(type_constraint=None, predicate=bool):
-  """???"""
-  type_constraint = _parse_type_constraint(type_constraint)
-  base_constraint_type = type(type_constraint)
-  class ConstraintCheckingEmpty(base_constraint_type):
-    has_default_value = False
-
-    @classproperty
-    def default_value(cls):
-      raise NotImplementedError('???')
-
-    def __init__(self):
-      self._types = type_constraint._types
-      self._desc = type_constraint._desc
-
-    @memoized_classproperty
-    def _variance_symbol(cls):
-      base = super(ConstraintCheckingEmpty, cls)._variance_symbol
-      return '{}!'.format(base)
-
-    def satisfied_by_type(self, obj_type):
-      return type_constraint.satisfied_by_type(obj_type)
-
-    def satisfied_by(self, obj):
-      return type_constraint.satisfied_by(obj) and predicate(obj)
-
-    def validate_satisfied_by(self, obj):
-      maybe_new_obj = type_constraint.validate_satisfied_by(obj)
-      if maybe_new_obj is not None:
-        obj = maybe_new_obj
-
-      if not predicate(obj):
-        raise TypeConstraintError(
-          "value {!r} (with type {!r}) must be True when predicate {} is applied "
-          "in this type constraint: {!r}."
-          .format(obj, type(obj).__name__, predicate, self))
-
-      return obj
-
-  return ConstraintCheckingEmpty()
-
-
-def not_none(type_constraint=None):
-  """???"""
-  return non_empty(type_constraint=type_constraint, predicate=(lambda x: x is not None))
-
-
-# TODO: when we can restrict the python version to >= 3.6 in our python 3 shard, we can use the
-# backported dataclasses library as a backend to take advantage of cool python 3 things like type
-# hints (https://github.com/ericvsmith/dataclasses). Python 3.7+ provides dataclasses in the stdlib.
-def datatype(field_decls, superclass_name=None, **kwargs):
-  """A wrapper for `namedtuple` that accounts for the type of the object in equality.
-
-  Field declarations can be a string, which declares a field with that name and
-  no type checking. Field declarations can also be a tuple `('field_name',
-  field_type)`, which declares a field named `field_name` which is type-checked
-  at construction. If a type is given, the value provided to the constructor for
-  that field must be exactly that type (i.e. `type(x) == field_type`), and not
-  e.g. a subclass.
-
-  :param field_decls: Iterable of field declarations.
-  :return: A type object which can then be subclassed.
-  :raises: :class:`TypeError`
-  """
-  parsed_field_list = []
-
-  default_values = []
-  for maybe_decl in field_decls:
-    parsed_decl = DatatypeFieldDecl.parse(maybe_decl)
-    # After the first argument with a default value, the rest (rightwards) must each have a default
-    # as well.
-    if default_values:
-      if not parsed_decl.has_default_value:
-        raise DatatypeFieldDecl.FieldDeclarationError(
-          "datatype field declaration {!r} (parsed into {!r}) must have a default value, "
-          "because it follows a declaration with a default value in the field declarations "
-          "{!r} (the preceding parsed arguments were: {!r})."
-          .format(maybe_decl, parsed_decl, field_decls, parsed_field_list))
-      else:
-        default_values.append(parsed_decl.default_value)
-    elif parsed_decl.has_default_value:
-      default_values.append(parsed_decl.default_value)
-    # namedtuple() already checks field name uniqueness, so we defer to it checking that here.
-    parsed_field_list.append(parsed_decl)
-
-  if not superclass_name:
-    superclass_name = '_anonymous_namedtuple_subclass'
-
-  field_name_list = [p.field_name for p in parsed_field_list]
-
-  namedtuple_cls = namedtuple(superclass_name, field_name_list, **kwargs)
-
-  if default_values:
-    namedtuple_cls.__new__.__defaults__ = tuple(default_values)
-
-  # Now we know that the elements of `field_name_list` (the field names) are unique, because the
-  # namedtuple() constructor will have ensured that.
-  ordered_fields_by_name = OrderedDict((p.field_name, p) for p in parsed_field_list)
-
-  class DataType(namedtuple_cls):
-    @classmethod
-    def make_type_error(cls, msg, *args, **kwargs):
-      return TypeCheckError(cls.__name__, msg, *args, **kwargs)
-
-    @classmethod
-    def _validate_fields(cls, this_object, allow_coercion):
-      arg_check_error_messages = []
-      updated_value_dict = {}
-
-      for p in parsed_field_list:
-        cur_field_constraint = p.type_constraint
-        if cur_field_constraint is None:
-          continue
-
-        cur_field_name = p.field_name
-        cur_field_value = getattr(this_object, cur_field_name)
-
-        try:
-          maybe_new_value = cur_field_constraint.validate_satisfied_by(cur_field_value)
-          if allow_coercion and (maybe_new_value is not None):
-            updated_value_dict[cur_field_name] = maybe_new_value
-
-        except TypeConstraintError as e:
-          arg_check_error_messages.append(
-            "field '{name}' was invalid: {err}"
-            .format(name=cur_field_name, err=str(e)))
-
-      if arg_check_error_messages:
-        raise cls.make_type_error('\n'.join(arg_check_error_messages))
-
-      # NB: This relies on the behavior of copy() that when no keyword arguments are provided, it
-      # returns the exact original object, which is safe as long as fields are immutable.
-      # We also rely on the fact that copy() won't call DataType.__new__() directly, only the
-      # supertype's __new__ method, to avoid unbounded mutual recursion.
-      return this_object.copy(**updated_value_dict)
-
-    def __new__(cls, *args, **kwargs):
-      # TODO: Ideally we could execute this exactly once per `cls` but it should be a
-      # relatively cheap check.
-      if not hasattr(cls.__eq__, '_eq_override_canary'):
-        raise cls.make_type_error('Should not override __eq__.')
-
-      try:
-        this_object = super(DataType, cls).__new__(cls, *args, **kwargs)
-      except TypeError as e:
-        raise cls.make_type_error(str(e), e)
-
-      return cls._validate_fields(this_object, allow_coercion=True)
-
-    def __eq__(self, other):
-      if self is other:
-        return True
-
-      # Compare types and fields.
-      if type(self) != type(other):
-        return False
-      # Explicitly return super.__eq__'s value in case super returns NotImplemented
-      return super(DataType, self).__eq__(other)
-    # We define an attribute on the `cls` level definition of `__eq__` that will allow us to detect
-    # that it has been overridden.
-    __eq__._eq_override_canary = None
-
-    def __ne__(self, other):
-      return not (self == other)
-
-    def __hash__(self):
-      return super(DataType, self).__hash__()
-
-    # NB: As datatype is not iterable, we need to override both __iter__ and all of the
-    # namedtuple methods that expect self to be iterable.
-    def __iter__(self):
-      raise TypeError("'{}' object is not iterable".format(type(self).__name__))
-
-    def _super_iter(self):
-      return super(DataType, self).__iter__()
-
-    def _asdict(self):
-      '''Return a new OrderedDict which maps field names to their values'''
-      return OrderedDict(zip(self._fields, self._super_iter()))
-
-    @memoized_classproperty
-    def _supertype_keyword_only_cached_constructor(cls):
-      def ctor(**kw):
-        return super(DataType, cls).__new__(cls, **kw)
-      return ctor
-
-    def _replace(self, **kwds):
-      '''Return a new datatype object replacing specified fields with new values'''
-      # TODO: ???/explain
-      if not kwds:
-        return self
-
-      field_dict = self._asdict()
-
-      arg_check_error_messages = []
-      for cur_field_name, cur_field_value in kwds.items():
-        try:
-          cur_field_decl = ordered_fields_by_name[cur_field_name]
-          cur_constraint = cur_field_decl.type_constraint
-          if cur_constraint:
-            maybe_new_value = cur_constraint.validate_satisfied_by(cur_field_value)
-            if maybe_new_value is not None:
-              cur_field_value = maybe_new_value
-
-          field_dict[cur_field_name] = cur_field_value
-        except KeyError as e:
-          arg_check_error_messages.append(
-            "Field '{}' was not recognized: {}({})."
-            .format(cur_field_name, type(e).__name__, e))
-        except TypeConstraintError as e:
-          arg_check_error_messages.append(
-            "Type checking error for field '{}': {}"
-            .format(cur_field_name, str(e)))
-
-      if arg_check_error_messages:
-        msg = (
-          "Replacing fields {kw!r} of object {obj!r} failed:\n{errs}"
-          .format(
-            kw=kwds,
-            obj=self,
-            errs='\n'.join(arg_check_error_messages)))
-        raise self.make_type_error(msg)
-
-      return self._supertype_keyword_only_cached_constructor(**field_dict)
-
-    def copy(self, **kwargs):
-      """???/made into its own method for better error messages (with the method name in them)"""
-      return self._replace(**kwargs)
-
-    # NB: it is *not* recommended to rely on the ordering of the tuple returned by this method.
-    def __getnewargs__(self):
-      '''Return self as a plain tuple.  Used by copy and pickle.'''
-      return tuple(self._super_iter())
-
-    def __repr__(self):
-      args_formatted = []
-      for field_name in ordered_fields_by_name.keys():
-        field_value = getattr(self, field_name)
-        args_formatted.append("{}={!r}".format(field_name, field_value))
-      return '{class_name}({args_joined})'.format(
-        class_name=type(self).__name__,
-        args_joined=', '.join(args_formatted))
-
-    def __str__(self):
-      elements_formatted = []
-      for field_name, decl_for_field in ordered_fields_by_name.items():
-        type_constraint_for_field = decl_for_field.type_constraint
-        field_value = getattr(self, field_name)
-        if not type_constraint_for_field:
-          elements_formatted.append(
-            # TODO: consider using the repr of arguments in this method.
-            "{field_name}={field_value}"
-            .format(field_name=field_name,
-                    field_value=field_value))
-        else:
-          elements_formatted.append(
-            "{field_name}<{type_constraint}>={field_value}"
-            .format(field_name=field_name,
-                    type_constraint=decl_for_field.type_constraint,
-                    field_value=field_value))
-      return '{class_name}({typed_tagged_elements})'.format(
-        class_name=type(self).__name__,
-        typed_tagged_elements=', '.join(elements_formatted))
-
-  # Return a new type with the given name, inheriting from the DataType class
-  # just defined, with an empty class body.
-  try:  # Python3
-    return type(superclass_name, (DataType,), {})
-  except TypeError:  # Python2
-    return type(superclass_name.encode('utf-8'), (DataType,), {})
-
-
-def enum(field_name, all_values):
-  """A datatype which can take on a finite set of values. This method is experimental and unstable.
-
-  Any enum subclass can be constructed with its create() classmethod. This method will use the first
-  element of `all_values` as the enum value if none is specified.
-
-  :param field_name: A string used as the field for the datatype. Note that enum does not yet
-                     support type checking as with datatype.
-  :param all_values: An iterable of objects representing all possible values for the enum.
-                     NB: `all_values` must be a finite, non-empty iterable with unique values!
-  """
-
-  # This call to list() will eagerly evaluate any `all_values` which would otherwise be lazy, such
-  # as a generator.
-  all_values_realized = list(all_values)
-  # `OrderedSet` maintains the order of the input iterable, but is faster to check membership.
-  allowed_values_set = OrderedSet(all_values_realized)
-
-  if len(allowed_values_set) < len(all_values_realized):
-    raise ValueError("When converting all_values ({}) to a set, at least one duplicate "
-                     "was detected. The unique elements of all_values were: {}."
-                     .format(all_values_realized, allowed_values_set))
-
-  class ChoiceDatatype(datatype([field_name])):
-    allowed_values = allowed_values_set
-    default_value = next(iter(allowed_values))
-
-    @memoized_classproperty
-    def _singletons(cls):
-      """Generate memoized instances of this enum wrapping each of this enum's allowed values."""
-      return { value: cls(value) for value in cls.allowed_values }
-
-    @classmethod
-    def _check_value(cls, value):
-      if value not in cls.allowed_values:
-        raise cls.make_type_error(
-          "Value {!r} for '{}' must be one of: {!r}."
-          .format(value, field_name, cls.allowed_values))
-
-    @classmethod
-    def create(cls, value=None):
-      # If we get an instance of this enum class, just return it. This means you can call .create()
-      # on None, an allowed value for the enum, or an existing instance of the enum.
-      if isinstance(value, cls):
-        return value
-
-      # Providing an explicit value that is not None will *not* use the default value!
-      if value is None:
-        value = cls.default_value
-
-      # We actually circumvent the constructor in this method due to the cls._singletons
-      # memoized_classproperty, but we want to raise the same error, so we move checking into a
-      # common method.
-      cls._check_value(value)
-
-      return cls._singletons[value]
-
-    def __new__(cls, *args, **kwargs):
-      this_object = super(ChoiceDatatype, cls).__new__(cls, *args, **kwargs)
-
-      field_value = getattr(this_object, field_name)
-
-      cls._check_value(field_value)
-
-      return this_object
-
-    @memoized_classmethod
-    def convert_type_constraint(cls, *args, **kwargs):
-      return convert(type_spec=Exactly(cls), create_func=cls.create, *args, **kwargs)
-
-  return ChoiceDatatype
-
-
-class TypedDatatypeClassConstructionError(Exception):
-
-  # TODO: make some wrapper exception class to make this kind of
-  # prefixing easy (maybe using a class field format string?).
-  def __init__(self, type_name, msg, *args, **kwargs):
-    full_msg =  "error: while trying to generate typed datatype {}: {}".format(
-      type_name, msg)
-    super(TypedDatatypeClassConstructionError, self).__init__(
-      full_msg, *args, **kwargs)
-
-
-class TypedDatatypeInstanceConstructionError(TypeError):
-
-  def __init__(self, type_name, msg, *args, **kwargs):
-    full_msg = "error: in constructor of type {}: {}".format(type_name, msg)
-    super(TypedDatatypeInstanceConstructionError, self).__init__(
-      full_msg, *args, **kwargs)
-
-
-class TypeCheckError(TypedDatatypeInstanceConstructionError):
-
-  def __init__(self, type_name, msg, *args, **kwargs):
-    formatted_msg = "type check error:\n{}".format(msg)
-    super(TypeCheckError, self).__init__(
-      type_name, formatted_msg, *args, **kwargs)
-
-
 class TypeConstraintError(TypeError):
   """Indicates a :class:`TypeConstraint` violation."""
 
@@ -581,13 +23,22 @@ class TypeConstraintError(TypeError):
 class TypeConstraint(AbstractClass):
   """Represents a type constraint.
 
-  Not intended for direct use; instead, use one of :class:`SuperclassesOf`, :class:`Exact` or
+  Not intended for direct use; instead, use one of :class:`SuperclassesOf`, :class:`Exactly`, or
   :class:`SubclassesOf`.
+
+  Override `has_default_value` and `default_value` to provide a default value for the type
+  constraint, as specified in the docstring for :class:`DatatypeFieldDecl`. If `has_default_value`
+  is False, `default_value` need not be defined.
   """
 
-  # TODO: ???
   has_default_value = False
-  default_value = None
+
+  @classproperty
+  def default_value(cls):
+    raise NotImplementedError(
+      "Base type constraint class '{}' did not define a `default_value` "
+      "-- is `has_default_value` True?"
+      .format(cls.__name__))
 
   def __init__(self, *types, **kwargs):
     """Creates a type constraint centered around the given types.
@@ -705,55 +156,659 @@ class SubclassesOf(TypeConstraint):
     return issubclass(obj_type, self._types)
 
 
-def convert_default(type_spec, **kwargs):
-  """???/makes it easier to do the common python pattern of default=None, then checking for it."""
-  assert(isinstance(type_spec, type))
+class DatatypeFieldDecl(namedtuple('DatatypeFieldDecl', [
+    'field_name',
+    'type_constraint',
+    'default_value',
+    'has_default_value',
+])):
+  """Description of a field, used in calls to datatype().
 
-  if 'default_value' in kwargs:
-    default_value = kwargs.pop('default_value')
-  else:
-    default_value = type_spec()
+  All elements of the list passed to datatype() are parsed into instances of this class by the
+  parse() classmethod.
 
-  assume_none_default = kwargs.pop('assume_none_default', True)
-  assert(isinstance(assume_none_default, bool))
+  `default_value` is only relevant if `has_default_value` is True.
+  """
 
-  if assume_none_default:
-    default_value_to_use = None
-    def create_func(value=None):
+  class FieldDeclarationError(TypeError): pass
+
+  def __new__(cls, field_name, type_constraint=None, **kwargs):
+    """Parse the arguments into a type constraint and a default value.
+
+    If the argument `default_value` is provided (only by keyword), `has_default_value` is set to
+    True, and the argument `default_value` is used as this field's `default_value`. If
+    `default_value` is not provided (as when parsing a field declaration from a tuple), but
+    `type_constraint` is a TypeConstraint with the property `has_default_value` evaluating to True,
+    then `has_default_value` is set to True, and the `type_constraint`'s `default_value` field is
+    used as this field's `default_value`.
+
+    If a `default_value` is provided by either of the above methods, its type is checked here with
+    `type_constraint.validate_satisfied_by(default_value)`, with any type checking errors wrapped in
+    :class:`DatatypeFieldDecl.FieldDeclarationError`. See the documentation for
+    `TypeConstraint.validate_satisfied_by()` for more information on how this is done.
+
+    :param str field_name: Name of the attribute to access the field at.
+    :param type_constraint: If None, the field's type is never checked. If `type_constraint` is a
+                            type, it is converted into a type constraint of `Exactly(<type>)`. If
+                            `type_constraint` is already a `TypeConstraint`, just use that.
+    :param default_value: This argument may only be provided by keyword. See above for details on
+                          how this argument is intepreted.
+    :raises: :class:`DatatypeFieldDecl.FieldDeclarationError` if the field declaration was invalid.
+    """
+    if not isinstance(field_name, text_type):
+      raise cls.FieldDeclarationError(
+        "field_name must be an instance of {!r}, but was instead {!r} (type {!r})."
+        .format(text_type, field_name, type(field_name).__name__))
+
+    # If `default_value` was provided as a keyword argument, get its value and set
+    # `has_default_value`.
+    if 'default_value' in kwargs:
+      has_default_value = True
+      default_value = kwargs.pop('default_value')
+    else:
+      has_default_value = False
+      default_value = None
+    if kwargs:
+      raise cls.FieldDeclarationError("Unrecognized keyword arguments: {!r}".format(kwargs))
+
+    # Parse the `type_constraint` field, and get a `default_value` from it if provided and if
+    # `default_value` was not provided as a keyword argument to this constructor.
+    if type_constraint is None:
+      pass
+    elif isinstance(type_constraint, TypeConstraint):
+      if not has_default_value and type_constraint.has_default_value:
+        has_default_value = True
+        default_value = type_constraint.default_value
+    elif isinstance(type_constraint, type):
+      type_constraint = Exactly(type_constraint)
+    else:
+      raise cls.FieldDeclarationError(
+        "type_constraint for field '{field}' must be an instance of `type` or `TypeConstraint`, "
+        "or else None, but was instead {value!r} (type {the_type!r})."
+        .format(field=field_name, value=type_constraint, the_type=type(type_constraint).__name__))
+
+    # The default value for the field must obey the field's type constraint, if both are
+    # provided. This will error at datatype class creation time if not.
+    if has_default_value and (type_constraint is not None):
+      try:
+        # NB: `TypeConstraint.validate_satisfied_by()` by can change the value of the object.
+        maybe_new_default_value = type_constraint.validate_satisfied_by(default_value)
+        if maybe_new_default_value is not None:
+          default_value = maybe_new_default_value
+      except TypeConstraintError as e:
+        raise cls.FieldDeclarationError(
+          "default_value {default_value!r} for the field '{field_name}' must satisfy the provided "
+          "type_constraint {tc!r}. {err}"
+          .format(default_value=default_value,
+                  field_name=field_name,
+                  tc=type_constraint,
+                  err=str(e)),
+          e)
+
+    return super(DatatypeFieldDecl, cls).__new__(
+      cls, field_name, type_constraint, default_value, has_default_value)
+
+  @classmethod
+  def _parse_tuple(cls, tuple_decl):
+    """Interpret the elements of a tuple (by position) into a field declaration.
+
+    Currently, we try to accept a syntax similar to `typing.NamedTuple` from Python 3 allows for
+    type-annotated fields, to allow for easy interoperability as we move to Python 3. Currently, we
+    accept a tuple with 1 or 2 elements, informally denoted by:
+
+    ('field_name': str, type?: (TypeConstraint | type))
+    """
+    type_spec = None
+    remaining_decl_elements = deque(tuple_decl)
+
+    if not bool(remaining_decl_elements):
+      raise ValueError("Empty tuple {!r} passed to datatype().".format(tuple_decl))
+
+    field_name = text_type(remaining_decl_elements.popleft())
+
+    # A type constraint may optionally be provided, either as a TypeConstraint instance, or as a
+    # type, which is shorthand for Exactly(<type>).
+    if bool(remaining_decl_elements):
+      type_spec = remaining_decl_elements.popleft()
+
+    if bool(remaining_decl_elements):
+      raise ValueError(
+        "There are too many elements of the tuple {!r} passed to datatype(). "
+        "The tuple must have between 1 and 2 elements. The remaining elements were: {!r}."
+        .format(tuple_decl, list(remaining_decl_elements)))
+
+    return cls(field_name=field_name, type_constraint=type_spec)
+
+  @classmethod
+  def parse(cls, maybe_decl):
+    """Interpret `maybe_decl` into a datatype field declaration.
+
+    `maybe_decl` may be:
+    1. 'field_name' => an untyped field named 'field_name'.
+    2. ('field_name',) => an untyped field named 'field_name'.
+    3. ('field_name', type_constraint) => a field named 'field_name' with the given type constraint.
+    4. an instance of this class => return `maybe_decl`.
+
+    The type of `maybe_decl` can be informally denoted by:
+
+    str | DatatypeFieldDecl | (field_name: str, type?: (TypeConstraint | type))
+
+    :raises: :class:`DatatypeFieldDecl.FieldDeclarationError`
+    """
+    if isinstance(maybe_decl, cls):
+      # If already a DatatypeFieldDecl instance, just return it.
+      parsed_decl = maybe_decl
+    elif isinstance(maybe_decl, text_type):
+      # A string alone is interpreted as an untyped field of that name.
+      parsed_decl = cls(field_name=maybe_decl)
+    elif isinstance(maybe_decl, tuple):
+      # A tuple may be provided, whose elements are interpreted into a DatatypeFieldDecl.
+      parsed_decl = cls._parse_tuple(maybe_decl)
+    else:
+      # Unrecognized input.
+      raise cls.FieldDeclarationError(
+        "The field declaration {value!r} must be a {str_type!r}, tuple, "
+        "or {this_type!r} instance, but its type was: {the_type!r}."
+        .format(value=maybe_decl,
+                str_type=text_type,
+                this_type=cls.__name__,
+                the_type=type(maybe_decl).__name__))
+
+    return parsed_decl
+
+
+class TypedDatatypeClassConstructionError(TypeError):
+
+  # TODO: make some wrapper exception class to make this kind of
+  # prefixing easy (maybe using a class field format string?).
+  def __init__(self, type_name, msg, *args, **kwargs):
+    full_msg =  "error: while trying to generate typed datatype {}: {}".format(
+      type_name, msg)
+    super(TypedDatatypeClassConstructionError, self).__init__(
+      full_msg, *args, **kwargs)
+
+
+class TypedDatatypeInstanceConstructionError(TypeError):
+
+  def __init__(self, type_name, msg, *args, **kwargs):
+    full_msg = "error: in constructor of type {}: {}".format(type_name, msg)
+    super(TypedDatatypeInstanceConstructionError, self).__init__(
+      full_msg, *args, **kwargs)
+
+
+class TypeCheckError(TypedDatatypeInstanceConstructionError):
+
+  def __init__(self, type_name, msg, *args, **kwargs):
+    formatted_msg = "type check error:\n{}".format(msg)
+    super(TypeCheckError, self).__init__(
+      type_name, formatted_msg, *args, **kwargs)
+
+
+# TODO: when we can restrict the python version to >= 3.6 in our python 3 shard, we can use the
+# backported dataclasses library as a backend to take advantage of cool python 3 things like type
+# hints (https://github.com/ericvsmith/dataclasses). Python 3.7+ provides dataclasses in the stdlib.
+def datatype(field_decls, superclass_name=None, **kwargs):
+  """A wrapper for `namedtuple` that accounts for the type of the object in equality.
+
+  Field declarations can be a string, which declares a field with that name and
+  no type checking. Field declarations can also be a tuple `('field_name',
+  field_type)`, which declares a field named `field_name` which is type-checked
+  at construction. If a type is given, the value provided to the constructor for
+  that field must be exactly that type (i.e. `type(x) == field_type`), and not
+  e.g. a subclass.
+
+  :param field_decls: Iterable of field declarations.
+  :return: A type object which can then be subclassed.
+  :raises: :class:`TypeError`
+  """
+  parsed_field_list = []
+
+  default_values = []
+  for maybe_decl in field_decls:
+    parsed_decl = DatatypeFieldDecl.parse(maybe_decl)
+    # After the first argument with a default value, the rest (rightwards) must each have a default
+    # as well.
+    if default_values:
+      if not parsed_decl.has_default_value:
+        raise DatatypeFieldDecl.FieldDeclarationError(
+          "datatype field declaration {!r} (parsed into {!r}) must have a default value, "
+          "because it follows a declaration with a default value in the field declarations "
+          "{!r} (the preceding parsed arguments were: {!r})."
+          .format(maybe_decl, parsed_decl, field_decls, parsed_field_list))
+      else:
+        default_values.append(parsed_decl.default_value)
+    elif parsed_decl.has_default_value:
+      default_values.append(parsed_decl.default_value)
+    # namedtuple() already checks field name uniqueness, so we defer to it checking that here.
+    parsed_field_list.append(parsed_decl)
+
+  if not superclass_name:
+    superclass_name = '_anonymous_namedtuple_subclass'
+
+  field_name_list = [p.field_name for p in parsed_field_list]
+
+  namedtuple_cls = namedtuple(superclass_name, field_name_list, **kwargs)
+
+  if default_values:
+    namedtuple_cls.__new__.__defaults__ = tuple(default_values)
+
+  # Now we know that the elements of `field_name_list` (the field names) are unique, because the
+  # namedtuple() constructor will have ensured that.
+  ordered_fields_by_name = OrderedDict((p.field_name, p) for p in parsed_field_list)
+
+  class DataType(namedtuple_cls):
+    @classmethod
+    def make_type_error(cls, msg, *args, **kwargs):
+      return TypeCheckError(cls.__name__, msg, *args, **kwargs)
+
+    @classmethod
+    def _validate_fields(cls, this_object, allow_coercion):
+      """Validate the fields of the object satisfy any declared type constraints.
+
+      If `allow_coercion` is True, the values of some of the fields may be modified -- see the
+      docstring for `TypeConstraint.validate_satisfied_by()` for more info.
+
+      NB: This relies on the behavior of copy() that when no keyword arguments are provided, it
+      returns the exact original object, which is safe as long as fields are immutable.
+      We also rely on the fact that copy() won't call DataType.__new__() directly, only the
+      supertype's __new__ method, to avoid unbounded mutual recursion. See the documentation for the
+      _replace() method.
+      """
+      arg_check_error_messages = []
+      updated_value_dict = {}
+
+      for p in parsed_field_list:
+        cur_field_constraint = p.type_constraint
+        if cur_field_constraint is None:
+          continue
+
+        cur_field_name = p.field_name
+        cur_field_value = getattr(this_object, cur_field_name)
+
+        try:
+          maybe_new_value = cur_field_constraint.validate_satisfied_by(cur_field_value)
+          if allow_coercion and (maybe_new_value is not None):
+            updated_value_dict[cur_field_name] = maybe_new_value
+        except TypeConstraintError as e:
+          arg_check_error_messages.append(
+            "field '{name}' was invalid: {err}"
+            .format(name=cur_field_name, err=str(e)))
+
+      if arg_check_error_messages:
+        raise cls.make_type_error('\n'.join(arg_check_error_messages))
+
+      return this_object.copy(**updated_value_dict)
+
+    @memoized_classmethod
+    def _eq_canary_check(cls):
+      """Check whether __eq__ has been overridden, memoized to once per `cls`."""
+      if not hasattr(cls.__eq__, '_eq_override_canary'):
+        raise cls.make_type_error('Should not override __eq__.')
+      return None
+
+    def __new__(cls, *args, **kwargs):
+      cls._eq_canary_check()
+
+      try:
+        this_object = super(DataType, cls).__new__(cls, *args, **kwargs)
+      except TypeError as e:
+        raise cls.make_type_error(str(e), e)
+
+      return cls._validate_fields(this_object, allow_coercion=True)
+
+    def __eq__(self, other):
+      if self is other:
+        return True
+
+      # Compare types and fields.
+      if type(self) != type(other):
+        return False
+      # Explicitly return super.__eq__'s value in case super returns NotImplemented
+      return super(DataType, self).__eq__(other)
+    # We define an attribute on the `cls` level definition of `__eq__` that will allow us to detect
+    # that it has been overridden.
+    __eq__._eq_override_canary = None
+
+    def __ne__(self, other):
+      return not (self == other)
+
+    def __hash__(self):
+      return super(DataType, self).__hash__()
+
+    # NB: As datatype is not iterable, we need to override both __iter__ and all of the
+    # namedtuple methods that expect self to be iterable.
+    def __iter__(self):
+      raise TypeError("'{}' object is not iterable".format(type(self).__name__))
+
+    def _super_iter(self):
+      return super(DataType, self).__iter__()
+
+    def _asdict(self):
+      '''Return a new OrderedDict which maps field names to their values'''
+      return OrderedDict(zip(self._fields, self._super_iter()))
+
+    @memoized_classproperty
+    def _supertype_keyword_only_cached_constructor(cls):
+      """This method is less of an optimization and more to avoid mistakes calling super()."""
+      def ctor(**kw):
+        return super(DataType, cls).__new__(cls, **kw)
+      return ctor
+
+    def _replace(self, **kwds):
+      '''Return a new datatype object replacing specified fields with new values.
+
+      This method upholds 2 contracts:
+      1. If no keyword arguments are provided, return the original object.
+      2. Do not call __new__() -- the parent class's __new__() is used instead (skipping e.g. type
+         checks, which are done in this method by hand).
+
+      These two contracts allow it to be used in our __new__() override, and to support type
+      constraints which may modify their subject using `validate_satisfied_by()` (e.g. `convert()`)
+      without unbounded mutual recursion with the __new__() method.
+      '''
+      if not kwds:
+        return self
+
+      field_dict = self._asdict()
+
+      arg_check_error_messages = []
+      for cur_field_name, cur_field_value in kwds.items():
+        try:
+          cur_field_decl = ordered_fields_by_name[cur_field_name]
+          cur_constraint = cur_field_decl.type_constraint
+          if cur_constraint:
+            maybe_new_value = cur_constraint.validate_satisfied_by(cur_field_value)
+            if maybe_new_value is not None:
+              cur_field_value = maybe_new_value
+
+          field_dict[cur_field_name] = cur_field_value
+        except KeyError as e:
+          arg_check_error_messages.append(
+            "Field '{}' was not recognized: {}({})."
+            .format(cur_field_name, type(e).__name__, e))
+        except TypeConstraintError as e:
+          arg_check_error_messages.append(
+            "Type checking error for field '{}': {}"
+            .format(cur_field_name, str(e)))
+
+      if arg_check_error_messages:
+        msg = (
+          "Replacing fields {kw!r} of object {obj!r} failed:\n{errs}"
+          .format(
+            kw=kwds,
+            obj=self,
+            errs='\n'.join(arg_check_error_messages)))
+        raise self.make_type_error(msg)
+
+      return self._supertype_keyword_only_cached_constructor(**field_dict)
+
+    def copy(self, **kwargs):
+      """Return the result of `self._replace(**kwargs)`.
+
+      This method stub makes error messages provide this method's name, instead of pointing to the
+      private `_replace()`.
+
+      We intentionally accept only keyword arguments to make copy() calls in Python code consuming
+      the datatype remain valid if the datatype's definition is updated, unless a field is removed
+      (which fails loudly and quickly with an unknown keyword argument error).
+      """
+      return self._replace(**kwargs)
+
+    # NB: it is *not* recommended to rely on the ordering of the tuple returned by this
+    # method. Prefer to access fields by name, as well as construct them by name where that is more
+    # clear.
+    def __getnewargs__(self):
+      '''Return self as a plain tuple.  Used by copy and pickle.'''
+      return tuple(self._super_iter())
+
+    def __repr__(self):
+      args_formatted = []
+      for field_name in ordered_fields_by_name.keys():
+        field_value = getattr(self, field_name)
+        args_formatted.append("{}={!r}".format(field_name, field_value))
+      return '{class_name}({args_joined})'.format(
+        class_name=type(self).__name__,
+        args_joined=', '.join(args_formatted))
+
+    def __str__(self):
+      elements_formatted = []
+      for field_name, decl_for_field in ordered_fields_by_name.items():
+        type_constraint_for_field = decl_for_field.type_constraint
+        field_value = getattr(self, field_name)
+        if not type_constraint_for_field:
+          elements_formatted.append(
+            # TODO: consider using the repr of arguments in this method.
+            "{field_name}={field_value}"
+            .format(field_name=field_name,
+                    field_value=field_value))
+        else:
+          elements_formatted.append(
+            "{field_name}<{type_constraint}>={field_value}"
+            .format(field_name=field_name,
+                    type_constraint=decl_for_field.type_constraint,
+                    field_value=field_value))
+      return '{class_name}({typed_tagged_elements})'.format(
+        class_name=type(self).__name__,
+        typed_tagged_elements=', '.join(elements_formatted))
+
+  # Return a new type with the given name, inheriting from the DataType class
+  # just defined, with an empty class body.
+  try:  # Python3
+    return type(superclass_name, (DataType,), {})
+  except TypeError:  # Python2
+    return type(superclass_name.encode('utf-8'), (DataType,), {})
+
+
+def enum(field_name, all_values):
+  """A datatype which can take on a finite set of values. This method is experimental and unstable.
+
+  Any enum subclass can be constructed with its create() classmethod. This method will use the first
+  element of `all_values` as the enum value if none is specified.
+
+  :param field_name: A string used as the field for the datatype. Note that enum does not yet
+                     support type checking as with datatype.
+  :param all_values: An iterable of objects representing all possible values for the enum.
+                     NB: `all_values` must be a finite, non-empty iterable with unique values!
+  """
+
+  # This call to list() will eagerly evaluate any `all_values` which would otherwise be lazy, such
+  # as a generator.
+  all_values_realized = list(all_values)
+  # `OrderedSet` maintains the order of the input iterable, but is faster to check membership.
+  allowed_values_set = OrderedSet(all_values_realized)
+
+  if len(allowed_values_set) < len(all_values_realized):
+    raise ValueError("When converting all_values ({}) to a set, at least one duplicate "
+                     "was detected. The unique elements of all_values were: {}."
+                     .format(all_values_realized, allowed_values_set))
+
+  class ChoiceDatatype(datatype([field_name])):
+    allowed_values = allowed_values_set
+    default_value = next(iter(allowed_values))
+
+    @memoized_classproperty
+    def _singletons(cls):
+      """Generate memoized instances of this enum wrapping each of this enum's allowed values."""
+      return { value: cls(value) for value in cls.allowed_values }
+
+    @classmethod
+    def _check_value(cls, value):
+      if value not in cls.allowed_values:
+        raise cls.make_type_error(
+          "Value {!r} for '{}' must be one of: {!r}."
+          .format(value, field_name, cls.allowed_values))
+
+    @classmethod
+    def create(cls, value=None):
+      # If we get an instance of this enum class, just return it. This means you can call .create()
+      # on None, an allowed value for the enum, or an existing instance of the enum.
+      if isinstance(value, cls):
+        return value
+
+      # Providing an explicit value that is not None will *not* use the default value!
       if value is None:
-        return default_value
-      return type_spec(value)
-  else:
-    create_func = type_spec
-    default_value_to_use = default_value
+        value = cls.default_value
 
-  type_constraint_base_class = kwargs.pop('type_constraint_base_class', SubclassesOf)
-  assert(issubclass(type_constraint_base_class, TypeConstraint))
+      # We actually circumvent the constructor in this method due to the cls._singletons
+      # memoized_classproperty, but we want to raise the same error, so we move checking into a
+      # common method.
+      cls._check_value(value)
 
-  class ConvertDefault(type_constraint_base_class):
+      return cls._singletons[value]
+
+    def __new__(cls, *args, **kwargs):
+      this_object = super(ChoiceDatatype, cls).__new__(cls, *args, **kwargs)
+
+      field_value = getattr(this_object, field_name)
+
+      cls._check_value(field_value)
+
+      return this_object
+
+    @memoized_classmethod
+    def convert_type_constraint(cls, *args, **kwargs):
+      return convert(type_spec=Exactly(cls), create_func=cls.create, *args, **kwargs)
+
+  return ChoiceDatatype
+
+
+class AnyClass(TypeConstraint):
+  def __init__(self, **kwargs):
+    self._types = ()
+    self._desc = kwargs.get('description', None)
+
+  def __repr__(self):
+    return 'AnyClass()'
+
+  def satisfied_by_type(self, _obj_type):
+    return True
+
+
+_none_type = type(None)
+
+
+def _parse_type_constraint(type_constraint):
+  if type_constraint is None:
+    type_constraint = AnyClass()
+  elif isinstance(type_constraint, type):
+    type_constraint = Exactly(type_constraint)
+  elif not isinstance(type_constraint, TypeConstraint):
+    raise TypeError("type_constraint must be a `type`, a `TypeConstraint`, or None: "
+                    "was {!r} (type {!r})."
+                    .format(type_constraint, type(type_constraint).__name__))
+
+  return type_constraint
+
+
+def optional(type_constraint=None, allow_default=True):
+  """Return a TypeConstraint instance matching `type_constraint`, or the value None.
+
+  If called with no arguments, this returns a type constraint which accepts any value as input, and
+  has the default value None.
+  """
+  orig_repr = (
+    "optional(type_constraint={type_constraint!r}, allow_default={allow_default!r})"
+    .format(type_constraint=type_constraint, allow_default=allow_default))
+
+  type_constraint = _parse_type_constraint(type_constraint)
+  base_constraint_type = type(type_constraint)
+  class ConstraintAlsoAcceptingNone(base_constraint_type):
+
     has_default_value = True
-    default_value = default_value_to_use
+    default_value = None
 
     def __init__(self):
-      super(ConvertDefault, self).__init__(type_spec)
+      self._types = (_none_type,) + type_constraint._types
+      self._desc = type_constraint._desc
+
+    def __repr__(self):
+      return orig_repr
+
+    @memoized_classproperty
+    def _variance_symbol(cls):
+      base = super(ConstraintAlsoAcceptingNone, cls)._variance_symbol
+      return '{}?'.format(base)
+
+    def satisfied_by_type(self, obj_type):
+      if obj_type is _none_type:
+        return True
+      return type_constraint.satisfied_by_type(obj_type)
+
+    def satisfied_by(self, obj):
+      return (obj is None) or type_constraint.satisfied_by(obj)
 
     def validate_satisfied_by(self, obj):
-      if self.satisfied_by(obj):
+      if obj is None:
+        return None
+      return type_constraint.validate_satisfied_by(obj)
+
+  return ConstraintAlsoAcceptingNone()
+
+
+def non_empty(type_constraint=None, predicate=bool):
+  """Return a TypeConstraint instance matching `type_constraint`, if `predicate` returns True.
+
+  If called with no arguments, returns a TypeConstraint instance matching any object for which
+  bool() returns True.
+  """
+  type_constraint = _parse_type_constraint(type_constraint)
+  base_constraint_type = type(type_constraint)
+  class ConstraintCheckingEmpty(base_constraint_type):
+    has_default_value = False
+
+    def __init__(self):
+      self._types = type_constraint._types
+      self._desc = type_constraint._desc
+
+    @memoized_classproperty
+    def _variance_symbol(cls):
+      base = super(ConstraintCheckingEmpty, cls)._variance_symbol
+      return '{}!'.format(base)
+
+    def satisfied_by_type(self, obj_type):
+      return type_constraint.satisfied_by_type(obj_type)
+
+    def satisfied_by(self, obj):
+      return type_constraint.satisfied_by(obj) and predicate(obj)
+
+    def validate_satisfied_by(self, obj):
+      orig_obj = obj
+      return_none = True
+
+      maybe_new_obj = type_constraint.validate_satisfied_by(obj)
+      if maybe_new_obj is not None:
+        return_none = False
+        obj = maybe_new_obj
+
+      if not predicate(obj):
+        raise TypeConstraintError(
+          "value {!r} (with type '{}', from original object {!r}) "
+          "must be True when predicate {!r} is applied "
+          "in this type constraint: {!r}."
+          .format(obj, type(obj).__name__, orig_obj, predicate, self))
+
+      if return_none:
+        # The type check passed, and the object was unmodified.
         return None
       else:
-        return create_func(obj)
+        # The object was modified, and passed the type check and the predicate, so return it.
+        return obj
 
-  return ConvertDefault()
+  return ConstraintCheckingEmpty()
+
+
+def not_none(type_constraint=None):
+  """Shorthand for non_empty(), but where only the value None is empty."""
+  return non_empty(type_constraint=type_constraint, predicate=(lambda x: x is not None))
 
 
 def convert(type_spec, create_func=None, should_have_default=True):
   """???"""
   if not isinstance(should_have_default, bool):
-    raise TypeError('???')
+    raise TypeError("should_have_default must be a bool: was {!r} (type '{}')."
+                    .format(should_have_default, type(should_have_default).__name__))
 
-  if type_spec is None:
-    raise TypeError('???')
-  elif isinstance(type_spec, type):
+  if isinstance(type_spec, type):
     if not create_func:
       create_func = type_spec
     type_constraint = SubclassesOf(type_spec)
@@ -770,7 +825,10 @@ def convert(type_spec, create_func=None, should_have_default=True):
       raise ValueError('???/need a create_func with a TypeConstraint')
     type_constraint = type_spec
   else:
-    raise NotImplementedError('???')
+    raise TypeError(
+      "type_spec was unrecognized: must be a type, iterable of types, or a TypeConstraint. "
+      "type_spec was: {!r} (type '{}')."
+      .format(type_spec, type(type_spec).__name__))
 
   if should_have_default:
     if create_func:
@@ -818,18 +876,45 @@ def convert(type_spec, create_func=None, should_have_default=True):
   return Convert()
 
 
-class AnyClass(TypeConstraint):
-  _variance_symbol = '*'
+def convert_default(type_spec, **kwargs):
+  """???/makes it easier to do the common python pattern of default=None, then checking for it."""
+  assert(isinstance(type_spec, type))
 
-  def __init__(self, **kwargs):
-    self._types = ()
-    self._desc = kwargs.get('description', None)
+  if 'default_value' in kwargs:
+    default_value = kwargs.pop('default_value')
+  else:
+    default_value = type_spec()
 
-  def __repr__(self):
-    return 'AnyClass()'
+  assume_none_default = kwargs.pop('assume_none_default', True)
+  assert(isinstance(assume_none_default, bool))
 
-  def satisfied_by_type(self, _obj_type):
-    return True
+  if assume_none_default:
+    default_value_to_use = None
+    def create_func(value=None):
+      if value is None:
+        return default_value
+      return type_spec(value)
+  else:
+    create_func = type_spec
+    default_value_to_use = default_value
+
+  type_constraint_base_class = kwargs.pop('type_constraint_base_class', SubclassesOf)
+  assert(issubclass(type_constraint_base_class, TypeConstraint))
+
+  class ConvertDefault(type_constraint_base_class):
+    has_default_value = True
+    default_value = default_value_to_use
+
+    def __init__(self):
+      super(ConvertDefault, self).__init__(type_spec)
+
+    def validate_satisfied_by(self, obj):
+      if self.satisfied_by(obj):
+        return None
+      else:
+        return create_func(obj)
+
+  return ConvertDefault()
 
 
 class Collection(object):
