@@ -682,6 +682,8 @@ def enum(field_name, all_values):
 
 
 class AnyClass(TypeConstraint):
+  _variance_symbol = '*'
+
   def __init__(self, **kwargs):
     self._types = ()
     self._desc = kwargs.get('description', None)
@@ -749,8 +751,8 @@ def optional(type_constraint=None, allow_default=True):
 
     @memoized_classproperty
     def _variance_symbol(cls):
-      base = super(ConstraintAlsoAcceptingNone, cls)._variance_symbol
-      return '{}?'.format(base)
+      base = type_constraint._variance_symbol
+      return '?{}'.format(base)
 
     def satisfied_by_type(self, obj_type):
       if obj_type is _none_type:
@@ -791,8 +793,8 @@ def non_empty(type_constraint=None, predicate=bool):
 
     @memoized_classproperty
     def _variance_symbol(cls):
-      base = super(ConstraintCheckingEmpty, cls)._variance_symbol
-      return '{}!'.format(base)
+      base = type_constraint._variance_symbol
+      return '!{}'.format(base)
 
     def satisfied_by_type(self, obj_type):
       return type_constraint.satisfied_by_type(obj_type)
@@ -891,7 +893,7 @@ def convert(type_spec, create_func=None, should_have_default=True):
 
     @memoized_classproperty
     def _variance_symbol(cls):
-      base_sym = super(Convert, cls)._variance_symbol
+      base_sym = type_constraint._variance_symbol
       return '@{}'.format(base_sym)
 
     def __init__(self):
@@ -968,6 +970,8 @@ def convert_default(type_spec, **kwargs):
   class ConvertDefault(type_constraint_base_class):
     has_default_value = True
     default_value = default_value_to_use
+
+    _variance_symbol = '&'
 
     def __init__(self, **kwargs):
       super(ConvertDefault, self).__init__(type_spec, **kwargs)
