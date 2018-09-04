@@ -173,7 +173,10 @@ class AddressableDescriptor(object):
         return serializable_type(**value)
 
     try:
-      return type_constraint.validate_satisfied_by(value)
+      maybe_new_value = type_constraint.validate_satisfied_by(value)
+      if maybe_new_value is not None:
+        value = maybe_new_value
+      return value
     except TypeConstraintError as e:
       raise AddressableTypeValidationError(
         "The value for the {} attribute of {} was invalid"
@@ -192,7 +195,10 @@ class AddressableDescriptor(object):
       type_constraint = self._get_type_constraint(instance)
 
       try:
-        return type_constraint.validate_satisfied_by(resolved_value)
+        maybe_new_resolved_value = type_constraint.validate_satisfied_by(resolved_value)
+        if maybe_new_resolved_value is not None:
+          resolved_value = maybe_new_resolved_value
+        return resolved_value
       except TypeConstraintError as e:
         raise AddressableTypeValidationError(
           "The value resolved from {} for the {} property of {} was invalid"
