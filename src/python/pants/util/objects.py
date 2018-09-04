@@ -434,6 +434,10 @@ def datatype(field_decls, superclass_name=None, **kwargs):
           arg_check_error_messages.append(
             "field '{name}' was invalid: {err}"
             .format(name=cur_field_name, err=str(e)))
+        except TypeError as e:
+          arg_check_error_messages.append(
+            "Type error for field '{}': {}"
+            .format(cur_field_name, str(e)))
 
       if arg_check_error_messages:
         raise cls.make_type_error('\n'.join(arg_check_error_messages))
@@ -538,6 +542,10 @@ def datatype(field_decls, superclass_name=None, **kwargs):
         except TypeConstraintError as e:
           arg_check_error_messages.append(
             "Type checking error for field '{}': {}"
+            .format(cur_field_name, str(e)))
+        except TypeError as e:
+          arg_check_error_messages.append(
+            "Type error for field '{}': {}"
             .format(cur_field_name, str(e)))
 
       if arg_check_error_messages:
