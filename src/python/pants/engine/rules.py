@@ -17,8 +17,7 @@ from twitter.common.collections import OrderedSet
 
 from pants.engine.selectors import Get, type_or_constraint_repr
 from pants.util.meta import AbstractClass
-from pants.util.objects import (Exactly, SubclassesOf, TypeConstraint, convert, convert_default,
-                                datatype)
+from pants.util.objects import Exactly, convert, convert_default, datatype
 
 
 logger = logging.getLogger(__name__)
@@ -138,9 +137,7 @@ class Rule(AbstractClass):
 
 
 class TaskRule(datatype([
-    ('output_constraint', convert(SubclassesOf(TypeConstraint),
-                                  create_func=Exactly,
-                                  should_have_default=False)),
+    ('output_constraint', convert(Exactly, should_have_default=False)),
     ('input_selectors', convert(tuple, should_have_default=False)),
     'func',
     ('input_gets', convert_default(tuple)),
@@ -166,9 +163,7 @@ class TaskRule(datatype([
 
 
 class SingletonRule(datatype([
-    ('output_constraint', convert(SubclassesOf(TypeConstraint),
-                                  create_func=Exactly,
-                                  should_have_default=False)),
+    ('output_constraint', convert(Exactly, should_have_default=False)),
     'value',
 ]), Rule):
   """A default rule for a product, which is thus a singleton for that product."""

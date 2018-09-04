@@ -34,35 +34,33 @@ def _parse_env_to_tuple(env=None):
 
 
 class ExecuteProcessRequest(datatype([
-    ('argv', tuple),
-    ('input_files', DirectoryDigest),
-    ('description', text_type),
-    F('env', convert(tuple, create_func=_parse_env_to_tuple), default_value=None),
-    ('output_files', convert_default(tuple)),
-    ('output_directories', convert_default(tuple)),
-    # NB: timeout_seconds covers the whole remote operation including queuing and setup.
-    F('timeout_seconds', Exactly(float, int), default_value=_default_timeout_seconds),
-    ('jdk_home', optional(text_type)),
+  ('argv', tuple),
+  ('input_files', DirectoryDigest),
+  ('description', text_type),
+  F('env', convert(tuple, create_func=_parse_env_to_tuple), default_value=None),
+  ('output_files', convert_default(tuple)),
+  ('output_directories', convert_default(tuple)),
+  # NB: timeout_seconds covers the whole remote operation including queuing and setup.
+  F('timeout_seconds', Exactly(float, int), default_value=_default_timeout_seconds),
+  ('jdk_home', optional(text_type)),
 ])):
   """Request for execution with args and snapshots to extract."""
 
 
-class ExecuteProcessResult(datatype([
-    ('stdout', binary_type),
-    ('stderr', binary_type),
-    ('output_directory_digest', DirectoryDigest),
-])):
+class ExecuteProcessResult(datatype([('stdout', binary_type),
+                                     ('stderr', binary_type),
+                                     ('output_directory_digest', DirectoryDigest)
+                                     ])):
   """Result of successfully executing a process.
 
   Requesting one of these will raise an exception if the exit code is non-zero."""
 
 
-class FallibleExecuteProcessResult(datatype([
-    ('stdout', binary_type),
-    ('stderr', binary_type),
-    ('exit_code', int),
-    ('output_directory_digest', DirectoryDigest),
-])):
+class FallibleExecuteProcessResult(datatype([('stdout', binary_type),
+                                             ('stderr', binary_type),
+                                             ('exit_code', int),
+                                             ('output_directory_digest', DirectoryDigest)
+                                             ])):
   """Result of executing a process.
 
   Requesting one of these will not raise an exception if the exit code is non-zero."""
