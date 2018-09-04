@@ -59,12 +59,12 @@ class GraphIntegrationTest(PantsRunIntegrationTest):
   _ERR_TARGETS = {
     'testprojects/src/python/sources:some-missing-some-not': [
       "globs('*.txt', '*.rs')",
-      "Snapshot(PathGlobs(include<->tuple>=(u\'testprojects/src/python/sources/*.txt\', u\'testprojects/src/python/sources/*.rs\'), exclude<->tuple>=(), glob_match_error_behavior<->GlobMatchErrorBehavior>=GlobMatchErrorBehavior(failure_behavior=error), conjunction<->GlobExpansionConjunction>=GlobExpansionConjunction(conjunction=all_match)))",
+      "Snapshot(PathGlobs(include<@=tuple>=(u\'testprojects/src/python/sources/*.txt\', u\'testprojects/src/python/sources/*.rs\'), exclude<@=tuple>=(), glob_match_error_behavior<@=GlobMatchErrorBehavior>=GlobMatchErrorBehavior(failure_behavior=error), conjunction<@=GlobExpansionConjunction>=GlobExpansionConjunction(conjunction=all_match)))",
       "Globs did not match. Excludes were: []. Unmatched globs were: [\"testprojects/src/python/sources/*.rs\"].",
     ],
     'testprojects/src/python/sources:missing-sources': [
       "*.scala",
-      "Snapshot(PathGlobs(include<->tuple>=(u\'testprojects/src/python/sources/*.scala\',), exclude<->tuple>=(u\'testprojects/src/python/sources/*Test.scala\', u\'testprojects/src/python/sources/*Spec.scala\'), glob_match_error_behavior<->GlobMatchErrorBehavior>=GlobMatchErrorBehavior(failure_behavior=error), conjunction<->GlobExpansionConjunction>=GlobExpansionConjunction(conjunction=any_match)))",
+      "Snapshot(PathGlobs(include<@=tuple>=(u\'testprojects/src/python/sources/*.scala\',), exclude<@=tuple>=(u\'testprojects/src/python/sources/*Test.scala\', u\'testprojects/src/python/sources/*Spec.scala\'), glob_match_error_behavior<@=GlobMatchErrorBehavior>=GlobMatchErrorBehavior(failure_behavior=error), conjunction<@=GlobExpansionConjunction>=GlobExpansionConjunction(conjunction=any_match)))",
       "Globs did not match. Excludes were: [\"testprojects/src/python/sources/*Test.scala\", \"testprojects/src/python/sources/*Spec.scala\"]. Unmatched globs were: [\"testprojects/src/python/sources/*.scala\"].",
     ],
     'testprojects/src/java/org/pantsbuild/testproject/bundle:missing-bundle-fileset': [
@@ -73,7 +73,7 @@ class GraphIntegrationTest(PantsRunIntegrationTest):
       "Globs('*.aaaa')",
       "ZGlobs('**/*.abab')",
       "['file1.aaaa', 'file2.aaaa']",
-      "Snapshot(PathGlobs(include<->tuple>=(u\'testprojects/src/java/org/pantsbuild/testproject/bundle/*.aaaa\',), exclude<->tuple>=(), glob_match_error_behavior<->GlobMatchErrorBehavior>=GlobMatchErrorBehavior(failure_behavior=error), conjunction<->GlobExpansionConjunction>=GlobExpansionConjunction(conjunction=all_match)))",
+      "Snapshot(PathGlobs(include<@=tuple>=(u\'testprojects/src/java/org/pantsbuild/testproject/bundle/*.aaaa\',), exclude<@=tuple>=(), glob_match_error_behavior<@=GlobMatchErrorBehavior>=GlobMatchErrorBehavior(failure_behavior=error), conjunction<@=GlobExpansionConjunction>=GlobExpansionConjunction(conjunction=all_match)))",
       "Globs did not match. Excludes were: []. Unmatched globs were: [\"testprojects/src/java/org/pantsbuild/testproject/bundle/*.aaaa\"].",
     ]
   }
