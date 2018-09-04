@@ -698,7 +698,11 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
     class OptionalTyped(datatype([('x', optional(int))])): pass
     self.assertTrue(OptionalTyped().x is None)
     self.assertEqual(OptionalTyped(3).x, 3)
-    with self.assertRaises(TypeError):
+    expected_rx_str = re.escape(
+      """error: in constructor of type OptionalTyped: type check error:
+field 'x' was invalid: value {unicode_literal}'asdf' (with type '{text_type_name}') must satisfy this type constraint: Exactly(int)."""
+      .format(unicode_literal=self.unicode_literal, text_type_name=text_type.__name__))
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
       OptionalTyped('asdf')
 
     class OptionalExplicitConstraint(datatype([
@@ -707,14 +711,24 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
     self.assertTrue(OptionalExplicitConstraint().x is None)
     self.assertEqual(OptionalExplicitConstraint(3).x, 3)
     self.assertEqual(OptionalExplicitConstraint('asdf').x, 'asdf')
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape(
+      """error: in constructor of type OptionalExplicitConstraint: type check error:
+field 'x' was invalid: value True (with type 'bool') must satisfy this type constraint: Exactly(int, {text_type_name})."""
+      .format(text_type_name=text_type.__name__))
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
       OptionalExplicitConstraint(True)
 
     class OptionalNonNoneDefault(datatype([F('x', optional(int), default_value=3)])): pass
     self.assertEqual(OptionalNonNoneDefault().x, 3)
     self.assertTrue(OptionalNonNoneDefault(None).x is None)
     self.assertEqual(OptionalNonNoneDefault(4).x, 4)
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape(
+      """error: in constructor of type OptionalNonNoneDefault: type check error:
+field 'x' was invalid: value True (with type 'bool') must satisfy this type constraint: Exactly(int)."""
+      .format(text_type_name=text_type.__name__))
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
       OptionalNonNoneDefault(True)
 
   def test_non_empty(self):
@@ -724,19 +738,42 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
         F('z', non_empty(int, predicate=(lambda x: x > 0)), default_value=3),
     ])): pass
 
-    with self.assertRaises(TypeError):
+    expected_msg_ending = (
+      "__new__() missing 2 required positional arguments: 'val'"
+      if PY3 else
+      "__new__() takes at least 3 arguments (1 given)"
+    )
+    with self.assertRaisesRegexp(TypeError, re.escape(expected_msg_ending)):
       NonEmptyFields()
-    with self.assertRaises(TypeError):
+    expected_msg_ending = (
+      "__new__() missing 1 required positional arguments: 'y'"
+      if PY3 else
+      "__new__() takes at least 3 arguments (2 given)"
+    )
+    with self.assertRaisesRegexp(TypeError, re.escape(expected_msg_ending)):
       NonEmptyFields(3)
-    with self.assertRaises(TypeError):
+    with self.assertRaisesRegexp(TypeCheckError, re.escape(expected_msg_ending)):
       NonEmptyFields(None)
-    with self.assertRaises(TypeError):
+    expected_rx_str = re.escape("""error: in constructor of type NonEmptyFields: type check error:
+field 'y' was invalid: value [] (with type 'list', from original object []) must be True when predicate <type 'bool'> is applied in this type constraint: ConstraintCheckingEmpty(list).""")
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
       NonEmptyFields(3, [])
-    with self.assertRaises(TypeError):
+    expected_rx_str = re.escape("""error: in constructor of type NonEmptyFields: type check error:
+field 'y' was invalid: value (1, 2) (with type 'tuple') must satisfy this type constraint: Exactly(list).""")
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
       NonEmptyFields(3, (1, 2))
-    with self.assertRaises(TypeError):
+    expected_rx_str = re.escape(
+      """error: in constructor of type NonEmptyFields: type check error:
+field 'z' was invalid: value {unicode_literal}'not_an_int' (with type '{text_type_name}') must satisfy this type constraint: Exactly(int)."""
+      .format(unicode_literal=self.unicode_literal, text_type_name=text_type.__name__))
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
       NonEmptyFields(3, [1], 'not_an_int')
-    with self.assertRaises(TypeError):
+    expected_rx_str = '.*'.join([
+      re.escape("""error: in constructor of type NonEmptyFields: type check error:
+field 'z' was invalid: value 0 (with type 'int', from original object 0) must be True when predicate"""),
+      re.escape("is applied in this type constraint: ConstraintCheckingEmpty(int)."),
+    ])
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
       NonEmptyFields(3, [1], 0)
 
     default_fields_obj = NonEmptyFields(x=0, y=[1, 2])
@@ -757,13 +794,22 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
         F('w', convert(int, create_func=make_int), default_value=None),
     ])): pass
 
-    with self.assertRaises(TypeError):
+    expected_msg_ending = (
+      "__new__() missing 1 required positional argument: 'val'"
+      if PY3 else
+      "__new__() takes at least 2 arguments (1 given)"
+    )
+    with self.assertRaisesRegexp(TypeError, re.escape(expected_msg_ending)):
       ConvertFieldClass()
-    with self.assertRaises(TypeError):
+    expected_rx_str = re.escape("'NoneType' object is not iterable")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertFieldClass(None)
-    with self.assertRaises(TypeError):
+    expected_rx_str = re.escape("""error: in constructor of type SomeEnum: type check error:
+Value 3 for 'x' must be one of: OrderedSet([1, 2]).""")
+    with self.assertRaisesRegexp(TypeCheckError, expected_rx_str):
       ConvertFieldClass([], [], 3)
-    with self.assertRaises(TypeError):
+    expected_rx_str = re.escape("int() argument must be a string or a number, not 'list'")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertFieldClass([], w=[])
 
     self.assertEqual(ConvertFieldClass(x=[]).__getnewargs__(), ((), (), SomeEnum.create(), 5))
