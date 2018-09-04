@@ -13,8 +13,8 @@ from builtins import object, str
 from future.utils import PY3, text_type
 
 from pants.util.objects import DatatypeFieldDecl as F
-from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, TypeError, convert,
-                                convert_default, datatype, enum, non_empty, not_none, optional)
+from pants.util.objects import (Exactly, SubclassesOf, SuperclassesOf, convert, convert_default,
+                                datatype, enum, non_empty, not_none, optional)
 from pants_test.test_base import TestBase
 
 
@@ -327,9 +327,7 @@ class TypedDatatypeTest(TestBase):
     # NB: datatype subclasses declared at top level are the success cases
     # here by not failing on import.
 
-    # If the type_name can't be converted into a suitable identifier, throw a
-    # ValueError.
-    with self.assertRaises(ValueError) as cm:
+    with self.assertRaises(TypeError) as cm:
       class NonStrType(datatype([int])): pass
     expected_msg = (
       "The field declaration {} must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
@@ -345,14 +343,7 @@ class TypedDatatypeTest(TestBase):
     )
     self.assertEqual(str(cm.exception), expected_msg)
 
-    with self.assertRaises(ValueError) as cm:
-      class JustTypeField(datatype([text_type])): pass
-    expected_msg = (
-      "The field declaration {} must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'type'."
-      .format(text_type, text_type))
-    self.assertIn(str(cm.exception), expected_msg)
-
-    with self.assertRaises(ValueError) as cm:
+    with self.assertRaises(TypeError) as cm:
       class NonStringField(datatype([3])): pass
     expected_msg = (
       "The field declaration 3 must be a {}, tuple, or 'DatatypeFieldDecl' instance, but its type was: 'int'."
@@ -390,7 +381,7 @@ class TypedDatatypeTest(TestBase):
     expected_rx_str = re.escape(
       "type_constraint for field 'a_field' must be an instance of `type` or `TypeConstraint`, "
       "or else None, but was instead 2 (type 'int').")
-    with self.assertRaisesRegexp(ValueError, expected_rx_str):
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       class InvalidTypeSpec(datatype([('a_field', 2)])): pass
 
   def test_class_construction_default_value(self):
@@ -722,10 +713,16 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
     self.assertEqual(NonEmptyFields(x=0, y=[1, 2], z=5).z, 5)
 
   def test_convert(self):
+    def make_int(value=None):
+      if value is None:
+        return 5
+      return int(value)
+
     class ConvertFieldClass(datatype([
         ('x', convert(tuple, should_have_default=False)),
         ('y', convert(tuple)),
         ('z', SomeEnum.convert_type_constraint()),
+        F('w', convert(int, create_func=make_int), default_value=None),
     ])): pass
 
     with self.assertRaises(TypeError):
@@ -734,22 +731,30 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
       ConvertFieldClass(None)
     with self.assertRaises(TypeError):
       ConvertFieldClass([], [], 3)
+    with self.assertRaises(TypeError):
+      ConvertFieldClass([], w=[])
 
-    self.assertEqual(ConvertFieldClass(x=[]).__getnewargs__(), ((), (), SomeEnum.create()))
-    self.assertEqual(ConvertFieldClass(x=[1,2], y=[3, 4], z=2).__getnewargs__(),
-                     ((1, 2), (3, 4), SomeEnum(2)))
+    self.assertEqual(ConvertFieldClass(x=[]).__getnewargs__(), ((), (), SomeEnum.create(), 5))
+    self.assertEqual(ConvertFieldClass(x=[1,2], y=[3, 4], z=2, w=None).__getnewargs__(),
+                     ((1, 2), (3, 4), SomeEnum(2), 5))
+    self.assertEqual(ConvertFieldClass(x=[], w=True).w, 1)
 
   def test_convert_default(self):
     class ConvertDefaultFieldClass(datatype([
         ('x', convert_default(tuple)),
         ('y', convert_default(list, assume_none_default=False)),
+        ('z', convert_default(tuple, default_value=(1, 2))),
     ])): pass
-    self.assertEqual(ConvertDefaultFieldClass().__getnewargs__(), ((), []))
-    self.assertEqual(ConvertDefaultFieldClass(x=None).__getnewargs__(), ((), []))
-    self.assertEqual(ConvertDefaultFieldClass(x=[1, 2]).__getnewargs__(), ((1, 2), []))
+    self.assertEqual(ConvertDefaultFieldClass().__getnewargs__(), ((), [], (1, 2)))
+    self.assertEqual(ConvertDefaultFieldClass(x=None).__getnewargs__(), ((), [], (1, 2)))
+    self.assertEqual(ConvertDefaultFieldClass(x=[1, 2]).__getnewargs__(), ((1, 2), [], (1, 2)))
     with self.assertRaises(TypeError):
       ConvertDefaultFieldClass(y=None)
-    self.assertEqual(ConvertDefaultFieldClass(y=(1, 2)).__getnewargs__(), ((), [1, 2]))
+    self.assertEqual(ConvertDefaultFieldClass(y=(1, 2)).__getnewargs__(), ((), [1, 2], (1, 2)))
+    self.assertEqual(ConvertDefaultFieldClass(z=None).__getnewargs__(), ((), [], (1, 2)))
+    self.assertEqual(ConvertDefaultFieldClass(z=[3]).__getnewargs__(), ((), [], (3,)))
+    with self.assertRaises(TypeError):
+      self.assertEqual(ConvertDefaultFieldClass(z=3))
 
   def test_convert_enum(self):
     class ConvertEnumWithDefault(datatype([
