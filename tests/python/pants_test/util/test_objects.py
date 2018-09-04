@@ -745,15 +745,21 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
         ('y', convert_default(list, assume_none_default=False)),
         ('z', convert_default(tuple, default_value=(1, 2))),
     ])): pass
+
     self.assertEqual(ConvertDefaultFieldClass().__getnewargs__(), ((), [], (1, 2)))
     self.assertEqual(ConvertDefaultFieldClass(x=None).__getnewargs__(), ((), [], (1, 2)))
     self.assertEqual(ConvertDefaultFieldClass(x=[1, 2]).__getnewargs__(), ((1, 2), [], (1, 2)))
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape("'NoneType' object is not iterable")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertDefaultFieldClass(y=None)
+
     self.assertEqual(ConvertDefaultFieldClass(y=(1, 2)).__getnewargs__(), ((), [1, 2], (1, 2)))
     self.assertEqual(ConvertDefaultFieldClass(z=None).__getnewargs__(), ((), [], (1, 2)))
     self.assertEqual(ConvertDefaultFieldClass(z=[3]).__getnewargs__(), ((), [], (3,)))
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape("'int' object is not iterable")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       self.assertEqual(ConvertDefaultFieldClass(z=3))
 
   def test_convert_enum(self):
@@ -763,17 +769,30 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
     self.assertEqual(ConvertEnumWithDefault().enum_field.x, 1)
     self.assertEqual(ConvertEnumWithDefault(None).enum_field.x, 1)
     self.assertEqual(ConvertEnumWithDefault(2).enum_field.x, 2)
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape(
+      "Value 3 for 'x' must be one of: OrderedSet([1, 2]).")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertEnumWithDefault(3)
 
     class ConvertEnumNoDefault(datatype([
         ('enum_field', SomeEnum.convert_type_constraint(should_have_default=False)),
     ])): pass
 
-    with self.assertRaises(TypeError):
+    expected_msg_ending = (
+      "__new__() missing 1 required positional argument: 'val'"
+      if PY3 else
+      "__new__() takes exactly 2 arguments (1 given)"
+    )
+    expected_rx_str = re.escape(expected_msg_ending)
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertEnumNoDefault()
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape(
+      "Value 3 for 'x' must be one of: OrderedSet([1, 2]).")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertEnumNoDefault(3)
+
     self.assertEqual(ConvertEnumWithDefault(None).enum_field.x, 1)
     self.assertEqual(ConvertEnumNoDefault(1).enum_field.x, 1)
     self.assertEqual(ConvertEnumNoDefault(2).enum_field.x, 2)
@@ -784,11 +803,23 @@ Type checking error for field 'elements': value 3 (with type 'int') must satisfy
         ('y', optional(convert(tuple))),
     ])): pass
 
-    with self.assertRaises(TypeError):
+    expected_msg_ending = (
+      "__new__() missing 1 required positional argument: 'val'"
+      if PY3 else
+      "__new__() takes at least 2 arguments (1 given)"
+    )
+    expected_rx_str = re.escape(expected_msg_ending)
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertWithFactoryClass()
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape("'NoneType' object is not iterable")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertWithFactoryClass(None)
-    with self.assertRaises(TypeError):
+
+    expected_rx_str = re.escape(
+      """error: in constructor of type ConvertWithFactoryClass: type check error:
+field 'x' was invalid: value () (with type 'tuple', from original object ()) must be True when predicate <type 'bool'> is applied in this type constraint: ConstraintCheckingEmpty(tuple).""")
+    with self.assertRaisesRegexp(TypeError, expected_rx_str):
       ConvertWithFactoryClass(())
 
     self.assertEqual(ConvertWithFactoryClass((1,)).y, None)
