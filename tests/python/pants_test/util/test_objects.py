@@ -452,7 +452,7 @@ class TypedDatatypeTest(TestBase):
       class WithTooManyElementsTuple(datatype([('x', int, None)])): pass
 
     expected_msg_ending = (
-      "__new__() takes 3 positional arguments but 4 were given"
+      "__new__() takes from 2 to 3 positional arguments but 4 were given"
       if PY3 else
       "__new__() takes at most 3 arguments (4 given)"
     )
@@ -460,7 +460,7 @@ class TypedDatatypeTest(TestBase):
       class WithTooManyPositionalArgsForFieldDecl(datatype([F('x', int, None)])): pass
 
     expected_msg_ending = (
-      "__new__() takes 3 positional arguments but 5 were given"
+      "__new__() takes from 2 to 3 positional arguments but 5 were given"
       if PY3 else
       "__new__() takes at most 3 arguments (5 given)"
     )
