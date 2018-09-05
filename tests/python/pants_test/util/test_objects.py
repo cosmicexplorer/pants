@@ -445,8 +445,9 @@ class TypedDatatypeTest(TestBase):
     self.assertEqual(WithCheckedDefaultValue(x=3).x, 3)
 
     expected_rx_str = re.escape(
-      "There are too many elements of the tuple ({unicode_literal}'x', <type 'int'>, None) passed to datatype(). The tuple must have between 1 and 2 elements. The remaining elements were: [None]."
-      .format(unicode_literal=self.unicode_literal))
+      "There are too many elements of the tuple ({unicode_literal}'x', <{class_type} 'int'>, None) passed to datatype(). The tuple must have between 1 and 2 elements. The remaining elements were: [None]."
+      .format(unicode_literal=self.unicode_literal,
+              class_type=('class' if PY3 else 'type')))
     with self.assertRaisesRegexp(ValueError, expected_rx_str):
       class WithTooManyElementsTuple(datatype([('x', int, None)])): pass
 
