@@ -103,11 +103,12 @@ impl super::CommandRunner for CommandRunner {
     let ExecuteProcessRequest {
       description,
       timeout,
+      // input_files,
       ..
     } = req;
 
     match execute_request_result {
-      Ok((action, command, execute_request)) => {
+      Ok(BazelRemoteExecutionRequestInfo(action, command, execute_request)) => {
         let command_runner = self.clone();
         let command_runner2 = self.clone();
         let execute_request = Arc::new(execute_request);
@@ -120,11 +121,17 @@ impl super::CommandRunner for CommandRunner {
               "Executing remotely request: {:?} (command: {:?})",
               execute_request, command
             );
+            // let store = store.clone();
+            // let input_upload = store.ensure_remote_has_recursive(vec![input_files.clone()]);
+            // let execute_before_input = command_runner.oneshot_execute(&execute_request);
+            // input_upload.select2(execute_before_input).to_boxed()
             command_runner.oneshot_execute(&execute_request)
           })
+          // .and_then(move |res| {
           .and_then(move |operation| {
             let start_time = Instant::now();
 
+            // future::loop_fn((res, 0), move |(res, iter_num)| {
             future::loop_fn((operation, 0), move |(operation, iter_num)| {
               let description = description.clone();
 
@@ -132,6 +139,34 @@ impl super::CommandRunner for CommandRunner {
               let store = store.clone();
               let operations_client = operations_client.clone();
               let command_runner2 = command_runner2.clone();
+
+              // match res {
+              //   Ok(future::Either::A((_upload_summary, execute_future))) => execute_future
+              //     .or_else(move |_| {
+              //       let execute_request2 = execute_request2.clone();
+              //       command_runner3
+              //         .oneshot_execute(&execute_request2)
+              //         .to_boxed()
+              //   }).to_boxed(),
+              //   Ok(future::Either::B((execution_result, _upload_future))) =>
+              //     future::ok(execution_result).to_boxed(),
+              //   Err(future::Either::A((upload_err, _execute_future))) =>
+              //     future::err(upload_err).to_boxed(),
+              //   Err(future::Either::B((execute_error, upload_future))) => match execute_error {
+              //     ExecutionError::Fatal(err) => future::err(err).to_boxed(),
+              //     ExecutionError::MissingDigests(missing_digests) => upload_future
+              //   } upload_future
+              //     .and_then(move |_| {
+              //       let command_runner5 = command_runner4.clone();
+              //       command_runner4
+              //         .oneshot_execute(&execute_request3)
+              //         .and_then(move |operation| {
+              //           command_runner5.extract_execute_response(operation)
+              //         })
+              //         .to_boxed()
+              //   })
+              // }
+
               command_runner2
                 .extract_execute_response(operation)
                 .map(future::Loop::Break)
@@ -578,16 +613,16 @@ impl CommandRunner {
   }
 }
 
-fn make_execute_request(
-  req: &ExecuteProcessRequest,
-) -> Result<
-  (
-    bazel_protos::remote_execution::Action,
-    bazel_protos::remote_execution::Command,
-    bazel_protos::remote_execution::ExecuteRequest,
-  ),
-  String,
-> {
+#[derive(Debug)]
+struct BazelRemoteExecutionRequestInfo(
+  pub bazel_protos::remote_execution::Action,
+  pub bazel_protos::remote_execution::Command,
+  pub bazel_protos::remote_execution::ExecuteRequest,
+);
+
+type BazelRemoteExecutionRequestResult = Result<BazelRemoteExecutionRequestInfo, String>;
+
+fn make_execute_request(req: &ExecuteProcessRequest) -> BazelRemoteExecutionRequestResult {
   let mut command = bazel_protos::remote_execution::Command::new();
   command.set_arguments(protobuf::RepeatedField::from_vec(req.argv.clone()));
   for (ref name, ref value) in &req.env {
@@ -644,7 +679,11 @@ fn make_execute_request(
   let mut execute_request = bazel_protos::remote_execution::ExecuteRequest::new();
   execute_request.set_action_digest(digest(&action)?);
 
-  Ok((action, command, execute_request))
+  Ok(BazelRemoteExecutionRequestInfo(
+    action,
+    command,
+    execute_request,
+  ))
 }
 
 fn format_error(error: &bazel_protos::status::Status) -> String {
