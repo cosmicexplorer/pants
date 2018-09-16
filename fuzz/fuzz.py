@@ -1,12 +1,12 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import os
+import shutil
 import tarfile
+from builtins import str
 from contextlib import contextmanager
 
 from pants.util.contextutil import pushd, temporary_dir
-
-
-@contextmanager
-def tar_from_stream(stream):
-  tarfile.open(mode='r|', fileobj=stream)
 
 
 def is_evil_path(file_path):
@@ -14,7 +14,7 @@ def is_evil_path(file_path):
     return True
 
   for component in file_path.split(os.sep):
-    if component == '..':
+    if component == b'..':
       return True
 
   return False
@@ -36,16 +36,26 @@ def get_relevant_tar_members(tar_file):
 
 
 @contextmanager
-def extract_tar_into_tmp_dir(tar_file):
+def extract_tar_into_tmp_dir(stream_tar_file):
   with temporary_dir() as tmpdir:
-    relevant_members = get_relevant_tar_members(tar_file)
-    tar_file.extractall(path=tmpdir, members=relevant_members)
+    tmp_tar_file_path = os.path.join(tmpdir, 'tmp.tar')
+    # Copy the stream into a temporary file.
+    with open(tmp_tar_file_path, 'wb') as tmp_tar_file_obj:
+      shutil.copyfileobj(stream_tar_file, tmp_tar_file_obj)
+    # Getting the members of a tar requires scanning the file to get the headers, which consumes the
+    # file object: see https://stackoverflow.com/a/18624269/2518889.
+    with tarfile.open(tmp_tar_file_path) as tar_for_members:
+      relevant_members = list(get_relevant_tar_members(tar_for_members))
+    # Read from the temporary file, and extract it.
+    with tarfile.open(tmp_tar_file_path) as tar_for_extraction:
+      tar_for_extraction.extractall(path=str(tmpdir).encode('utf-8'), members=relevant_members)
+    # We don't need the tar file anymore.
+    os.unlink(tmp_tar_file_path)
     yield tmpdir
 
 
 @contextmanager
 def untar_stream_into_tmp_dir(stream):
-  with tar_from_stream(stream) as tar_file:
-    with extract_tar_into_tmp_dir(tar_file) as tmpdir:
-      with pushd(tmpdir):
-        yield
+  with extract_tar_into_tmp_dir(stream) as tmpdir:
+    with pushd(tmpdir):
+      yield

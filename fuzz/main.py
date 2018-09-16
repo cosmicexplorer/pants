@@ -1,12 +1,15 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
+
+import os
 import sys
 import time
 
 import afl
-from fuzz import *
+from fuzz.fuzz import untar_stream_into_tmp_dir
 
-from pants.base.build_environment import get_buildroot
+from pants.base.exiter import Exiter
 from pants.bin.pants_runner import PantsRunner
-from pants.util.contextutil import maybe_profiled, pushd
+from pants.util.contextutil import maybe_profiled
 
 
 def main():
@@ -21,7 +24,7 @@ def main():
     pants_run_env = os.environ.copy()
     pants_run_env['PANTS_ENABLE_PANTSD'] = 'False'
 
-    pants_smoke_test_cmd = ['./pants', 'options']
+    pants_smoke_test_cmd = ['./pants', 'goals']
 
     with maybe_profiled(os.environ.get('PANTSC_PROFILE')):
       try:
