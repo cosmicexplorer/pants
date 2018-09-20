@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 class ExceptionSink(object):
   """A mutable singleton object representing where exceptions should be logged to."""
 
+  # Get the current directory at class initialization time -- this is probably (definitely?) a
+  # writable directory. Using this directory as a fallback increases the chances that if an
+  # exception occurs early in initialization that we still record it somewhere.
   _destination = os.getcwd()
 
   def __new__(cls, *args, **kwargs):
