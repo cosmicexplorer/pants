@@ -6,7 +6,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import datetime
 import os
-import signal
 import sys
 import termios
 import time
@@ -17,6 +16,7 @@ from future.utils import raise_with_traceback
 from setproctitle import setproctitle as set_process_title
 
 from pants.base.build_environment import get_buildroot
+from pants.base.exception_sink import ExceptionSink
 from pants.base.exiter import Exiter
 from pants.bin.local_pants_runner import LocalPantsRunner
 from pants.init.util import clean_global_runtime_state
@@ -226,12 +226,6 @@ class DaemonPantsRunner(ProcessManager):
       ) as finalizer:
         yield finalizer
 
-  def _setup_sigint_handler(self):
-    """Sets up a control-c signal handler for the daemon runner context."""
-    def handle_control_c(signum, frame):
-      raise KeyboardInterrupt('remote client sent control-c!')
-    signal.signal(signal.SIGINT, handle_control_c)
-
   def _raise_deferred_exc(self):
     """Raises deferred exceptions from the daemon's synchronous path in the post-fork client."""
     if self._deferred_exception:
@@ -266,16 +260,15 @@ class DaemonPantsRunner(ProcessManager):
     # the `pantsd.log`. This ensures that in the event of e.g. a hung but detached pantsd-runner
     # process that the stacktrace output lands deterministically in a known place vs to a stray
     # terminal window.
-    self._exiter.set_except_hook(sys.stderr)
+
+    # TODO: make a special place for pantsd-runner errors!
+    ExceptionSink.instance.reset_fatal_error_logging()
 
     # Ensure anything referencing sys.argv inherits the Pailgun'd args.
     sys.argv = self._args
 
     # Set context in the process title.
     set_process_title('pantsd-runner [{}]'.format(' '.join(self._args)))
-
-    # Setup a SIGINT signal handler.
-    self._setup_sigint_handler()
 
     # Broadcast our process group ID (in PID form - i.e. negated) to the remote client so
     # they can send signals (e.g. SIGINT) to all processes in the runners process group.
@@ -288,6 +281,8 @@ class DaemonPantsRunner(ProcessManager):
       try:
         # Setup the Exiter's finalizer.
         self._exiter.set_finalizer(finalizer)
+
+        ExceptionSink.instance.reset_fatal_error_logging()
 
         # Clean global state.
         clean_global_runtime_state(reset_subsystem=True)

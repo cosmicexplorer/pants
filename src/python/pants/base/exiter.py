@@ -4,16 +4,12 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import faulthandler
 import logging
-import signal
 import sys
 import traceback
-from builtins import object, str
+from builtins import object
 
 from future.utils import PY2
-
-from pants.base.exception_sink import ExceptionSink
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +20,7 @@ class Exiter(object):
 
   The expected method call order of this class is as follows:
 
+  TODO: this is outdated!
    1) Call Exiter.set_except_hook() to set sys.excepthook to the internal exception hook. This
       should happen as early as possible to ensure any/all exceptions are handled by the hook.
    2) Call Exiter.apply_options() to set traceback printing behavior via an Options object.
@@ -81,35 +78,3 @@ class Exiter(object):
     :param str msg: A string message to print to stderr before exiting. (Optional)
     """
     self.exit(result=1, msg=msg)
-
-  def handle_unhandled_exception(self, exc_class=None, exc=None, tb=None, add_newline=False):
-    """Default sys.excepthook implementation for unhandled exceptions."""
-    exc_class = exc_class or sys.exc_info()[0]
-    exc = exc or sys.exc_info()[1]
-    tb = tb or sys.exc_info()[2]
-
-    def format_msg(print_backtrace=True):
-      msg = 'Exception caught: ({})\n'.format(type(exc))
-      msg += '{}\n'.format(''.join(self._format_tb(tb))) if print_backtrace else '\n'
-      msg += 'Exception message: {}\n'.format(str(exc) if exc else 'none')
-      msg += '\n' if add_newline else ''
-      return msg
-
-    # Always output the unhandled exception details into a log file.
-    self._log_exception(format_msg())
-    self.exit_and_fail(format_msg(self._should_print_backtrace))
-
-  def _log_exception(self, msg):
-    if self._workdir:
-      ExceptionSink.set_destination(self._workdir)
-    ExceptionSink.log_exception(msg)
-
-  def _setup_faulthandler(self, trace_stream):
-    faulthandler.enable(trace_stream)
-    # This permits a non-fatal `kill -31 <pants pid>` for stacktrace retrieval.
-    faulthandler.register(signal.SIGUSR2, trace_stream, chain=True)
-
-  def set_except_hook(self, trace_stream=None):
-    """Sets the global exception hook."""
-    self._setup_faulthandler(trace_stream or sys.stderr)
-    sys.excepthook = self.handle_unhandled_exception

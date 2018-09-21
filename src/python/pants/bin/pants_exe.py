@@ -31,7 +31,6 @@ def main():
   start_time = time.time()
 
   exiter = Exiter()
-  exiter.set_except_hook()
 
   with maybe_profiled(os.environ.get('PANTSC_PROFILE')):
     try:

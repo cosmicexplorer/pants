@@ -5,10 +5,13 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import datetime
+import faulthandler
 import logging
 import os
+import signal
 import sys
-from builtins import object
+import traceback
+from builtins import object, str
 
 from pants.util.dirutil import is_writable_dir, safe_open
 
@@ -31,18 +34,36 @@ class ExceptionSink(object):
   class ExceptionSinkError(Exception): pass
 
   @classmethod
-  def set_destination(cls, dir_path):
-    if not is_writable_dir(dir_path):
+  def reset_fatal_error_logging(cls,
+                                destination=None,
+                                traceback_formatter=traceback.format_tb,
+                                trace_stream=None):
+    # TODO: what assumptions can we make about the current directory of a process? Does it have to
+    # exist / be readable / writable?
+    destination = destination or os.getcwd()
+    if not is_writable_dir(destination):
       # TODO: when this class sets up excepthooks, raising this should be safe, because we always
       # have a destination to log to (os.getcwd() if not otherwise set).
       raise cls.ExceptionSinkError(
         "The provided exception sink path at '{}' is not a writable directory."
-        .format(dir_path))
-    cls._destination = dir_path
+        .format(destination))
+    cls._destination = destination
 
-  @classmethod
-  def get_destination(cls):
-    return cls._destination
+    # None is an allowed value -- this does not print tracebacks.
+    cls._traceback_formatter = traceback_formatter
+
+    cls._trace_stream = trace_stream or sys.stderr
+    # TODO: verify that these faulthandler operations are idempotent!
+    faulthandler.enable(cls._trace_stream)
+    # This permits a non-fatal `kill -31 <pants pid>` for stacktrace retrieval.
+    faulthandler.register(signal.SIGUSR2, cls._trace_stream, chain=True)
+
+    # Make unhandled exceptions go to our exception log now.
+    sys.excepthook = cls._handle_unhandled_exception
+
+    # TODO: this should handle control-c as well. This may require a SIGINT handler and a check for
+    # KeyboardInterrupt in the exception hook?
+    signal.signal(signal.SIGINT, cls._handle_sigint)
 
   @classmethod
   def _exceptions_log_path(cls, for_pid=None):
@@ -57,7 +78,7 @@ class ExceptionSink(object):
     return datetime.datetime.now().isoformat()
 
   # NB: This includes a trailing newline, but no leading newline.
-  _EXCEPTION_LOG_FORMAT = """\
+  _FATAL_ERROR_LOG_FORMAT = """\
 timestamp: {timestamp}
 args: {args}
 pid: {pid}
@@ -86,6 +107,46 @@ pid: {pid}
       with safe_open(cls._exceptions_log_path(), 'a') as shared_error_log:
         shared_error_log.write(fatal_error_log_entry)
     except Exception as e:
+      # TODO: update the below TODO!
       # TODO: If there is an error in writing to the exceptions log, we may want to consider trying
       # to write to another location (e.g. the cwd, if that is not already the destination).
       logger.error('Problem logging original exception: {}'.format(e))
+
+  @classmethod
+  def _format_traceback(cls, tb):
+    if cls._traceback_formatter is None:
+      return '(backtrace omitted)'
+    else:
+      return cls._traceback_formatter(tb)
+
+  _UNHANDLED_EXCEPTION_LOG_FORMAT = """\
+Exception caught: ({exception_type})
+{backtrace}
+Exception message: {exception_message}{maybe_newline}
+"""
+
+  @classmethod
+  def _format_unhandled_exception_log(cls, exc, tb, add_newline):
+    exception_message = str(exc) if exc else '(no message)'
+    maybe_newline = '\n' if add_newline else ''
+    return cls._UNHANDLED_EXCEPTION_LOG_FORMAT.format(
+      exception_type=type(exc),
+      backtrace=cls._format_traceback(tb),
+      exception_message=exception_message,
+      maybe_newline=maybe_newline,
+    )
+
+  @classmethod
+  def _handle_unhandled_exception(cls, exc_class=None, exc=None, tb=None, add_newline=False):
+    """Default sys.excepthook implementation for unhandled exceptions."""
+    exc_class = exc_class or sys.exc_info()[0]
+    exc = exc or sys.exc_info()[1]
+    tb = tb or sys.exc_info()[2]
+
+    # Always output the unhandled exception details into a log file.
+    exception_log_entry = cls._format_unhandled_exception_log(exc, tb, add_newline)
+    cls.log_exception(exception_log_entry)
+
+  @classmethod
+  def _handle_sigint(cls, signum, frame):
+    raise KeyboardInterrupt('???')

@@ -15,6 +15,7 @@ from pants_test.option.util.fakes import create_options
 
 class ExiterTest(unittest.TestCase):
 
+  # TODO: is this necessary anymore?
   def test_log_exception(self):
     with temporary_dir() as workdir:
       exiter = Exiter()
