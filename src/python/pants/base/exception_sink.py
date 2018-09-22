@@ -13,6 +13,7 @@ import sys
 import traceback
 from builtins import object, str
 
+from pants.base.exiter import Exiter
 from pants.util.dirutil import is_writable_dir, safe_open
 
 
@@ -26,6 +27,9 @@ class ExceptionSink(object):
   # writable directory. Using this directory as a fallback increases the chances that if an
   # exception occurs early in initialization that we still record it somewhere.
   _destination = os.getcwd()
+  _traceback_formatter = None
+  _trace_stream = None
+  _exiter = None
 
   def __new__(cls, *args, **kwargs):
     raise TypeError('Instances of {} are not allowed to be constructed!'
@@ -37,10 +41,13 @@ class ExceptionSink(object):
   def reset_fatal_error_logging(cls,
                                 destination=None,
                                 traceback_formatter=traceback.format_tb,
-                                trace_stream=None):
-    # TODO: what assumptions can we make about the current directory of a process? Does it have to
-    # exist / be readable / writable?
-    destination = destination or os.getcwd()
+                                trace_stream=None,
+                                exiter=None):
+    # TODO: We maintain the current log destination if not overridden -- we could also keep previous
+    # values of cls._destination as a list and fall back in order to previous log dirs if logging
+    # fails to the current destination. Resetting the log destination doesn't happen often enough to
+    # justify this now.
+    destination = destination or cls._destination
     if not is_writable_dir(destination):
       # TODO: when this class sets up excepthooks, raising this should be safe, because we always
       # have a destination to log to (os.getcwd() if not otherwise set).
@@ -53,6 +60,9 @@ class ExceptionSink(object):
     cls._traceback_formatter = traceback_formatter
 
     cls._trace_stream = trace_stream or sys.stderr
+
+    cls._exiter = exiter or Exiter()
+
     # TODO: verify that these faulthandler operations are idempotent!
     faulthandler.enable(cls._trace_stream)
     # This permits a non-fatal `kill -31 <pants pid>` for stacktrace retrieval.
@@ -150,3 +160,8 @@ Exception message: {exception_message}{maybe_newline}
   @classmethod
   def _handle_sigint(cls, signum, frame):
     raise KeyboardInterrupt('???')
+
+
+# NB: We set all our class attributes to the default values by calling this method at module import
+# time.
+ExceptionSink.reset_fatal_error_logging()
