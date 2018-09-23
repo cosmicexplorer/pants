@@ -29,11 +29,8 @@ def test_env():
 
 def main():
   start_time = time.time()
-
+  # NB: This exiter gets passed down as a parameter to whichever runner PantsRunner chooses.
   exiter = Exiter()
 
   with maybe_profiled(os.environ.get('PANTSC_PROFILE')):
-    try:
-      PantsRunner(exiter, start_time=start_time).run()
-    except KeyboardInterrupt:
-      exiter.exit_and_fail('Interrupted by user.')
+    PantsRunner(exiter, start_time=start_time).run()

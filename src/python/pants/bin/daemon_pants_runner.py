@@ -23,7 +23,7 @@ from pants.init.util import clean_global_runtime_state
 from pants.java.nailgun_io import NailgunStreamStdinReader, NailgunStreamWriter
 from pants.java.nailgun_protocol import ChunkType, NailgunProtocol
 from pants.pantsd.process_manager import ProcessManager
-from pants.util.contextutil import HardSystemExit, hermetic_environment_as, stdio_as
+from pants.util.contextutil import hermetic_environment_as, stdio_as
 from pants.util.socket import teardown_socket
 
 
@@ -31,7 +31,10 @@ class DaemonExiter(Exiter):
   """An Exiter that emits unhandled tracebacks and exit codes via the Nailgun protocol."""
 
   def __init__(self, socket):
-    super(DaemonExiter, self).__init__()
+    # N.B. Assuming a fork()'d child, cause os._exit to be called here to avoid the routine
+    # sys.exit behavior (via `pants.util.contextutil.hard_exit_handler()`).
+    # TODO: update the above documentation!
+    super(DaemonExiter, self).__init__(exiter=os._exit)
     self._socket = socket
     self._finalizer = None
 
@@ -64,9 +67,8 @@ class DaemonExiter(Exiter):
       # Shutdown the connected socket.
       teardown_socket(self._socket)
     finally:
-      # N.B. Assuming a fork()'d child, cause os._exit to be called here to avoid the routine
-      # sys.exit behavior (via `pants.util.contextutil.hard_exit_handler()`).
-      raise HardSystemExit()
+      # Exit the runtime with os._exit().
+      super(DaemonExiter, self).exit(result=0, msg=msg)
 
 
 class DaemonPantsRunner(ProcessManager):
@@ -124,7 +126,7 @@ class DaemonPantsRunner(ProcessManager):
     """
     super(DaemonPantsRunner, self).__init__(
       name=self._make_identity(),
-      metadata_base_dir=metadata_base_dir
+      metadata_base_dir=metadata_base_dir,
     )
     self._socket = socket
     self._args = args
@@ -133,7 +135,6 @@ class DaemonPantsRunner(ProcessManager):
     self._target_roots = target_roots
     self._options_bootstrapper = options_bootstrapper
     self._deferred_exception = deferred_exc
-
     self._exiter = DaemonExiter(socket)
 
   def _make_identity(self):
@@ -260,9 +261,10 @@ class DaemonPantsRunner(ProcessManager):
     # the `pantsd.log`. This ensures that in the event of e.g. a hung but detached pantsd-runner
     # process that the stacktrace output lands deterministically in a known place vs to a stray
     # terminal window.
-
-    # TODO: make a special place for pantsd-runner errors!
-    ExceptionSink.instance.reset_fatal_error_logging()
+    # TODO: ascertain if all of the above is still true (I believe so?).
+    ExceptionSink.reset_fatal_error_logging(
+      exiter=self._exiter,
+    )
 
     # Ensure anything referencing sys.argv inherits the Pailgun'd args.
     sys.argv = self._args
@@ -276,13 +278,11 @@ class DaemonPantsRunner(ProcessManager):
     NailgunProtocol.send_pid(self._socket, pid)
 
     # Invoke a Pants run with stdio redirected and a proxied environment.
-    with self.nailgunned_stdio(self._socket, self._env) as finalizer,\
-         hermetic_environment_as(**self._env):
-      try:
+    try:
+      with self.nailgunned_stdio(self._socket, self._env) as finalizer,\
+           hermetic_environment_as(**self._env):
         # Setup the Exiter's finalizer.
         self._exiter.set_finalizer(finalizer)
-
-        ExceptionSink.instance.reset_fatal_error_logging()
 
         # Clean global state.
         clean_global_runtime_state(reset_subsystem=True)
@@ -301,9 +301,5 @@ class DaemonPantsRunner(ProcessManager):
         )
         runner.set_start_time(self._maybe_get_client_start_time_from_env(self._env))
         runner.run()
-      except KeyboardInterrupt:
-        self._exiter.exit(1, msg='Interrupted by user.\n')
-      except Exception:
-        self._exiter.handle_unhandled_exception(add_newline=True)
-      else:
-        self._exiter.exit(0)
+    finally:
+      self._exiter.exit(0)

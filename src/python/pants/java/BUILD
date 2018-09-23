@@ -23,6 +23,8 @@ python_library(
     '3rdparty/python:future',
     ':nailgun_io',
     ':nailgun_protocol',
+    'src/python/pants/base:exception_sink',
+    'src/python/pants/base:exiter',
     'src/python/pants/util:socket'
   ]
 )

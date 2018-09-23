@@ -13,6 +13,7 @@ from contextlib import contextmanager
 
 from future.utils import raise_with_traceback
 
+from pants.base.exception_sink import ExceptionSink, SignalHandler
 from pants.console.stty_utils import STTYSettings
 from pants.java.nailgun_client import NailgunClient
 from pants.java.nailgun_protocol import NailgunProtocol
@@ -21,6 +22,22 @@ from pants.util.collections import combined_dict
 
 
 logger = logging.getLogger(__name__)
+
+
+class RemotePantsRunnerSignalHandler(SignalHandler):
+
+  def __init__(self, client):
+    self._client = client
+
+  def handle_sigint(self, signum, frame):
+    self._client.send_control_c()
+    # NB: make sure to eventually exit in all of these methods!
+    super(RemotePantsRunnerSignalHandler, self).handle_sigint(signum, frame)
+
+  # N.B. SIGQUIT will abruptly kill the pantsd-runner, which will shut down the other end
+  # of the Pailgun connection - so we send a gentler SIGINT here instead.
+  def handle_sigquit(self, signum, frame):
+    self.handle_sigint(signum, frame)
 
 
 class RemotePantsRunner(object):
@@ -56,27 +73,6 @@ class RemotePantsRunner(object):
     self._stdin = stdin or sys.stdin
     self._stdout = stdout or sys.stdout
     self._stderr = stderr or sys.stderr
-
-  @contextmanager
-  def _trapped_signals(self, client):
-    """A contextmanager that overrides the SIGINT (control-c) and SIGQUIT (control-\) handlers
-    and handles them remotely."""
-    def handle_control_c(signum, frame):
-      client.send_control_c()
-
-    existing_sigint_handler = signal.signal(signal.SIGINT, handle_control_c)
-    # N.B. SIGQUIT will abruptly kill the pantsd-runner, which will shut down the other end
-    # of the Pailgun connection - so we send a gentler SIGINT here instead.
-    existing_sigquit_handler = signal.signal(signal.SIGQUIT, handle_control_c)
-
-    # Retry interrupted system calls.
-    signal.siginterrupt(signal.SIGINT, False)
-    signal.siginterrupt(signal.SIGQUIT, False)
-    try:
-      yield
-    finally:
-      signal.signal(signal.SIGINT, existing_sigint_handler)
-      signal.signal(signal.SIGQUIT, existing_sigquit_handler)
 
   def _setup_logging(self):
     """Sets up basic stdio logging for the thin client."""
@@ -143,7 +139,15 @@ class RemotePantsRunner(object):
                            exit_on_broken_pipe=True,
                            expects_pid=True)
 
-    with self._trapped_signals(client), STTYSettings.preserved():
+    ExceptionSink.reset_fatal_error_logging_from_options(
+      maybe_options=self._bootstrap_options.for_global_scope(),
+      trace_stream=self._stderr,
+      exiter=self._exiter,
+      signal_handler=RemotePantsRunnerSignalHandler(client),
+    )
+
+    # TODO: figure out whether STTYSettings should also be handled by the ExceptionSink.
+    with STTYSettings.preserved():
       # Execute the command on the pailgun.
       result = client.execute(self.PANTS_COMMAND, *self._args, **modified_env)
 

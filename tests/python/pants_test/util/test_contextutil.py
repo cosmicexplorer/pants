@@ -326,6 +326,7 @@ class ContextutilTest(unittest.TestCase):
       # Ensure the profile data is valid.
       pstats.Stats(profile_path).print_stats()
 
+  # TODO: update this test!
   def test_hard_exit_handler(self):
     with mock.patch('os._exit', **PATCH_OPTS) as mock_exit:
       with hard_exit_handler():

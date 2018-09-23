@@ -5,9 +5,11 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import logging
+import sys
 from builtins import object
 
 from pants.base.build_environment import get_buildroot
+from pants.base.exception_sink import ExceptionSink
 from pants.bin.goal_runner import GoalRunner
 from pants.engine.native import Native
 from pants.goal.run_tracker import RunTracker
@@ -18,7 +20,7 @@ from pants.init.repro import Reproducer
 from pants.init.target_roots_calculator import TargetRootsCalculator
 from pants.option.options_bootstrapper import OptionsBootstrapper
 from pants.reporting.reporting import Reporting
-from pants.util.contextutil import hard_exit_handler, maybe_profiled
+from pants.util.contextutil import maybe_profiled
 
 
 logger = logging.getLogger(__name__)
@@ -89,9 +91,6 @@ class LocalPantsRunner(object):
     )
     global_options = options.for_global_scope()
 
-    # Apply exiter options.
-    exiter.apply_options(options)
-
     # Option values are usually computed lazily on demand,
     # but command line options are eagerly computed for validation.
     for scope in options.scope_to_flags.keys():
@@ -157,12 +156,21 @@ class LocalPantsRunner(object):
     self._run_start_time = start_time
 
   def run(self):
-    with hard_exit_handler(), maybe_profiled(self._profile_path):
+    ExceptionSink.reset_fatal_error_logging_from_options(
+      maybe_options=self._options.for_global_scope(),
+      exiter=self._exiter,
+    )
+    with maybe_profiled(self._profile_path):
       self._run()
 
   def _maybe_run_v1(self, run_tracker, reporting):
     if not self._global_options.v1:
       return 0
+
+    ExceptionSink.reset_fatal_error_logging_from_options(
+      maybe_options=self._options.for_global_scope(),
+      exiter=self._exiter,
+    )
 
     # Setup and run GoalRunner.
     goal_runner_factory = GoalRunner.Factory(
@@ -173,7 +181,7 @@ class LocalPantsRunner(object):
       reporting,
       self._graph_session,
       self._target_roots,
-      self._exiter
+      self._exiter,
     )
     return goal_runner_factory.create().run()
 

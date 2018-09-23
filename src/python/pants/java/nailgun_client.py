@@ -12,6 +12,8 @@ import socket
 import sys
 from builtins import object, str
 
+from pants.base.exception_sink import ExceptionSink
+from pants.base.exiter import Exiter
 from pants.java.nailgun_io import NailgunStreamWriter
 from pants.java.nailgun_protocol import ChunkType, NailgunProtocol
 from pants.util.socket import RecvBufferedSocket
@@ -63,16 +65,21 @@ class NailgunClientSession(NailgunProtocol):
     try:
       for chunk_type, payload in self.iter_chunks(self._sock, return_bytes=True):
         if chunk_type == ChunkType.STDOUT:
+          # raise Exception('???/stdout')
           self._write_flush(self._stdout, payload)
         elif chunk_type == ChunkType.STDERR:
+          # raise Exception('???/stderr')
           self._write_flush(self._stderr, payload)
         elif chunk_type == ChunkType.EXIT:
+          # raise Exception('???/exit')
           self._write_flush(self._stdout)
           self._write_flush(self._stderr)
           return int(payload)
         elif chunk_type == ChunkType.PID:
+          # raise Exception('???/pid')
           self.remote_pid = int(payload)
         elif chunk_type == ChunkType.START_READING_INPUT:
+          # raise Exception('???/start_reading_input')
           self._maybe_start_input_writer()
         else:
           raise self.ProtocolError('received unexpected chunk {} -> {}'.format(chunk_type, payload))
@@ -204,6 +211,13 @@ class NailgunClient(object):
     environment = dict(**environment)
     environment.update(self.ENV_DEFAULTS)
     cwd = cwd or self._workdir
+
+    ExceptionSink.reset_fatal_error_logging(
+      destination=self._workdir,
+      should_print_backtrace=True,
+      # trace_stream=self._stderr,
+      # exiter=Exiter(),
+    )
 
     # N.B. This can throw NailgunConnectionError (catchable via NailgunError).
     sock = self.try_connect()
