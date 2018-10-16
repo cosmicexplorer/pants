@@ -209,7 +209,8 @@ class NativeCompile(NativeTask, AbstractClass):
     """
     sources = compile_request.sources
 
-    if len(sources) == 0:
+    hacky_sources_minus_headers = [s for s in sources if not s.endswith('.h')]
+    if len(hacky_sources_minus_headers) == 0:
       # TODO: do we need this log message? Should we still have it for intentionally header-only
       # libraries (that might be a confusing message to see)?
       self.context.log.debug("no sources in request {}, skipping".format(compile_request))
