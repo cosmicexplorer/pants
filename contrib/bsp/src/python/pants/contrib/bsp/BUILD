@@ -1,7 +1,7 @@
 python_library(
   name='plugin',
   dependencies=[
-    '3rdparty/py:pants',
+    'src/python/pants:pants-packaged',
     'contrib/bsp/src/python/pants/contrib/bsp/subsystems',
     'contrib/bsp/src/python/pants/contrib/bsp/targets',
     'contrib/bsp/src/python/pants/contrib/bsp/tasks',

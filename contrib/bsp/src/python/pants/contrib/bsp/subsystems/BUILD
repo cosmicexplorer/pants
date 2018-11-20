@@ -1,5 +1,5 @@
 python_library(
   dependencies=[
-    '3rdparty/py:pants',
+    'src/python/pants:pants-packaged',
   ],
 )

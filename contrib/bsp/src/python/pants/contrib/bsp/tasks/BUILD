@@ -1,6 +1,6 @@
 python_library(
   dependencies=[
-    '3rdparty/py:pants',
+    'src/python/pants:pants-packaged',
     'contrib/bsp/src/python/pants/contrib/bsp/subsystems',
     'contrib/bsp/src/python/pants/contrib/bsp/targets',
   ],

@@ -1,5 +1,8 @@
-from __future__ import (absolute_import, division, generators, nested_scopes,
-                        print_function, unicode_literals, with_statement)
+# coding=utf-8
+# Copyright 2018 Pants project contributors (see CONTRIBUTORS.md).
+# Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import json
 import os
@@ -72,6 +75,7 @@ class EnsimeGen(ModifiedExportTaskBase, JvmToolTaskMixin):
   def _scala_platform(self):
     return ScalaPlatform.global_instance()
 
+  @staticmethod
   def _retrieve_single_product_at_target_base(product_mapping, target):
     product = product_mapping.get(target)
     single_base_dir = assert_single_element(product.keys())
@@ -90,7 +94,8 @@ class EnsimeGen(ModifiedExportTaskBase, JvmToolTaskMixin):
 
       jar_product = self.context.products.get(BootstrapJar)
       ensime_gen_target_address = Address.parse(self._ensime_gen_source.ensime_gen_binary)
-      ensime_gen_target = assert_single_element(self.resolve(ensime_gen_target_address))
+      ensime_gen_target = assert_single_element(
+        [self.context.build_graph.resolve_address(ensime_gen_target_address)])
       ensime_gen_jar = self._retrieve_single_product_at_target_base(jar_product, ensime_gen_target)
       ensime_gen_classpath = [ensime_gen_jar.tool_jar_path]
 

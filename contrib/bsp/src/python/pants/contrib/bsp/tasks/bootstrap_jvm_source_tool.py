@@ -1,5 +1,8 @@
-from __future__ import (absolute_import, division, generators, nested_scopes,
-                        print_function, unicode_literals, with_statement)
+# coding=utf-8
+# Copyright 2018 Pants project contributors (see CONTRIBUTORS.md).
+# Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 import glob
 import os
@@ -144,6 +147,7 @@ class BootstrapJvmSourceTool(Task):
       return
 
     jvm_binary_target_spec = self.binary_tool_target
+    # raise Exception('jvm_binary_target_spec: {}'.format(jvm_binary_target_spec))
     binary_target_address = Address.parse(jvm_binary_target_spec)
 
     # Scan everything under the target dir, then check whether the binary target has been
@@ -160,4 +164,5 @@ class BootstrapJvmSourceTool(Task):
     built_jar = self._collect_dist_jar(self.workdir)
 
     bootstrap_jar_product = self.context.products.get(BootstrapJar)
-    self._add_product_at_target_base(bootstrap_jar_product, binary_target, BootstrapJar(built_jar))
+    self._add_product_at_target_base(bootstrap_jar_product, binary_target, BootstrapJar(
+      binary_type(built_jar)))
