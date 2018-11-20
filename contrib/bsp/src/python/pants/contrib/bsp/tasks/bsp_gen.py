@@ -107,34 +107,23 @@ class BspGen(ModifiedExportTaskBase, JvmToolTaskMixin):
       output_file = os.path.join(get_buildroot(), self.get_options().output_file)
       safe_mkdir_for(output_file)
 
-      # This is what we depend on in 3rdparty/jvm:bsp-server.
-      bsp_server_version = '2.0.1'
-
-      bsp_server_jars = self.tool_classpath_from_products(self.context.products, 'bsp-server',
-                                                             scope=self.options_scope)
-
-      scala_compiler_jars = self._scala_platform.compiler_classpath(self.context.products)
-
       argv = [
         get_buildroot(),
         reported_scala_version,
         self._make_bsp_cache_dir(),
         zinc_compile_dir,
         output_file,
-        bsp_server_version,
       ]
 
       env = {
         'SCALAC_ARGS': json.dumps(self.get_options().scalac_options),
         'JAVAC_ARGS': json.dumps(self.get_options().javac_options),
-        'ENSIME_SERVER_JARS_CLASSPATH': ':'.join(bsp_server_jars),
-        'SCALA_COMPILER_JARS_CLASSPATH': ':'.join(scala_compiler_jars),
       }
 
       with open(export_outfile, 'rb') as inf:
         with environment_as(**env):
           execute_java(bsp_gen_classpath,
-                       'pingpong.bsp.BspFileGen',
+                       'pants.bsp.BspFileGen',
                        args=argv,
                        workunit_name='bsp-gen-invoke',
                        workunit_labels=[WorkUnitLabel.TOOL],
