@@ -1,0 +1,4 @@
+# Settings to run pants with when invoking a BSP server.
+
+[scala]
+version: 2.12

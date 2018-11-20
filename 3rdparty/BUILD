@@ -185,3 +185,12 @@ jar_library(name='wire-runtime',
             ],
             # javac uses undeclared types to build the MessageBuilder API.
             scope='forced',)
+
+jar_library(name='bsp',
+            jars=[
+              # TODO: clone bsp
+              # TODO: publish and find the specific tagged revision we publish from loading /
+              # publishing the bsp project in intellij!
+              scala_jar(org='ch.epfl.scala', name='bsp4s', rev='1.0.0+106-060da437'),
+              # TODO (for funsies): look up 'dynver'!
+            ])
