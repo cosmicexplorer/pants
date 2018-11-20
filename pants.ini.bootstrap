@@ -8,5 +8,5 @@ kill_nailguns: True
 [DEFAULT]
 execution_strategy: subprocess
 
-[bootstrap.bootstrap-ensime-gen]
+[bootstrap.bootstrap-bsp-gen]
 skip: True

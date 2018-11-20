@@ -1,4 +1,4 @@
-package pingpong.ensime
+package pingpong.bsp
 
 import spray.json._
 

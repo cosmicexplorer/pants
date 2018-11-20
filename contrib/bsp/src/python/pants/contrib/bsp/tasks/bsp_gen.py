@@ -21,30 +21,28 @@ from pants.util.contextutil import environment_as, temporary_dir
 from pants.util.dirutil import safe_mkdir, safe_mkdir_for
 from pants.util.memo import memoized_property
 from pants.util.objects import SubclassesOf
-from pants.contrib.bsp.subsystems.ensime_gen_source import EnsimeGenSource
+from pants.contrib.bsp.subsystems.bsp_gen_source import BspGenSource
 from pants.contrib.bsp.tasks.bootstrap_jvm_source_tool import BootstrapJar
 from pants.contrib.bsp.tasks.modified_export_task_base import ModifiedExportTaskBase
 
 
-class EnsimeGen(ModifiedExportTaskBase, JvmToolTaskMixin):
+class BspGen(ModifiedExportTaskBase, JvmToolTaskMixin):
 
   @classmethod
   def register_options(cls, register):
-    super(EnsimeGen, cls).register_options(register)
+    super(BspGen, cls).register_options(register)
 
     register('--reported-scala-version', type=str, default=None,
-             help='Scala version to report to ensime. Defaults to the scala platform version.')
+             help='Scala version to report to bsp. Defaults to the scala platform version.')
 
     register('--scalac-options', type=list,
              default=['-deprecation', '-unchecked', '-Xlint'],
-             help='Options to pass to scalac for ensime.')
+             help='Options to pass to scalac for bsp.')
     register('--javac-options', type=list,
              default=['-deprecation', '-Xlint:all', '-Xlint:-serial', '-Xlint:-path'],
-             help='Options to pass to javac for ensime.')
-    register('--output-file', type=str, default='.ensime', advanced=True,
-             help='Relative path to the buildroot to write the ensime config to.')
-
-    cls.register_jvm_tool(register, 'ensime-server')
+             help='Options to pass to javac for bsp.')
+    register('--output-file', type=str, default='.bsp', advanced=True,
+             help='Relative path to the buildroot to write the bsp config to.')
 
   @classmethod
   def prepare(cls, options, round_manager):
@@ -55,19 +53,19 @@ class EnsimeGen(ModifiedExportTaskBase, JvmToolTaskMixin):
 
   @classmethod
   def subsystem_dependencies(cls):
-    return super(EnsimeGen, cls).subsystem_dependencies() + (
+    return super(BspGen, cls).subsystem_dependencies() + (
       DistributionLocator,
       ScalaPlatform,
-      EnsimeGenSource.scoped(cls),
+      BspGenSource.scoped(cls),
     )
 
   @memoized_property
-  def _ensime_gen_source(self):
-    return EnsimeGenSource.scoped_instance(self)
+  def _bsp_gen_source(self):
+    return BspGenSource.scoped_instance(self)
 
-  def _make_ensime_cache_dir(self):
+  def _make_bsp_cache_dir(self):
     bootstrap_dir = get_pants_cachedir()
-    cache_dir = os.path.join(bootstrap_dir, 'ensime')
+    cache_dir = os.path.join(bootstrap_dir, 'bsp')
     safe_mkdir(cache_dir)
     return cache_dir
 
@@ -93,11 +91,11 @@ class EnsimeGen(ModifiedExportTaskBase, JvmToolTaskMixin):
         outf.write(export_result)
 
       jar_product = self.context.products.get(BootstrapJar)
-      ensime_gen_target_address = Address.parse(self._ensime_gen_source.ensime_gen_binary)
-      ensime_gen_target = assert_single_element(
-        [self.context.build_graph.resolve_address(ensime_gen_target_address)])
-      ensime_gen_jar = self._retrieve_single_product_at_target_base(jar_product, ensime_gen_target)
-      ensime_gen_classpath = [ensime_gen_jar.tool_jar_path]
+      bsp_gen_target_address = Address.parse(self._bsp_gen_source.bsp_gen_binary)
+      bsp_gen_target = assert_single_element(
+        [self.context.build_graph.resolve_address(bsp_gen_target_address)])
+      bsp_gen_jar = self._retrieve_single_product_at_target_base(jar_product, bsp_gen_target)
+      bsp_gen_classpath = [bsp_gen_jar.tool_jar_path]
 
       # TODO: use JvmPlatform for jvm options!
       reported_scala_version = self.get_options().reported_scala_version
@@ -109,10 +107,10 @@ class EnsimeGen(ModifiedExportTaskBase, JvmToolTaskMixin):
       output_file = os.path.join(get_buildroot(), self.get_options().output_file)
       safe_mkdir_for(output_file)
 
-      # This is what we depend on in 3rdparty/jvm:ensime-server.
-      ensime_server_version = '2.0.1'
+      # This is what we depend on in 3rdparty/jvm:bsp-server.
+      bsp_server_version = '2.0.1'
 
-      ensime_server_jars = self.tool_classpath_from_products(self.context.products, 'ensime-server',
+      bsp_server_jars = self.tool_classpath_from_products(self.context.products, 'bsp-server',
                                                              scope=self.options_scope)
 
       scala_compiler_jars = self._scala_platform.compiler_classpath(self.context.products)
@@ -120,25 +118,25 @@ class EnsimeGen(ModifiedExportTaskBase, JvmToolTaskMixin):
       argv = [
         get_buildroot(),
         reported_scala_version,
-        self._make_ensime_cache_dir(),
+        self._make_bsp_cache_dir(),
         zinc_compile_dir,
         output_file,
-        ensime_server_version,
+        bsp_server_version,
       ]
 
       env = {
         'SCALAC_ARGS': json.dumps(self.get_options().scalac_options),
         'JAVAC_ARGS': json.dumps(self.get_options().javac_options),
-        'ENSIME_SERVER_JARS_CLASSPATH': ':'.join(ensime_server_jars),
+        'ENSIME_SERVER_JARS_CLASSPATH': ':'.join(bsp_server_jars),
         'SCALA_COMPILER_JARS_CLASSPATH': ':'.join(scala_compiler_jars),
       }
 
       with open(export_outfile, 'rb') as inf:
         with environment_as(**env):
-          execute_java(ensime_gen_classpath,
-                       'pingpong.ensime.EnsimeFileGen',
+          execute_java(bsp_gen_classpath,
+                       'pingpong.bsp.BspFileGen',
                        args=argv,
-                       workunit_name='ensime-gen-invoke',
+                       workunit_name='bsp-gen-invoke',
                        workunit_labels=[WorkUnitLabel.TOOL],
                        distribution=DistributionLocator.cached(),
                        stdin=inf)

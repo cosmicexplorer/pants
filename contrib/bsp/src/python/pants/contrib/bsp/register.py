@@ -16,9 +16,9 @@ from pants.contrib.bsp.targets.custom_scrooge_java_thrift_library import \
 from pants.contrib.bsp.targets.pants_jvm_binary_subproject import PantsJvmBinarySubproject
 from pants.contrib.bsp.targets.sbt_dist import SbtDist
 from pants.contrib.bsp.tasks.bootstrap_coursier import BootstrapCoursier
-from pants.contrib.bsp.tasks.bootstrap_ensime_gen import BootstrapEnsimeGen
+from pants.contrib.bsp.tasks.bootstrap_bsp_gen import BootstrapBspGen
 from pants.contrib.bsp.tasks.custom_scrooge import CustomScrooge
-from pants.contrib.bsp.tasks.ensime_gen import EnsimeGen
+from pants.contrib.bsp.tasks.bsp_gen import BspGen
 from pants.contrib.bsp.tasks.publish_local_sbt_distributions import \
     PublishLocalSbtDistributions
 
@@ -51,8 +51,8 @@ def register_goals():
     action=BootstrapCoursier,
   ).install('bootstrap')
   task(
-    name='bootstrap-ensime-gen',
-    action=BootstrapEnsimeGen,
+    name='bootstrap-bsp-gen',
+    action=BootstrapBspGen,
   ).install('bootstrap')
   task(name='custom-scrooge', action=CustomScrooge).install('gen')
-  task(name='ensime-gen', action=EnsimeGen).install('ensime')
+  task(name='bsp-gen', action=BspGen).install('bsp')

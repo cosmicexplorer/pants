@@ -12,17 +12,17 @@ from pants.subsystem.subsystem import Subsystem
 from pants.util.memo import memoized_property
 
 
-class EnsimeGenSource(Subsystem):
+class BspGenSource(Subsystem):
 
-  options_scope = 'ensime-gen-source'
+  options_scope = 'bsp-gen-source'
 
   @classmethod
   def register_options(cls, register):
-    super(EnsimeGenSource, cls).register_options(register)
+    super(BspGenSource, cls).register_options(register)
 
-    register('--ensime-gen-binary', type=target_option, default='//:ensime-gen', advanced=True,
-             help='The target to use for ensime-gen sources.')
+    register('--bsp-gen-binary', type=target_option, default='//:bsp-gen', advanced=True,
+             help='The target to use for bsp-gen sources.')
 
   @memoized_property
-  def ensime_gen_binary(self):
-    return self.get_options().ensime_gen_binary
+  def bsp_gen_binary(self):
+    return self.get_options().bsp_gen_binary
