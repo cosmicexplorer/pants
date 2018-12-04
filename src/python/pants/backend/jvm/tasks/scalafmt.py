@@ -71,6 +71,9 @@ class ScalaFmt(RewriteBase):
 
     # If the scalafmt target or any of its transitive dependencies have changed, this fingerprint
     # will be different -- this is currently only used in the graal executor.
+    # TODO: `input_fingerprint` should be calculated automatically from the jvm tool target option
+    # in runjava, or in a new API somewhere (otherwise it will just error out in the graal
+    # subsystem)
     scalafmt_target = assert_single_element(
       self.context.build_graph.resolve(self.get_options().scalafmt))
     input_fingerprint = scalafmt_target.transitive_invalidation_hash()
