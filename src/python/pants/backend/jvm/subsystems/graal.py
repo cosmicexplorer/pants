@@ -92,7 +92,9 @@ class GraalCE(NativeTool, JvmToolMixin):
   def produce_native_image(self, tool_classpath, main_class, input_fingerprint):
     if not isinstance(input_fingerprint, text_type):
       raise self.NativeImageCreationError(
-        'Input fingerprint provided must be an instance of {}: was {!r} (type {}).'
+        "Input fingerprint provided must be an instance of {}: was {!r} (type {}). "
+        "JVM tools using the 'graal' execution_strategy must provide an 'input_fingerprint' "
+        "argument to self.runjava()."
         .format(text_type.__name__, input_fingerprint, type(input_fingerprint).__name__))
 
     # We have finished with the digest.
