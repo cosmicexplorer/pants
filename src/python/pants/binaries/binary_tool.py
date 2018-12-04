@@ -154,6 +154,10 @@ class BinaryToolBase(Subsystem):
   def _binary_util(self):
     return BinaryUtil.Factory.create()
 
+  @memoized_property
+  def host_platform(self):
+    return self._binary_util._host_platform()
+
   @classmethod
   def _get_name(cls):
     return cls.name or cls.options_scope
