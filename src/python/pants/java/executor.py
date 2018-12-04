@@ -257,3 +257,38 @@ class SubprocessExecutor(Executor):
                                 **subprocess_args)
       except OSError as e:
         raise self.Error('Problem executing {0}: {1}'.format(self._distribution.java, e))
+
+
+class GraalExecutor(SubprocessExecutor):
+  """An Executor which bundles the classpath into a native image built with the Graal VM.
+
+  :API: public
+  """
+
+  def __init__(self, distribution, graal_ce, input_fingerprint):
+    super(GraalExecutor, self).__init__(distribution=distribution)
+    self._graal_ce = graal_ce
+    self._input_fingerprint = input_fingerprint
+
+  def _runner(self, classpath, main, jvm_options, args, cwd=None):
+    logger.debug('using graal executor for main class {}, ignoring jvm options {!r}.'
+                 .format(main, jvm_options))
+    native_image_path = self._graal_ce.produce_native_image(classpath, main, self._input_fingerprint)
+    full_command = [native_image_path] + args
+
+    class GraalNativeImageRunner(self.Runner):
+      @property
+      def executor(_):
+        return self
+
+      @property
+      def command(_):
+        return full_command
+
+      def spawn(_, stdout=None, stderr=None, stdin=None):
+        return self._spawn(full_command, cwd, stdout=stdout, stderr=stderr, stdin=stdin)
+
+      def run(_, stdout=None, stderr=None, stdin=None):
+        return self._spawn(full_command, cwd, stdout=stdout, stderr=stderr, stdin=stdin).wait()
+
+    return GraalNativeImageRunner()

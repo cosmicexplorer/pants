@@ -4,14 +4,17 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import os
 from abc import abstractproperty
 
 from pants.backend.jvm.tasks.rewrite_base import RewriteBase
+from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.java.jar.jar_dependency import JarDependency
 from pants.option.custom_types import file_option
 from pants.task.fmt_task_mixin import FmtTaskMixin
 from pants.task.lint_task_mixin import LintTaskMixin
+from pants.util.collections import assert_single_element
 
 
 class ScalaFmt(RewriteBase):
@@ -27,13 +30,22 @@ class ScalaFmt(RewriteBase):
     register('--configuration', advanced=True, type=file_option, fingerprint=True,
               help='Path to scalafmt config file, if not specified default scalafmt config used')
 
-    cls.register_jvm_tool(register,
-                          'scalafmt',
-                          classpath=[
-                          JarDependency(org='com.geirsson',
-                                        name='scalafmt-cli_2.11',
-                                        rev='1.5.1')
-                          ])
+    cls.register_jvm_tool(
+      register,
+      'scalafmt',
+      classpath=[
+        JarDependency(org='com.geirsson',
+                      name='scalafmt-cli_2.11',
+                      rev='1.5.1'),
+        # NB!!!!: the version here should match the major and minor version used for the tool, and
+        # should be the latest release for the (maj,min) tuple
+        # TODO: this requires the user to specify the scala-reflect jar dependency in BUILD.tools or
+        # wherever the scalafmt dep is defined.
+        # TODO: this should only be if we use the graal executor!
+        JarDependency(org='org.scala-lang',
+                      name='scala-reflect',
+                      rev='2.11.12'),
+      ])
 
   @classmethod
   def target_types(cls):
@@ -52,14 +64,23 @@ class ScalaFmt(RewriteBase):
     config_file = self.get_options().configuration
     args = list(self.additional_args)
     if config_file is not None:
+      if not os.path.isabs(config_file):
+        config_file = os.path.join(get_buildroot(), config_file)
       args.extend(['--config', config_file])
     args.extend([source for _target, source in target_sources])
+
+    # If the scalafmt target or any of its transitive dependencies have changed, this fingerprint
+    # will be different -- this is currently only used in the graal executor.
+    scalafmt_target = assert_single_element(
+      self.context.build_graph.resolve(self.get_options().scalafmt))
+    input_fingerprint = scalafmt_target.transitive_invalidation_hash()
 
     return self.runjava(classpath=self.tool_classpath('scalafmt'),
                         main='org.scalafmt.cli.Cli',
                         args=args,
                         workunit_name='scalafmt',
-                        jvm_options=self.get_options().jvm_options)
+                        jvm_options=self.get_options().jvm_options,
+                        input_fingerprint=input_fingerprint)
 
   @abstractproperty
   def additional_args(self):
