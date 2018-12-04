@@ -563,6 +563,7 @@ python_library(
     ':jvm_tool_task_mixin',
     'src/python/pants/java/jar',
     'src/python/pants/base:exceptions',
+    'src/python/pants/backend/jvm/subsystems:graal',
     'src/python/pants/java/distribution:distribution',
     'src/python/pants/java:executor',
     'src/python/pants/java:nailgun_executor',
@@ -702,6 +703,7 @@ python_library(
     'src/python/pants/java/jar',
     'src/python/pants/option',
     'src/python/pants/task',
+    'src/python/pants/util:collections',
   ]
 )
 

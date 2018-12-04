@@ -255,6 +255,7 @@ class BaseZincCompile(JvmCompile):
       self.HERMETIC: hermetic_init,
       self.HERMETIC_WITH_NAILGUN: hermetic_init,
       self.SUBPROCESS: lambda: None,
+      self.GRAAL: lambda: None,
       self.NAILGUN: lambda: None,
     })()
 
@@ -327,6 +328,7 @@ class BaseZincCompile(JvmCompile):
                                   self.HERMETIC: False,
                                   self.HERMETIC_WITH_NAILGUN: False,
                                   self.SUBPROCESS: True,
+                                  self.GRAAL: True,
                                   self.NAILGUN: True,
                                 }))
     # TODO: Investigate upstream_analysis for hermetic compiles
@@ -443,6 +445,7 @@ class BaseZincCompile(JvmCompile):
         jvm_options, ctx, classes_dir, zinc_args, compiler_bridge_classpath_entry, dependency_classpath,
         scalac_classpath_entries, with_nailgun=True),
       self.SUBPROCESS: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
+      self.GRAAL: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
       self.NAILGUN: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
     })()
 
