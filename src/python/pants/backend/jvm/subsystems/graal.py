@@ -97,7 +97,6 @@ class GraalCE(NativeTool, JvmToolMixin):
         "argument to self.runjava()."
         .format(text_type.__name__, input_fingerprint, type(input_fingerprint).__name__))
 
-    # We have finished with the digest.
     input_hash = stable_json_hash([input_fingerprint, self._report_unsupported_elements])
     output_image_file_name = '{}-{}'.format(main_class, input_hash)
 
