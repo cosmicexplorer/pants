@@ -96,14 +96,7 @@ class OptionsInitializer(object):
     })
 
     # Now that we have the known scopes we can get the full options.
-    options = options_bootstrapper.get_full_options(known_scope_infos)
-
-    distinct_optionable_classes = sorted({si.optionable_cls for si in known_scope_infos},
-                                         key=lambda o: o.options_scope)
-    for optionable_cls in distinct_optionable_classes:
-      optionable_cls.register_options_on_scope(options)
-
-    return options
+    return options_bootstrapper.get_full_options(known_scope_infos)
 
   @classmethod
   def create(cls, options_bootstrapper, build_configuration, init_subsystems=True):

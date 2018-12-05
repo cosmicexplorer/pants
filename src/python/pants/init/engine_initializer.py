@@ -36,6 +36,7 @@ from pants.engine.native import Native
 from pants.engine.parser import SymbolTable
 from pants.engine.rules import SingletonRule
 from pants.engine.scheduler import Scheduler
+from pants.engine.selectors import Params
 from pants.init.options_initializer import BuildConfigInitializer
 from pants.option.global_options import (DEFAULT_EXECUTION_OPTIONS, ExecutionOptions,
                                          GlobMatchErrorBehavior)
@@ -190,7 +191,7 @@ class LegacyGraphSession(datatype(['scheduler_session', 'symbol_table', 'console
     if invalid_goals:
       raise self.InvalidGoals(invalid_goals)
 
-  def run_console_rules(self, goals, target_roots, v2_ui):
+  def run_console_rules(self, options_bootstrapper, goals, target_roots, v2_ui):
     """Runs @console_rules sequentially and interactively by requesting their implicit Goal products.
 
     For retryable failures, raises scheduler.ExecutionError.
@@ -207,8 +208,9 @@ class LegacyGraphSession(datatype(['scheduler_session', 'symbol_table', 'console
     for goal in goals:
       try:
         goal_product = self.goal_map[goal]
+        params = Params(subjects[0], options_bootstrapper)
         logger.debug('requesting {} to satisfy execution of `{}` goal'.format(goal_product, goal))
-        self.scheduler_session.run_console_rule(goal_product, subjects[0], v2_ui)
+        self.scheduler_session.run_console_rule(goal_product, params, v2_ui)
       finally:
         self.console.flush()
 

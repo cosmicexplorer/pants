@@ -178,11 +178,18 @@ class OptionsBootstrapper(datatype([
   @memoized_method
   def _full_options(self, known_scope_infos):
     bootstrap_option_values = self.get_bootstrap_options().for_global_scope()
-    return Options.create(self.env,
-                          self.config,
-                          known_scope_infos,
-                          args=self.args,
-                          bootstrap_option_values=bootstrap_option_values)
+    options = Options.create(self.env,
+                             self.config,
+                             known_scope_infos,
+                             args=self.args,
+                             bootstrap_option_values=bootstrap_option_values)
+
+    distinct_optionable_classes = sorted({si.optionable_cls for si in known_scope_infos},
+                                         key=lambda o: o.options_scope)
+    for optionable_cls in distinct_optionable_classes:
+      optionable_cls.register_options_on_scope(options)
+
+    return options
 
   def get_full_options(self, known_scope_infos):
     """Get the full Options instance bootstrapped by this object for the given known scopes.
