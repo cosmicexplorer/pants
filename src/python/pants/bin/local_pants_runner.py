@@ -193,7 +193,7 @@ class LocalPantsRunner(object):
     try:
       self._graph_session.run_console_rules(
         self._options_bootstrapper,
-        goals,
+        self._options.goals_and_possible_v2_goals,
         self._target_roots,
         self._global_options.v2_ui
       )

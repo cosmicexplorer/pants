@@ -217,7 +217,7 @@ class SchedulerService(PantsService):
       # N.B. @console_rules run pre-fork in order to cache the products they request during execution.
       session.run_console_rules(
           options_bootstrapper,
-          goals,
+          options.goals_and_possible_v2_goals,
           target_roots,
           v2_ui=global_options.v2_ui
         )

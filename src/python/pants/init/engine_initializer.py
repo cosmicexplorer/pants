@@ -181,6 +181,15 @@ class LegacyGraphSession(datatype(['scheduler_session', 'symbol_table', 'console
     request = self.scheduler_session.execution_request([TransitiveHydratedTargets], subjects)
     self.scheduler_session.execute(request)
 
+  def validate_goals(self, goals):
+    """Checks for @console_rules that satisfy requested goals.
+
+    :param list goals: The list of requested goal names as passed on the commandline.
+    """
+    invalid_goals = [goal for goal in goals if goal not in self.goal_map]
+    if invalid_goals:
+      raise self.InvalidGoals(invalid_goals)
+
   def run_console_rules(self, options_bootstrapper, goals, target_roots, v2_ui):
     """Runs @console_rules sequentially and interactively by requesting their implicit Goal products.
 
@@ -196,13 +205,10 @@ class LegacyGraphSession(datatype(['scheduler_session', 'symbol_table', 'console
     # Console rule can only have one subject.
     assert len(subjects) == 1
     for goal in goals:
-      try:
-        goal_product = self.goal_map[goal]
-        params = Params(subjects[0], options_bootstrapper)
-        logger.debug('requesting {} to satisfy execution of `{}` goal'.format(goal_product, goal))
-        self.scheduler_session.run_console_rule(goal_product, params, v2_ui)
-      finally:
-        self.console.flush()
+      goal_product = self.goal_map[goal]
+      params = Params(subjects[0], options_bootstrapper)
+      logger.debug('requesting {} to satisfy execution of `{}` goal'.format(goal_product, goal))
+      self.scheduler_session.run_console_rule(goal_product, params, v2_ui)
 
   def create_build_graph(self, target_roots, build_root=None):
     """Construct and return a `BuildGraph` given a set of input specs.
