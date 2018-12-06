@@ -8,14 +8,16 @@ import inspect
 
 from pants.option.optionable import Optionable
 from pants.option.scope import ScopeInfo
-from pants.subsystem.subsystem_client_mixin import SubsystemClientMixin, SubsystemDependency
+from pants.subsystem.subsystem_client_mixin import (SubsystemClientMixin, SubsystemDependency,
+                                                    SubsystemFactory)
+from pants.util.meta import classproperty
 
 
 class SubsystemError(Exception):
   """An error in a subsystem."""
 
 
-class Subsystem(SubsystemClientMixin, Optionable):
+class Subsystem(SubsystemClientMixin, SubsystemFactory, Optionable):
   """A separable piece of functionality that may be reused across multiple tasks or other code.
 
   Subsystems encapsulate the configuration and initialization of things like JVMs,
@@ -44,6 +46,11 @@ class Subsystem(SubsystemClientMixin, Optionable):
       super(Subsystem.UninitializedSubsystemError, self).__init__(
         'Subsystem "{}" not initialized for scope "{}". '
         'Is subsystem missing from subsystem_dependencies() in a task? '.format(class_name, scope))
+
+  @classproperty
+  def subsystem_cls(cls):
+    # Fills the `SubsystemFactory` contract.
+    return cls
 
   @classmethod
   def is_subsystem_type(cls, obj):

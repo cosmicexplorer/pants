@@ -4,19 +4,53 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from builtins import object
-from collections import namedtuple
+import functools
+from builtins import object, str
 
 from twitter.common.collections import OrderedSet
 
+from pants.engine.rules import TaskRule
+from pants.engine.selectors import Get
 from pants.option.arg_splitter import GLOBAL_SCOPE
-from pants.option.scope import ScopeInfo
+from pants.option.scope import Scope, ScopedOptions, ScopeInfo
+from pants.util.objects import datatype
+
+
+def _construct_subsystem(subsystem_factory):
+  scope = subsystem_factory.options_scope
+  scoped_options = yield Get(ScopedOptions, Scope(str(scope)))
+  yield subsystem_factory.subsystem_cls(scope, scoped_options.options)
+
+
+class SubsystemFactory(object):
+  """A mixin that provides a method that returns an @rule to construct a Subsystem."""
+
+  @property
+  def subsystem_cls(self):
+    raise NotImplementedError('{} does not define a `subsystem_cls` property.'.format(self))
+
+  @property
+  def options_scope(self):
+    raise NotImplementedError('{} does not define a `scope` property.'.format(self))
+
+  @classmethod
+  def constructor(cls):
+    """Returns an @rule (aka TaskRule) that constructs an instance of this Subsystem."""
+    snake_scope = cls.options_scope.replace('-', '_')
+    partial_construct_subsystem = functools.partial(_construct_subsystem, cls)
+    partial_construct_subsystem.__name__ = 'construct_scope_{}'.format(snake_scope)
+    return TaskRule(
+      cls.subsystem_cls,
+      [],
+      partial_construct_subsystem,
+      input_gets=[Get(ScopedOptions, Scope)],
+    )
 
 
 class SubsystemClientError(Exception): pass
 
 
-class SubsystemDependency(namedtuple('_SubsystemDependency', ('subsystem_cls', 'scope'))):
+class SubsystemDependency(datatype(['subsystem_cls', 'scope']), SubsystemFactory):
   """Indicates intent to use an instance of `subsystem_cls` scoped to `scope`."""
 
   def is_global(self):
