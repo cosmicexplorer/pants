@@ -40,7 +40,6 @@ from pants.engine.selectors import Params
 from pants.init.options_initializer import BuildConfigInitializer
 from pants.option.global_options import (DEFAULT_EXECUTION_OPTIONS, ExecutionOptions,
                                          GlobMatchErrorBehavior)
-from pants.rules.core.register import create_core_rules
 from pants.util.objects import datatype
 
 
@@ -358,7 +357,6 @@ class EngineInitializer(object):
       create_process_rules() +
       create_graph_rules(address_mapper, symbol_table) +
       create_options_parsing_rules() +
-      create_core_rules() +
       # TODO: This should happen automatically, but most tests (e.g. tests/python/pants_test/auth) fail if it's not here:
       [run_python_test] +
       rules

@@ -4,13 +4,17 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from pants.rules.core.fastlist import fast_list
+from pants.rules.core import fastlist
 from pants.rules.core.test import coordinator_of_tests, fast_test
 
 
-def create_core_rules():
-  return [
-    fast_list,
+def global_subsystems():
+  # TODO: Move into the graph_info backend.
+  return fastlist.subsystems()
+
+
+def rules():
+  return fastlist.rules() + [
     fast_test,
     coordinator_of_tests,
   ]
