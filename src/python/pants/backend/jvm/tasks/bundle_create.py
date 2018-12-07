@@ -17,8 +17,33 @@ from pants.base.exceptions import TaskError
 from pants.build_graph.bundle_mixin import BundleMixin
 from pants.build_graph.target_scopes import Scopes
 from pants.fs import archive
+from pants.task.task import Task
+from pants.util.collections import assert_single_element
 from pants.util.dirutil import safe_mkdir
 from pants.util.objects import datatype
+
+
+class GraalNativeImageCreate(Task):
+
+  @classmethod
+  def prepare(cls, options, round_manager):
+    super(GraalNativeImageCreate, cls).prepare(options, round_manager)
+    round_manager.require('jvm_bundles')
+
+  def execute(self): pass
+    # app_targets = self.context.targets(BundleCreate.App.is_app)
+    # binaries_product = self.context.products.get('jvm_bundles')
+
+  def _add_product_at_target_base(self, product_mapping, target, value):
+    product_mapping.add(target, target.target_base).append(value)
+
+  def _retrieve_single_product_at_target_base(self, product_mapping, target):
+    self.context.log.debug("product_mapping: {}".format(product_mapping))
+    self.context.log.debug("target: {}".format(target))
+    product = product_mapping.get(target)
+    single_base_dir = assert_single_element(product.keys())
+    single_product = assert_single_element(product[single_base_dir])
+    return single_product
 
 
 class BundleCreate(BundleMixin, JvmBinaryTask):
