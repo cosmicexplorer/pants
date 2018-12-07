@@ -111,6 +111,35 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
     GraalExecutor: [WorkUnitLabel.RUN],
   }
 
+  def runjava_async(self, classpath, main, jvm_options=None, args=None, workunit_name=None,
+                    workunit_labels=None, workunit_log_config=None, dist=None,
+                    input_fingerprint=None):
+    executor = self.create_java_executor(dist=dist, input_fingerprint=input_fingerprint)
+
+    for executor_cls, labels in self._extra_workunit_labels.items():
+      if isinstance(executor, executor_cls):
+        workunit_labels = workunit_labels or []
+        workunit_labels.extend(labels)
+
+    # Creating synthetic jar to work around system arg length limit is not necessary
+    # when `NailgunExecutor` is used because args are passed through socket, therefore turning off
+    # creating synthetic jar if nailgun is used.
+    create_synthetic_jar = self.execution_strategy != self.NAILGUN
+    try:
+      return util.execute_java_async(classpath=classpath,
+                                     main=main,
+                                     jvm_options=jvm_options,
+                                     args=args,
+                                     executor=executor,
+                                     workunit_factory=self.context.new_workunit,
+                                     workunit_name=workunit_name,
+                                     workunit_labels=workunit_labels,
+                                     workunit_log_config=workunit_log_config,
+                                     create_synthetic_jar=create_synthetic_jar,
+                                     synthetic_jar_dir=self._executor_workdir)
+    except executor.Error as e:
+      raise TaskError(e)
+
   def runjava(self, classpath, main, jvm_options=None, args=None, workunit_name=None,
               workunit_labels=None, workunit_log_config=None, dist=None,
               input_fingerprint=None):
@@ -119,7 +148,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
     If --execution-strategy=subprocess is specified then the java main is run in a freshly spawned
     subprocess, otherwise a persistent nailgun server dedicated to this Task subclass is used to
     speed up amortized run times.
-
+,
     :API: public
     """
     executor = self.create_java_executor(dist=dist, input_fingerprint=input_fingerprint)

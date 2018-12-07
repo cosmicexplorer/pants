@@ -29,6 +29,8 @@ class ScalaFmt(RewriteBase):
     super(ScalaFmt, cls).register_options(register)
     register('--configuration', advanced=True, type=file_option, fingerprint=True,
               help='Path to scalafmt config file, if not specified default scalafmt config used')
+    register('--per-target-parallelism', type=bool, default=False, advanced=True,
+             help='???')
 
     cls.register_jvm_tool(
       register,
@@ -58,6 +60,48 @@ class ScalaFmt(RewriteBase):
   @classmethod
   def implementation_version(cls):
     return super(ScalaFmt, cls).implementation_version() + [('ScalaFmt', 5)]
+
+  def _execute_for(self, targets):
+    if not self.get_options().per_target_parallelism:
+      return super(ScalaFmt, self)._execute_for(targets)
+
+    subprocs = []
+    for tgt in targets:
+      source_file_paths = [s for _, s in self._calculate_sources([tgt])]
+      the_subprocess = self.invoke_tool_async(None, source_file_paths)
+      subprocs.append(the_subprocess)
+
+    for p in subprocs:
+      rc = p.wait()
+      if rc != 0:
+        raise TaskError('{} is improperly implemented: a failed process '
+                        'should raise an exception earlier.'.format(type(self).__name__))
+
+  def invoke_tool_async(self, absolute_root, target_sources):
+    # If no config file is specified use default scalafmt config.
+    config_file = self.get_options().configuration
+    args = list(self.additional_args)
+    if config_file is not None:
+      if not os.path.isabs(config_file):
+        config_file = os.path.join(get_buildroot(), config_file)
+      args.extend(['--config', config_file])
+    args.extend(target_sources)
+
+    # If the scalafmt target or any of its transitive dependencies have changed, this fingerprint
+    # will be different -- this is currently only used in the graal executor.
+    # TODO: `input_fingerprint` should be calculated automatically from the jvm tool target option
+    # in runjava, or in a new API somewhere (otherwise it will just error out in the graal
+    # subsystem)
+    scalafmt_target = assert_single_element(
+      self.context.build_graph.resolve(self.get_options().scalafmt))
+    input_fingerprint = scalafmt_target.transitive_invalidation_hash()
+
+    return self.runjava_async(classpath=self.tool_classpath('scalafmt'),
+                              main='org.scalafmt.cli.Cli',
+                              args=args,
+                              workunit_name='scalafmt',
+                              jvm_options=self.get_options().jvm_options,
+                              input_fingerprint=input_fingerprint)
 
   def invoke_tool(self, absolute_root, target_sources):
     # If no config file is specified use default scalafmt config.
