@@ -241,7 +241,9 @@ class EngineInitializer(object):
   @staticmethod
   def _make_goal_map_from_rules(rules):
     goal_map = {}
-    goal_to_rule = [(rule.goal, rule) for rule in rules if getattr(rule, 'goal', None) is not None]
+    goal_to_rule = [(rule.goal_subsystem_cls.options_scope, rule)
+                    for rule in rules
+                    if getattr(rule, 'goal_subsystem_cls', None) is not None]
     for goal, rule in goal_to_rule:
       if goal in goal_map:
         raise EngineInitializer.GoalMappingError(

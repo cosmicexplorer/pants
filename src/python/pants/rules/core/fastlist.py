@@ -13,17 +13,14 @@ from pants.engine.selectors import Get, Select
 from pants.subsystem.subsystem import Subsystem
 
 
-class ListOptions(Subsystem):
-  """Lists all targets matching the target specs.
-
-  If no targets are specified, lists all targets in the workspace.
-  """
+class List(Subsystem):
+  """Lists all targets matching the target specs."""
 
   options_scope = 'list'
 
   @classmethod
   def register_options(cls, register):
-    super(ListOptions, cls).register_options(register)
+    super(List, cls).register_options(register)
     register('--provides', type=bool,
              help='List only targets that provide an artifact, displaying the columns specified by '
                   '--provides-columns.')
@@ -34,7 +31,7 @@ class ListOptions(Subsystem):
              help='Print only targets that are documented with a description.')
 
 
-@console_rule('list', [Select(Console), Select(ListOptions), Select(Specs)])
+@console_rule(List, [Select(Console), Select(List), Select(Specs)])
 def fast_list(console, options, specs):
   """A fast variant of `./pants list` with a reduced feature set."""
 
@@ -84,12 +81,11 @@ def fast_list(console, options, specs):
 
 def subsystems():
   return [
-      ListOptions,
+      List,
     ]
 
 
 def rules():
   return [
-      ListOptions.constructor(),
-      fast_list
+      fast_list,
     ]

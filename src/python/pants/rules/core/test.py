@@ -15,9 +15,16 @@ from pants.engine.rules import console_rule, rule
 from pants.engine.selectors import Get, Select
 from pants.rules.core.core_test_model import Status, TestResult
 from pants.rules.core.exceptions import GracefulTerminationException
+from pants.subsystem.subsystem import Subsystem
 
 
-@console_rule('test', [Select(Console), Select(BuildFileAddresses)])
+class Test(Subsystem):
+  """Runs tests."""
+
+  options_scope = 'test'
+
+
+@console_rule(Test, [Select(Console), Select(BuildFileAddresses)])
 def fast_test(console, addresses):
   test_results = yield [Get(TestResult, Address, address.to_address()) for address in addresses]
   wrote_any_stdout = False
@@ -51,3 +58,16 @@ def coordinator_of_tests(target):
     yield TestResult(status=result.status, stdout=result.stdout)
   else:
     raise Exception("Didn't know how to run tests for type {}".format(target.adaptor.type_alias))
+
+
+def subsystems():
+  return [
+      Test,
+    ]
+
+
+def rules():
+  return [
+      coordinator_of_tests,
+      fast_test,
+    ]

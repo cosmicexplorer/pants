@@ -9,7 +9,6 @@ from builtins import object, str
 
 from twitter.common.collections import OrderedSet
 
-from pants.engine.rules import TaskRule
 from pants.engine.selectors import Get
 from pants.option.arg_splitter import GLOBAL_SCOPE
 from pants.option.scope import Scope, ScopedOptions, ScopeInfo
@@ -34,17 +33,20 @@ class SubsystemFactory(object):
     raise NotImplementedError('{} does not define a `scope` property.'.format(self))
 
   @classmethod
-  def constructor(cls):
-    """Returns an @rule (aka TaskRule) that constructs an instance of this Subsystem."""
+  def signature(cls):
+    """Returns kwargs to construct a `TaskRule` that will construct the target Subsystem.
+
+    TODO: This indirection avoids a cycle between this module and the `rules` module.
+    """
     snake_scope = cls.options_scope.replace('-', '_')
     partial_construct_subsystem = functools.partial(_construct_subsystem, cls)
     partial_construct_subsystem.__name__ = 'construct_scope_{}'.format(snake_scope)
-    return TaskRule(
-      cls.subsystem_cls,
-      [],
-      partial_construct_subsystem,
-      input_gets=[Get(ScopedOptions, Scope)],
-    )
+    return dict(
+        output_type=cls.subsystem_cls,
+        input_selectors=[],
+        func=partial_construct_subsystem,
+        input_gets=[Get(ScopedOptions, Scope)],
+      )
 
 
 class SubsystemClientError(Exception): pass
