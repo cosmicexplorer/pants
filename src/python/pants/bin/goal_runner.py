@@ -58,8 +58,11 @@ class GoalRunnerFactory(object):
       result = help_printer.print_help()
       self._exiter(result)
 
-  def _determine_goals(self, address_mapper, requested_goals):
+  def _determine_goals(self, address_mapper, options):
     """Check and populate the requested goals for a given run."""
+    v1_goals, ambiguous_goals, _ = options.goals_by_version
+    requested_goals = v1_goals + ambiguous_goals
+
     spec_parser = CmdLineSpecParser(self._root_dir)
 
     for goal in requested_goals:
@@ -95,7 +98,7 @@ class GoalRunnerFactory(object):
         self._root_dir
       )
 
-      goals = self._determine_goals(address_mapper, self._options.goals)
+      goals = self._determine_goals(address_mapper, self._options)
       is_quiet = self._should_be_quiet(goals)
 
       target_root_instances = self._roots_to_targets(build_graph, self._target_roots)

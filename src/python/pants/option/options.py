@@ -9,8 +9,6 @@ import re
 import sys
 from builtins import object, open, str
 
-from twitter.common.collections import OrderedSet
-
 from pants.base.deprecated import warn_or_error
 from pants.option.arg_splitter import GLOBAL_SCOPE, ArgSplitter
 from pants.option.global_options import GlobalOptionsRegistrar
@@ -198,20 +196,28 @@ class Options(object):
     """
     return self._goals
 
-  # TODO: Replace this with a formal way of registering v2-only goals.
-  # See https://github.com/pantsbuild/pants/issues/6651
-  @property
-  def goals_and_possible_v2_goals(self):
-    """Goals, including any unrecognised scopes which may be v2-only goals.
+  @memoized_property
+  def goals_by_version(self):
+    """Goals organized into three tuples by whether they are v1, ambiguous, or v2 goals (respectively).
 
-    Experimental API which shouldn't be relied on outside of Pants itself.
+    It's possible for a goal to be implemented with both v1 and v2, in which case a consumer
+    should use the `--v1` and `--v2` global flags to disambiguate.
     """
-    if self._unknown_scopes:
-      r = OrderedSet(self.goals)
-      r.update(self._unknown_scopes)
-      return r
-    else:
-      return self.goals
+    v1, ambiguous, v2 = [], [], []
+    for goal in self._goals:
+      goal_dot = '{}.'.format(goal)
+      scope_categories = {s.category
+                          for s in self.known_scope_to_info.values()
+                          if s.scope == goal or s.scope.startswith(goal_dot)}
+      is_v1 = ScopeInfo.TASK in scope_categories
+      is_v2 = ScopeInfo.SUBSYSTEM in scope_categories
+      if is_v1 and is_v2:
+        ambiguous.append(goal)
+      elif is_v1:
+        v1.append(goal)
+      else:
+        v2.append(goal)
+    return tuple(v1), tuple(ambiguous), tuple(v2)
 
   @property
   def known_scope_to_info(self):

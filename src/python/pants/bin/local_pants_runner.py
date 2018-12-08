@@ -162,7 +162,8 @@ class LocalPantsRunner(object):
       self._run()
 
   def _maybe_run_v1(self, run_tracker, reporting):
-    if not self._global_options.v1:
+    v1_goals, ambiguous_goals, _ = self._options.goals_by_version
+    if not v1_goals and (not ambiguous_goals or not self._global_options.v1):
       return 0
 
     # Setup and run GoalRunner.
@@ -181,18 +182,18 @@ class LocalPantsRunner(object):
   def _maybe_run_v2(self):
     # N.B. For daemon runs, @console_rules are invoked pre-fork -
     # so this path only serves the non-daemon run mode.
-    if self._is_daemon or not self._global_options.v2:
+    if self._is_daemon:
       return 0
 
-    # If we're a pure --v2 run, validate goals - otherwise some goals specified
-    # may be provided by the --v1 task paths.
-    if not self._global_options.v1:
-      self._graph_session.validate_goals(self._options.goals_and_possible_v2_goals)
+    _, ambiguous_goals, v2_goals = self._options.goals_by_version
+    goals = v2_goals + (ambiguous_goals if self._global_options.v2 else tuple())
+    if not goals:
+      return 0
 
     try:
       self._graph_session.run_console_rules(
         self._options_bootstrapper,
-        self._options.goals_and_possible_v2_goals,
+        goals,
         self._target_roots,
         self._global_options.v2_ui
       )
