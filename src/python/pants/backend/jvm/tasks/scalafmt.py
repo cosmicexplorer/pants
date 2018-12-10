@@ -29,8 +29,10 @@ class ScalaFmt(RewriteBase):
     super(ScalaFmt, cls).register_options(register)
     register('--configuration', advanced=True, type=file_option, fingerprint=True,
               help='Path to scalafmt config file, if not specified default scalafmt config used')
+    # TODO: Split the input by number of files or by file size, not by target!
     register('--per-target-parallelism', type=bool, default=False, advanced=True,
-             help='???')
+             help="Whether to invoke a scalafmt process per target. This can achieve speedups on "
+                  "some inputs combined with the 'graal' execution_strategy.")
 
     cls.register_jvm_tool(
       register,
@@ -39,11 +41,12 @@ class ScalaFmt(RewriteBase):
         JarDependency(org='com.geirsson',
                       name='scalafmt-cli_2.11',
                       rev='1.5.1'),
-        # NB!!!!: the version here should match the major and minor version used for the tool, and
-        # should be the latest release for the (maj,min) tuple
-        # TODO: this requires the user to specify the scala-reflect jar dependency in BUILD.tools or
-        # wherever the scalafmt dep is defined.
-        # TODO: this should only be if we use the graal executor!
+        # NB: Scalafmt has specifically added support for graal, and other tools may need to as
+        # well.  The version here should match the major and minor scala version used for the tool,
+        # and should be the latest release for the (maj,min) tuple.
+        # If the user overrides the scalafmt dependency, e.g. in BUILD.tools, this would require the
+        # user to specify the scala-reflect jar dependency where the override occurs in order to
+        # work with graal.
         JarDependency(org='org.scala-lang',
                       name='scala-reflect',
                       rev='2.11.12'),
@@ -61,7 +64,11 @@ class ScalaFmt(RewriteBase):
   def implementation_version(cls):
     return super(ScalaFmt, cls).implementation_version() + [('ScalaFmt', 5)]
 
+  # TODO: if we want to address scalafmt perf in general, we should first ensure we only operate on
+  # the files which were specifically changed, not all files in all invalidated targets! The
+  # _calculate_sources() method is probably the one to change here.
   def _execute_for(self, targets):
+    """If parallelism is enabled, spawn a process per target and wait on them all."""
     if not self.get_options().per_target_parallelism:
       return super(ScalaFmt, self)._execute_for(targets)
 
@@ -71,14 +78,16 @@ class ScalaFmt(RewriteBase):
       the_subprocess = self.invoke_tool_async(None, source_file_paths)
       subprocs.append(the_subprocess)
 
+    # TODO: is there a way to wait on any of the pids to complete instead of "in order"?
     for p in subprocs:
       rc = p.wait()
       if rc != 0:
         raise TaskError('{} is improperly implemented: a failed process '
                         'should raise an exception earlier.'.format(type(self).__name__))
 
+  # TODO: remove the repeated boilerplate here!
   def invoke_tool_async(self, absolute_root, target_sources):
-    # If no config file is specified use default scalafmt config.
+    # If no config file is specified, use default scalafmt config.
     config_file = self.get_options().configuration
     args = list(self.additional_args)
     if config_file is not None:
@@ -91,7 +100,7 @@ class ScalaFmt(RewriteBase):
     # will be different -- this is currently only used in the graal executor.
     # TODO: `input_fingerprint` should be calculated automatically from the jvm tool target option
     # in runjava, or in a new API somewhere (otherwise it will just error out in the graal
-    # subsystem)
+    # subsystem).
     scalafmt_target = assert_single_element(
       self.context.build_graph.resolve(self.get_options().scalafmt))
     input_fingerprint = scalafmt_target.transitive_invalidation_hash()
