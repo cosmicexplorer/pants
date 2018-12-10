@@ -23,7 +23,9 @@ from pants.util.dirutil import safe_mkdir
 from pants.util.objects import datatype
 
 
+# TODO: this task isn't registered anywhere, and doesn't do anything yet.
 class GraalNativeImageCreate(Task):
+  """Create native images with zero startup time from jvm_bundles using graal."""
 
   @classmethod
   def prepare(cls, options, round_manager):
