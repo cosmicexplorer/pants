@@ -89,15 +89,16 @@ class GraalCE(NativeTool, JvmToolMixin):
 
   class NativeImageCreationError(Exception): pass
 
-  def produce_native_image(self, tool_classpath, main_class, input_fingerprint):
+  def produce_native_image(self, tool_classpath, main_class, input_fingerprint, jvm_options=None):
     if not isinstance(input_fingerprint, text_type):
       raise self.NativeImageCreationError(
         "Input fingerprint provided must be an instance of {}: was {!r} (type {}). "
         "JVM tools using the 'graal' execution_strategy must provide an 'input_fingerprint' "
         "argument to self.runjava()."
         .format(text_type.__name__, input_fingerprint, type(input_fingerprint).__name__))
+    jvm_options = jvm_options or []
 
-    input_hash = stable_json_hash([input_fingerprint, self._report_unsupported_elements])
+    input_hash = stable_json_hash([input_fingerprint, self._report_unsupported_elements] + jvm_options)
     output_image_file_name = '{}-{}'.format(main_class, input_hash)
 
     fingerprinted_native_image_path = os.path.join(self._cache_dir, output_image_file_name)
@@ -107,7 +108,14 @@ class GraalCE(NativeTool, JvmToolMixin):
     cp_formatted = ':'.join(tool_classpath)
     argv = [
       self._native_image_exe,
-      '-cp', cp_formatted,
+      '-classpath', cp_formatted,
+      '--verbose',
+      '--enable-all-security-services',
+      '--allow-incomplete-classpath',
+      '-O9',
+    ] + [
+      '-J{}'.format(opt) for opt in jvm_options
+    ] + [
       main_class,
     ]
     if self._report_unsupported_elements:
