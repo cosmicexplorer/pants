@@ -9,6 +9,7 @@ import os
 from pants.backend.jvm.subsystems.graal import GraalCE
 from pants.backend.jvm.tasks.jvm_tool_task_mixin import JvmToolTaskMixin
 from pants.base.exceptions import TaskError
+from pants.base.hash_utils import stable_json_hash
 from pants.base.workunit import WorkUnitLabel
 from pants.init.subprocess import Subprocess
 from pants.java import util
@@ -17,8 +18,8 @@ from pants.java.jar.jar_dependency import JarDependency
 from pants.java.nailgun_executor import NailgunExecutor, NailgunProcessGroup
 from pants.process.subprocess import Subprocess
 from pants.task.task import Task, TaskBase
+from pants.util.memo import memoized_property
 from pants.util.objects import enum
-
 
 class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
   ID_PREFIX = 'ng'
@@ -105,46 +106,18 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
     GraalExecutor: [WorkUnitLabel.RUN],
   }
 
-  def runjava_async(self, classpath, main, jvm_options=None, args=None, workunit_name=None,
-                    workunit_labels=None, workunit_log_config=None, dist=None,
-                    input_fingerprint=None):
-    executor = self.create_java_executor(dist=dist, input_fingerprint=input_fingerprint)
-
-    for executor_cls, labels in self._extra_workunit_labels.items():
-      if isinstance(executor, executor_cls):
-        workunit_labels = workunit_labels or []
-        workunit_labels.extend(labels)
-
-    # Creating synthetic jar to work around system arg length limit is not necessary
-    # when `NailgunExecutor` is used because args are passed through socket, therefore turning off
-    # creating synthetic jar if nailgun is used.
-    create_synthetic_jar = self.execution_strategy != self.NAILGUN
-    try:
-      return util.execute_java_async(classpath=classpath,
-                                     main=main,
-                                     jvm_options=jvm_options,
-                                     args=args,
-                                     executor=executor,
-                                     workunit_factory=self.context.new_workunit,
-                                     workunit_name=workunit_name,
-                                     workunit_labels=workunit_labels,
-                                     workunit_log_config=workunit_log_config,
-                                     create_synthetic_jar=create_synthetic_jar,
-                                     synthetic_jar_dir=self._executor_workdir)
-    except executor.Error as e:
-      raise TaskError(e)
-
   def runjava(self, classpath, main, jvm_options=None, args=None, workunit_name=None,
-              workunit_labels=None, workunit_log_config=None, dist=None,
-              input_fingerprint=None):
+              workunit_labels=None, workunit_log_config=None, dist=None, async=False):
     """Runs the java main using the given classpath and args.
 
     If --execution-strategy=subprocess is specified then the java main is run in a freshly spawned
     subprocess, otherwise a persistent nailgun server dedicated to this Task subclass is used to
     speed up amortized run times.
-,
+
     :API: public
     """
+    # TODO: in the v2 engine we don't need to do manual caching like this!
+    input_fingerprint = stable_json_hash(sorted(classpath))
     executor = self.create_java_executor(dist=dist, input_fingerprint=input_fingerprint)
 
     for executor_cls, labels in self._extra_workunit_labels.items():
@@ -156,18 +129,22 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
     # when `NailgunExecutor` is used because args are passed through socket, therefore turning off
     # creating synthetic jar if nailgun is used.
     create_synthetic_jar = self.execution_strategy != self.NAILGUN
+    execute_kwargs = dict(classpath=classpath,
+                          main=main,
+                          jvm_options=jvm_options,
+                          args=args,
+                          executor=executor,
+                          workunit_factory=self.context.new_workunit,
+                          workunit_name=workunit_name,
+                          workunit_labels=workunit_labels,
+                          workunit_log_config=workunit_log_config,
+                          create_synthetic_jar=create_synthetic_jar,
+                          synthetic_jar_dir=self._executor_workdir)
     try:
-      return util.execute_java(classpath=classpath,
-                               main=main,
-                               jvm_options=jvm_options,
-                               args=args,
-                               executor=executor,
-                               workunit_factory=self.context.new_workunit,
-                               workunit_name=workunit_name,
-                               workunit_labels=workunit_labels,
-                               workunit_log_config=workunit_log_config,
-                               create_synthetic_jar=create_synthetic_jar,
-                               synthetic_jar_dir=self._executor_workdir)
+      if async:
+        return util.execute_java_async(**execute_kwargs)
+      else:
+        return util.execute_java(**execute_kwargs)
     except executor.Error as e:
       raise TaskError(e)
 

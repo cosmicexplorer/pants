@@ -6,6 +6,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 import os
+import psutil
 import sys
 from zipfile import ZIP_STORED
 
@@ -200,6 +201,15 @@ def execute_runner_async(runner, workunit_factory=None, workunit_name=None, work
     process = runner.spawn(stdout=workunit.output('stdout'), stderr=workunit.output('stderr'))
 
     class WorkUnitProcessHandler(ProcessHandler):
+      # @classmethod
+      # def wait_all(cls, process_handlers, *args, **kwargs):
+      #   return psutil.wait_procs([
+      #     p._process.pid for p in process_handlers
+      #   ], *args, **kwargs)
+
+      def __init__(self, process):
+        self._process = process
+
       def wait(_, timeout=None):
         try:
           ret = process.wait(timeout=timeout)
@@ -219,7 +229,7 @@ def execute_runner_async(runner, workunit_factory=None, workunit_name=None, work
       def poll(_):
         return process.poll()
 
-    return WorkUnitProcessHandler()
+    return WorkUnitProcessHandler(process)
 
 
 def relativize_classpath(classpath, root_dir, followlinks=True):

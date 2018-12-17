@@ -10,6 +10,7 @@ import os
 import sys
 from abc import abstractmethod
 
+import psutil
 from future.utils import PY2, PY3
 
 from pants.util.meta import AbstractClass
@@ -58,6 +59,12 @@ class ProcessHandler(AbstractClass):
 
 class SubprocessProcessHandler(ProcessHandler):
   """A `ProcessHandler` that delegates directly to a subprocess(32).Popen object."""
+
+  @classmethod
+  def wait_all(cls, process_handlers, *args, **kwargs):
+    return psutil.wait_procs([
+      psutil.Process(pid=p._process.pid) for p in process_handlers
+    ], *args, **kwargs)
 
   def __init__(self, process):
     self._process = process
