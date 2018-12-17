@@ -271,9 +271,8 @@ class GraalExecutor(SubprocessExecutor):
     self._input_fingerprint = input_fingerprint
 
   def _runner(self, classpath, main, jvm_options, args, cwd=None):
-    logger.debug('using graal executor for main class {}, ignoring jvm options {!r}.'
-                 .format(main, jvm_options))
-    native_image_path = self._graal_ce.produce_native_image(classpath, main, self._input_fingerprint)
+    native_image_path = self._graal_ce.produce_native_image(
+      classpath, main, self._input_fingerprint, jvm_options=jvm_options)
     full_command = [native_image_path] + args
 
     class GraalNativeImageRunner(self.Runner):
