@@ -5,6 +5,7 @@ python_library(
   dependencies=[
     '3rdparty/python:pex',
     'contrib/python/src/python/pants/contrib/python/checks/checker',
+    'src/python/pants/backend/native/config',
     'src/python/pants/backend/python/subsystems',
     'src/python/pants/backend/python/targets',
     'src/python/pants/backend/python/tasks',

@@ -5,9 +5,11 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
+import re
 import sys
 
 from packaging import version
+from pants.backend.native.config.environment import Platform as NatPlat
 from pants.backend.python.interpreter_cache import PythonInterpreterCache
 from pants.backend.python.python_requirement import PythonRequirement
 from pants.backend.python.subsystems.pex_build_util import PexBuilderWrapper
@@ -27,6 +29,8 @@ from pants.util.collections import factory_dict
 from pants.util.contextutil import temporary_file
 from pants.util.dirutil import safe_concurrent_creation
 from pants.util.memo import memoized_classproperty, memoized_property
+from pants.util.process_handler import subprocess
+from pants.util.strutil import create_path_env_var
 from pex.pex import PEX
 from pex.pex_builder import PEXBuilder
 from pex.platforms import Platform
@@ -199,6 +203,27 @@ class Checkstyle(LintTaskMixin, Task):
           'PEX_PYTHON': interpreter.binary,
           'PEX_IGNORE_RCFILES': 'True',
         }
+
+        do_ldd_check = NatPlat.create().resolve_platform_specific({
+          'darwin': lambda: False,
+          'linux': lambda: True,
+        })
+        if do_ldd_check:
+          ldd_output = subprocess.check_output(['ldd', interpreter.binary])
+          self.context.log.debug('ldd_output: {}'.format(ldd_output))
+          libpython_lib = os.path.basename(interpreter.binary)
+          self.context.log.debug('libpython_lib: {}'.format(libpython_lib))
+          libpython_regex = re.compile('{} => ([^\s]+)'.format(re.escape('lib{}.so.1.0'.format(libpython_lib))))
+          self.context.log.debug('libpython_regex: {}'.format(libpython_regex.pattern))
+          libpython_line = re.search(libpython_regex, ldd_output)
+          self.context.log.debug('libpython_line: {}'.format(libpython_line.group(0)))
+          libpython_loc = libpython_line.group(1)
+          self.context.log.debug('libpython_loc: {}'.format(libpython_loc))
+          pex_invocation_env['LD_LIBRARY_PATH'] = create_path_env_var(
+            [os.path.dirname(libpython_loc)],
+            env=os.environ, env_var='LD_LIBRARY_PATH', prepend=True)
+          self.context.log.debug('pex_invocation_env: {}'.format(pex_invocation_env))
+
         return checker.run(args=args,
                            stdout=workunit.output('stdout'),
                            stderr=workunit.output('stderr'),
