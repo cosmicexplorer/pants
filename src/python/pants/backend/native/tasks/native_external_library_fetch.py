@@ -15,7 +15,6 @@ from pants.backend.native.targets.external_native_library import ExternalNativeL
 from pants.backend.native.tasks.conan_prep import ConanPrep
 from pants.base.build_environment import get_pants_cachedir
 from pants.base.exceptions import TaskError
-from pants.goal.products import UnionProducts
 from pants.invalidation.cache_manager import VersionedTargetSet
 from pants.task.task import Task
 from pants.util.contextutil import environment_as
@@ -107,6 +106,7 @@ class NativeExternalLibraryFetch(Task):
   def prepare(cls, options, round_manager):
     super(NativeExternalLibraryFetch, cls).prepare(options, round_manager)
     round_manager.require_data(ConanPrep.tool_instance_cls)
+    round_manager.require_data(NativeExternalLibraryFiles)
 
   @property
   def create_target_dirs(self):
@@ -150,7 +150,7 @@ class NativeExternalLibraryFetch(Task):
     """
     Sets the relevant properties of the task product (`NativeExternalLibraryFiles`) object.
     """
-    product = UnionProducts()
+    product = self.context.products.get_data(NativeExternalLibraryFiles)
     for vt in vts:
       lib_dir = os.path.join(vt.results_dir, 'lib')
       include_dir = os.path.join(vt.results_dir, 'include')

@@ -12,6 +12,7 @@ from pants.backend.native.subsystems.native_toolchain import (NativeToolchain,
                                                               ToolchainVariantRequest)
 from pants.backend.native.targets.external_native_library import ExternalNativeLibrary
 from pants.backend.native.targets.native_library import NativeLibrary
+from pants.backend.native.targets.native_python_wheel import NativePythonWheel
 from pants.build_graph.dependency_context import DependencyContext
 from pants.task.task import Task
 from pants.util.collections import assert_single_element
@@ -42,7 +43,7 @@ class NativeTask(Task):
 
     :return: :class:`pants.util.objects.TypeConstraint`
     """
-    return SubclassesOf(ExternalNativeLibrary, NativeLibrary)
+    return SubclassesOf(ExternalNativeLibrary, NativePythonWheel, NativeLibrary)
 
   @classmethod
   def subsystem_dependencies(cls):

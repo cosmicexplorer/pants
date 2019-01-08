@@ -9,8 +9,6 @@ from abc import abstractmethod
 from collections import defaultdict
 
 from pants.backend.native.config.environment import Executable
-from pants.backend.native.targets.external_native_library import ExternalNativeLibrary
-from pants.backend.native.targets.native_library import NativeLibrary
 from pants.backend.native.tasks.native_external_library_fetch import NativeExternalLibraryFiles
 from pants.backend.native.tasks.native_task import NativeTask
 from pants.base.build_environment import get_buildroot
@@ -46,7 +44,6 @@ class NativeCompile(NativeTask, AbstractClass):
   # operate on for `strict_deps` calculation.
   # NB: `source_target_constraint` must be overridden.
   source_target_constraint = None
-  dependent_target_constraint = SubclassesOf(ExternalNativeLibrary, NativeLibrary)
 
   # `NativeCompile` will use `workunit_label` as the name of the workunit when executing the
   # compiler process. `workunit_label` must be set to a string.
@@ -61,7 +58,7 @@ class NativeCompile(NativeTask, AbstractClass):
   @classmethod
   def prepare(cls, options, round_manager):
     super(NativeCompile, cls).prepare(options, round_manager)
-    round_manager.optional_data(NativeExternalLibraryFiles)
+    round_manager.require_data(NativeExternalLibraryFiles)
 
   @property
   def cache_target_dirs(self):

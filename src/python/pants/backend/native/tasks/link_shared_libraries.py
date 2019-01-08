@@ -49,7 +49,7 @@ class LinkSharedLibraries(NativeTask):
   def prepare(cls, options, round_manager):
     super(LinkSharedLibraries, cls).prepare(options, round_manager)
     round_manager.require(ObjectFiles)
-    round_manager.optional_product(NativeExternalLibraryFiles)
+    round_manager.require_data(NativeExternalLibraryFiles)
 
   @property
   def cache_target_dirs(self):
