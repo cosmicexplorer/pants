@@ -9,6 +9,7 @@ from textwrap import dedent
 
 from pants.backend.native import register
 from pants.backend.native.targets.native_library import CppLibrary
+from pants.backend.native.tasks.extract_native_python_wheels import ExtractNativePythonWheels
 from pants.backend.native.tasks.native_external_library_fetch import NativeExternalLibraryFetch
 from pants_test.task_test_base import TaskTestBase
 
@@ -59,14 +60,24 @@ class NativeCompileTestMixin(object):
                             **kwargs)
 
   def prepare_context_for_compile(self, target_roots, for_task_types=None, **kwargs):
+    extract_python_wheels_task_type = self.synthesize_task_subtype(ExtractNativePythonWheels,
+                                                                   'extract_python_wheels_scope')
     native_elf_fetch_task_type = self.synthesize_task_subtype(NativeExternalLibraryFetch,
                                                               'native_elf_fetch_scope')
 
-    for_task_types = list(for_task_types or ()) + [native_elf_fetch_task_type]
+    for_task_types = list(for_task_types or ()) + [
+      extract_python_wheels_task_type,
+      native_elf_fetch_task_type,
+    ]
     context = self.context(target_roots=target_roots, for_task_types=for_task_types, **kwargs)
 
+    extract_python_wheels = extract_python_wheels_task_type(context,
+                                                            os.path.join(self.pants_workdir,
+                                                                         'extract_python_wheels'))
     native_elf_fetch = native_elf_fetch_task_type(context,
                                                   os.path.join(self.pants_workdir,
                                                                'native_elf_fetch'))
+
+    extract_python_wheels.execute()
     native_elf_fetch.execute()
     return context
