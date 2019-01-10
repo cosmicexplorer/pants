@@ -11,7 +11,8 @@ from pants.backend.native.subsystems.binaries.llvm import create_llvm_rules
 from pants.backend.native.subsystems.native_build_settings import NativeBuildSettings
 from pants.backend.native.subsystems.native_toolchain import create_native_toolchain_rules
 from pants.backend.native.subsystems.xcode_cli_tools import create_xcode_cli_tools_rules
-from pants.backend.native.targets.external_native_library import ExternalNativeLibrary
+from pants.backend.native.targets.external_native_library import (ConanRequirement,
+                                                                  ExternalNativeLibrary)
 from pants.backend.native.targets.native_artifact import NativeArtifact
 from pants.backend.native.targets.native_library import CLibrary, CppLibrary
 from pants.backend.native.targets.native_python_wheel import NativePythonWheel
@@ -34,6 +35,7 @@ def build_file_aliases():
       NativePythonWheel.alias(): NativePythonWheel,
     },
     objects={
+      ConanRequirement.alias(): ConanRequirement,
       NativeArtifact.alias(): NativeArtifact,
     }
   )
