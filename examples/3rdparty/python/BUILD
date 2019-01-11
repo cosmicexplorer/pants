@@ -3,11 +3,23 @@
 
 python_requirements()
 
-native_python_wheel(
+remote_sources(
   name='tensorflow-framework',
-  include_relpath='include/',
-  lib_relpath='',
+  dest=packaged_native_library,
+  sources_target=':tensorflow-native-libs',
+  args=dict(
+    include_relpath='include',
+    lib_relpath='',
+    native_lib_names=['tensorflow_framework'],
+  ),
+)
+
+unpacked_whls(
+  name='tensorflow-native-libs',
+  libraries=[':tensorflow'],
   module_name='tensorflow',
-  native_lib_names=['tensorflow_framework'],
-  requirement_target_spec=':tensorflow',
+  include_patterns=[
+    'include/**/*',
+    './*.so',
+  ],
 )

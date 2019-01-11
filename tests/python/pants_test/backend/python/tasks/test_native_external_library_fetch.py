@@ -76,6 +76,13 @@ class TestConanRequirement(unittest.TestCase):
 
 class TestNativeExternalLibraryFetch(unittest.TestCase):
 
+  # TODO: remove this "test" class!
+  # @classmethod
+  # def _parse_lib_name_from_library_filename(cls, filename):
+  #   match_group = re.match(r"^lib(.*)\.(a|so|dylib)$", filename)
+  #   if match_group:
+  #     return match_group.group(1)
+  #   return None
   def test_parse_lib_name_from_library_filename(self):
     tc_1 = 'liblzo.a'
     tc_2 = 'libtensorflow.so'

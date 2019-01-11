@@ -9,8 +9,8 @@ from textwrap import dedent
 
 from pants.backend.native import register
 from pants.backend.native.targets.native_library import CppLibrary
-from pants.backend.native.tasks.extract_native_python_wheels import ExtractNativePythonWheels
 from pants.backend.native.tasks.native_external_library_fetch import NativeExternalLibraryFetch
+from pants.backend.native.tasks.unpack_wheels import UnpackWheels
 from pants_test.task_test_base import TaskTestBase
 
 
@@ -60,7 +60,7 @@ class NativeCompileTestMixin(object):
                             **kwargs)
 
   def prepare_context_for_compile(self, target_roots, for_task_types=None, **kwargs):
-    extract_python_wheels_task_type = self.synthesize_task_subtype(ExtractNativePythonWheels,
+    extract_python_wheels_task_type = self.synthesize_task_subtype(UnpackWheels,
                                                                    'extract_python_wheels_scope')
     native_elf_fetch_task_type = self.synthesize_task_subtype(NativeExternalLibraryFetch,
                                                               'native_elf_fetch_scope')

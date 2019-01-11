@@ -26,6 +26,16 @@ class PackagedNativeLibrary(Target):
 
   def __init__(self, address, payload=None, sources=None, include_relpath=None, lib_relpath=None,
                native_lib_names=None, **kwargs):
+    """
+    :param include_relpath: The relative path from the wheel's data directory to the root directory
+                            where C/C++ header files are located. Use ``''`` if located in the
+                            top-level directory.
+    :param lib_relpath: The relative path from the wheel's data directory to the single directory
+                        where native libraries are located. Use ``''`` if located in the top-level
+                        directory.
+    :param native_lib_names: Names of any native libraries contained in the wheel. For a library
+                             named ``libmylib.so``, use the name ``mylib``.
+    """
     if not payload:
       payload = Payload()
     payload.add_fields({
