@@ -17,7 +17,7 @@ RUN /usr/bin/scl enable devtoolset-7 -- \
          && ./configure --prefix=/python-3-docker-build/python-3.6.8-install \
                         --enable-optimizations \
          && make install'
-ENV PATH "/python-3-docker-build/python-3.6.8-install/bin:${PATH}"
+ENV PATH "${PATH}:/python-3-docker-build/python-3.6.8-install/bin"
 RUN ls -lAvF /python-3-docker-build/python-3.6.8-install/bin
 
 # -----------------------------------------------------------------------
