@@ -16,9 +16,17 @@ RUN echo >> ~/.bashrc 'eval "$(pyenv init -)"'
 RUN echo >> ~/.bashrc 'eval "$(pyenv virtualenv-init -)"'
 ENV PATH "${PYENV_ROOT}/bin:${PATH}"
 RUN pyenv update
-RUN /usr/bin/scl enable devtoolset-7 -- pyenv install ${PYTHON_2_VERSION}
-RUN /usr/bin/scl enable devtoolset-7 -- pyenv install ${PYTHON_3_VERSION}
+# `scl enable devtoolset-7` puts the gcc we just installed on the PATH for that command.
+RUN scl enable devtoolset-7 -- pyenv install ${PYTHON_2_VERSION}
+RUN scl enable devtoolset-7 -- pyenv install ${PYTHON_3_VERSION}
 RUN pyenv global ${PYTHON_2_VERSION} ${PYTHON_3_VERSION}
+
+# Populate the bashrc with pyenv initialization commands. The PATH was set in the centos6 image when
+# installing pythons with pyenv. This needs to be done before the VOLUME command, as all changes to
+# that directory are discarded afterwards.
+RUN mkdir -p /travis/home
+RUN echo >> /travis/home/.bashrc 'eval "$(pyenv init -)"'
+RUN echo >> /travis/home/.bashrc 'eval "$(pyenv virtualenv-init -)"'
 
 # Setup mount points for the travis ci user & workdir.
 VOLUME /travis/home
