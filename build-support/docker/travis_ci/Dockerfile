@@ -45,10 +45,6 @@ RUN mkdir -p /travis/home
 RUN echo >> /travis/home/.bashrc 'eval "$(pyenv init -)"'
 RUN echo >> /travis/home/.bashrc 'eval "$(pyenv virtualenv-init -)"'
 
-# Setup mount points for the travis ci user & workdir.
-VOLUME /travis/home
-VOLUME /travis/workdir
-
 # Setup a non-root user to execute the build under (avoids problems with npm install).
 ARG TRAVIS_USER=travis_ci
 ARG TRAVIS_UID=1000
@@ -57,9 +53,20 @@ ARG TRAVIS_GID=0
 
 RUN groupadd --gid ${TRAVIS_GID} ${TRAVIS_GROUP} || true
 RUN useradd -d /travis/home -g ${TRAVIS_GROUP} --uid ${TRAVIS_UID} ${TRAVIS_USER}
+
+RUN mkdir -p /travis/workdir
+RUN chown -R ${TRAVIS_USER}:${TRAVIS_GROUP} /travis/home
+RUN chmod u+rwx /travis/home
+RUN chown -R ${TRAVIS_USER}:${TRAVIS_GROUP} /travis/workdir
+RUN chmod u+rwx /travis/workdir
+
 USER ${TRAVIS_USER}:${TRAVIS_GROUP}
 
 # Our newly created user is unlikely to have a sane environment: set a locale at least.
 ENV LC_ALL="en_US.UTF-8"
+
+# Setup mount points for the travis ci user & workdir.
+VOLUME /travis/home
+VOLUME /travis/workdir
 
 WORKDIR /travis/workdir
