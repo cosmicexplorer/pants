@@ -23,14 +23,16 @@ ARG PYTHON_3_VERSION=3.6.8
 # NB: PYENV_ROOT must be set in the environment for `pyenv install` to work, otherwise it will
 # mysteriously fail to find the `install` command.
 ENV PYENV_ROOT /pyenv-docker-build
-RUN mkdir ${PYENV_ROOT}
-RUN git clone https://github.com/pyenv/pyenv ${PYENV_ROOT}
-# Install python 2 and 3, and set python 2 as the default interpreter.
-RUN /usr/bin/scl enable devtoolset-7 -- bash -c '\
-    ${PYENV_ROOT}/bin/pyenv install --keep --skip-existing ${PYTHON_2_VERSION} \
-    && ${PYENV_ROOT}/bin/pyenv install --keep --skip-existing ${PYTHON_3_VERSION} \
-    && ${PYENV_ROOT}/bin/pyenv global ${PYTHON_2_VERSION}'
-ENV PATH "${PYENV_ROOT}/shims:${PATH}"
+RUN curl -L -v https://pyenv.run | bash
+# https://github.com/pyenv/pyenv-installer tells you to *remove* this from your .bashrc on
+# uninstall, but it doesn't appear to *add* it there on install, which is confusing.
+RUN echo >> ~/.bashrc 'eval "$(pyenv init -)"'
+RUN echo >> ~/.bashrc 'eval "$(pyenv virtualenv-init -)"'
+ENV PATH "${PYENV_ROOT}/bin:${PATH}"
+RUN pyenv update
+RUN /usr/bin/scl enable devtoolset-7 -- pyenv install ${PYTHON_2_VERSION}
+RUN /usr/bin/scl enable devtoolset-7 -- pyenv install ${PYTHON_3_VERSION}
+RUN pyenv global ${PYTHON_2_VERSION} ${PYTHON_3_VERSION}
 
 # By default, execute in an environment with python27 enabled.
 ENTRYPOINT ["/usr/bin/scl", "enable", "devtoolset-7",  "--"]
