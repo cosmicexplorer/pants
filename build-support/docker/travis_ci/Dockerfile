@@ -3,23 +3,6 @@
 
 # Use our custom Centos6 image for binary compatibility with old linux distros.
 FROM pantsbuild/centos6:latest
-# Install the desired versions of python 2 and 3.
-ARG PYTHON_2_VERSION=2.7.13
-ARG PYTHON_3_VERSION=3.6.8
-# NB: PYENV_ROOT must be set in the environment for `pyenv install` to work, otherwise it will
-# mysteriously fail to find the `install` command.
-ENV PYENV_ROOT /pyenv-docker-build
-RUN curl -L -v https://pyenv.run | bash
-# https://github.com/pyenv/pyenv-installer tells you to *remove* this from your .bashrc on
-# uninstall, but it doesn't appear to *add* it there on install, which is confusing.
-RUN echo >> ~/.bashrc 'eval "$(pyenv init -)"'
-RUN echo >> ~/.bashrc 'eval "$(pyenv virtualenv-init -)"'
-ENV PATH "${PYENV_ROOT}/bin:${PATH}"
-RUN pyenv update
-# `scl enable devtoolset-7` puts the gcc we just installed on the PATH for that command.
-RUN scl enable devtoolset-7 -- pyenv install ${PYTHON_2_VERSION}
-RUN scl enable devtoolset-7 -- pyenv install ${PYTHON_3_VERSION}
-RUN pyenv global ${PYTHON_2_VERSION} ${PYTHON_3_VERSION}
 
 # Populate the bashrc with pyenv initialization commands. The PATH was set in the centos6 image when
 # installing pythons with pyenv. This needs to be done before the VOLUME command, as all changes to
