@@ -17,7 +17,6 @@ from pants.java.jar.jar_dependency import JarDependency
 from pants.java.nailgun_executor import NailgunExecutor, NailgunProcessGroup
 from pants.process.subprocess import Subprocess
 from pants.task.task import Task, TaskBase
-from pants.util.collections import assert_single_element
 from pants.util.memo import memoized_property
 from pants.util.objects import enum, register_enum_option
 

@@ -204,6 +204,7 @@ class RscCompile(ZincCompile):
       self.HERMETIC: lambda: super(RscCompile, self).get_zinc_compiler_classpath(),
       self.HERMETIC_WITH_NAILGUN: lambda: [],
       self.SUBPROCESS: lambda: super(RscCompile, self).get_zinc_compiler_classpath(),
+      self.GRAAL: lambda: super(RscCompile, self).get_zinc_compiler_classpath(),
       self.NAILGUN: lambda: self._nailgunnable_combined_classpath,
     })()
 
@@ -449,6 +450,7 @@ class RscCompile(ZincCompile):
             self.HERMETIC: hermetic_digest_classpath,
             self.HERMETIC_WITH_NAILGUN: hermetic_digest_classpath,
             self.SUBPROCESS: nonhermetic_digest_classpath,
+            self.GRAAL: nonhermetic_digest_classpath,
             self.NAILGUN: nonhermetic_digest_classpath,
           })()
 
@@ -721,6 +723,8 @@ class RscCompile(ZincCompile):
           main, tool_name, args, distribution, with_nailgun=True,
           tgt=tgt, input_files=input_files, input_digest=input_digest, output_dir=output_dir),
         self.SUBPROCESS: lambda: self._runtool_nonhermetic(
+          wu, self.tool_classpath(tool_name), main, tool_name, args, distribution),
+        self.GRAAL: lambda: self._runtool_nonhermetic(
           wu, self.tool_classpath(tool_name), main, tool_name, args, distribution),
         self.NAILGUN: lambda: self._runtool_nonhermetic(
           wu, self._nailgunnable_combined_classpath, main, tool_name, args, distribution),

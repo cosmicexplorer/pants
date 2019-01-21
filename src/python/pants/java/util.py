@@ -6,7 +6,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 import os
-import psutil
 import sys
 from zipfile import ZIP_STORED
 
@@ -18,7 +17,7 @@ from pants.java.jar.manifest import Manifest
 from pants.java.nailgun_executor import NailgunExecutor
 from pants.util.contextutil import open_zip, temporary_file
 from pants.util.dirutil import safe_concurrent_rename, safe_mkdir, safe_mkdtemp
-from pants.util.process_handler import ProcessHandler, SubprocessProcessHandler
+from pants.util.process_handler import SubprocessProcessHandler
 
 
 logger = logging.getLogger(__name__)
@@ -200,34 +199,17 @@ def execute_runner_async(runner, workunit_factory=None, workunit_name=None, work
     workunit = workunit_generator.__enter__()
     process = runner.spawn(stdout=workunit.output('stdout'), stderr=workunit.output('stderr'))
 
-    class WorkUnitProcessHandler(ProcessHandler):
-      # @classmethod
-      # def wait_all(cls, process_handlers, *args, **kwargs):
-      #   return psutil.wait_procs([
-      #     p._process.pid for p in process_handlers
-      #   ], *args, **kwargs)
+    class WorkUnitProcessHandler(SubprocessProcessHandler):
 
-      def __init__(self, process):
-        self._process = process
-
-      def wait(_, timeout=None):
+      def wait(self, timeout=None):
         try:
-          ret = process.wait(timeout=timeout)
+          ret = super(WorkUnitProcessHandler, self).wait(timeout=timeout)
           workunit.set_outcome(WorkUnit.FAILURE if ret else WorkUnit.SUCCESS)
           workunit_generator.__exit__(None, None, None)
           return ret
         except BaseException:
           if not workunit_generator.__exit__(*sys.exc_info()):
             raise
-
-      def kill(_):
-        return process.kill()
-
-      def terminate(_):
-        return process.terminate()
-
-      def poll(_):
-        return process.poll()
 
     return WorkUnitProcessHandler(process)
 

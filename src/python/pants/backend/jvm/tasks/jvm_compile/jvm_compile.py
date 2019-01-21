@@ -407,6 +407,7 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
       self.HERMETIC: set_directory_digests_for_hermetic,
       self.HERMETIC_WITH_NAILGUN: set_directory_digests_for_hermetic,
       self.SUBPROCESS: lambda: None,
+      self.GRAAL: lambda: None,
       self.NAILGUN: lambda: None,
     })()
 
