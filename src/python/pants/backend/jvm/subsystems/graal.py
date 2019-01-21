@@ -11,8 +11,9 @@ import shutil
 from future.utils import text_type
 
 from pants.backend.jvm.subsystems.jvm_tool_mixin import JvmToolMixin
+from pants.backend.native.config.environment import Platform
 from pants.base.build_environment import get_pants_cachedir
-from pants.base.hash_utils import stable_json_hash
+from pants.base.hash_utils import stable_json_sha1
 from pants.binaries.binary_tool import NativeTool
 from pants.binaries.binary_util import BinaryToolUrlGenerator
 from pants.util.contextutil import temporary_dir
@@ -98,7 +99,7 @@ class GraalCE(NativeTool, JvmToolMixin):
         .format(text_type.__name__, input_fingerprint, type(input_fingerprint).__name__))
     jvm_options = jvm_options or []
 
-    input_hash = stable_json_hash([input_fingerprint, self._report_unsupported_elements] + jvm_options)
+    input_hash = stable_json_sha1([input_fingerprint, self._report_unsupported_elements] + jvm_options)
     output_image_file_name = '{}-{}'.format(main_class, input_hash)
 
     fingerprinted_native_image_path = os.path.join(self._cache_dir, output_image_file_name)
@@ -112,7 +113,8 @@ class GraalCE(NativeTool, JvmToolMixin):
       '--verbose',
       '--enable-all-security-services',
       '--allow-incomplete-classpath',
-      '-O9',
+      # TODO: make this -O9!
+      '-O0',
     ] + [
       '-J{}'.format(opt) for opt in jvm_options
     ] + [
@@ -123,7 +125,12 @@ class GraalCE(NativeTool, JvmToolMixin):
 
     pprinted_argv = safe_shlex_join(argv)
     with temporary_dir() as tmp_dir:
-      image_output_path = os.path.join(tmp_dir, main_class)
+      output_file_name = Platform.current.resolve_platform_specific({
+        'darwin': lambda: main_class,
+        # TODO: figure out why and how precisely the class name is mangled here!
+        'linux': lambda: main_class.lower(),
+      })
+      image_output_path = os.path.join(tmp_dir, output_file_name)
 
       logger.info('Building graal native image for {}...'.format(main_class))
       rc = subprocess.check_call(argv, cwd=tmp_dir)

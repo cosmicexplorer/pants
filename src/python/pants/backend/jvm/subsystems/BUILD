@@ -166,6 +166,7 @@ python_library(
   sources=['graal.py'],
   dependencies=[
     '3rdparty/python:futures',
+    'src/python/pants/backend/native/config',
     'src/python/pants/base:build_environment',
     'src/python/pants/base:hash_utils',
     'src/python/pants/binaries',

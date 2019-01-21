@@ -9,7 +9,7 @@ import os
 from pants.backend.jvm.subsystems.graal import GraalCE
 from pants.backend.jvm.tasks.jvm_tool_task_mixin import JvmToolTaskMixin
 from pants.base.exceptions import TaskError
-from pants.base.hash_utils import stable_json_hash
+from pants.base.hash_utils import stable_json_sha1
 from pants.base.workunit import WorkUnitLabel
 from pants.java import util
 from pants.java.executor import GraalExecutor, SubprocessExecutor
@@ -123,7 +123,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
     :API: public
     """
     # TODO: in the v2 engine we don't need to do manual caching like this!
-    input_fingerprint = stable_json_hash(sorted(classpath))
+    input_fingerprint = stable_json_sha1(sorted(classpath))
     executor = self.create_java_executor(dist=dist, input_fingerprint=input_fingerprint)
 
     for executor_cls, labels in self._extra_workunit_labels.items():
