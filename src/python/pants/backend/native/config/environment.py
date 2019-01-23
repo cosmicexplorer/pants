@@ -8,38 +8,33 @@ import os
 from abc import abstractproperty
 
 from pants.engine.rules import SingletonRule
+from pants.util.memo import memoized_classproperty
 from pants.util.meta import AbstractClass
-from pants.util.objects import datatype
+from pants.util.objects import EnumVariantSelectionError, datatype, enum
 from pants.util.osutil import all_normalized_os_names, get_normalized_os_name
 from pants.util.strutil import create_path_env_var
 
 
-class Platform(datatype(['normalized_os_name'])):
+class Platform(enum('normalized_os_name', all_normalized_os_names())):
 
   class UnsupportedPlatformError(Exception):
     """Thrown if pants is running on an unrecognized platform."""
 
+  @memoized_classproperty
+  def current(cls):
+    return cls.create()
+
+  # TODO: convert all usages of this to use .current instead!
   @classmethod
   def create(cls):
-    return Platform(get_normalized_os_name())
+    return super(Platform, cls).create(get_normalized_os_name())
 
-  _NORMALIZED_OS_NAMES = frozenset(all_normalized_os_names())
-
+  # TODO: convert this to just be .resolve_for_enum_variant()! (maybe?)
   def resolve_platform_specific(self, platform_specific_funs):
-    arg_keys = frozenset(platform_specific_funs.keys())
-    unknown_plats = self._NORMALIZED_OS_NAMES - arg_keys
-    if unknown_plats:
-      raise self.UnsupportedPlatformError(
-        "platform_specific_funs {} must support platforms {}"
-        .format(platform_specific_funs, list(unknown_plats)))
-    extra_plats = arg_keys - self._NORMALIZED_OS_NAMES
-    if extra_plats:
-      raise self.UnsupportedPlatformError(
-        "platform_specific_funs {} has unrecognized platforms {}"
-        .format(platform_specific_funs, list(extra_plats)))
-
-    fun_for_platform = platform_specific_funs[self.normalized_os_name]
-    return fun_for_platform()
+    try:
+      return self.resolve_for_enum_variant(platform_specific_funs)
+    except EnumVariantSelectionError as e:
+      raise self.UnsupportedPlatformError("variant match failed: {}".format(e), e)
 
 
 class Executable(AbstractClass):

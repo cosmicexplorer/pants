@@ -15,6 +15,7 @@ from pants.java.nailgun_executor import NailgunExecutor, NailgunProcessGroup
 from pants.process.subprocess import Subprocess
 from pants.task.task import Task, TaskBase
 from pants.util.memo import memoized_property
+from pants.util.objects import enum
 
 
 class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
@@ -24,9 +25,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
   SUBPROCESS = 'subprocess'
   HERMETIC = 'hermetic'
 
-  class InvalidExecutionStrategyMapping(Exception): pass
-
-  _all_execution_strategies = frozenset([NAILGUN, SUBPROCESS, HERMETIC])
+  class ExecutionStrategy(enum([NAILGUN, SUBPROCESS, HERMETIC])): pass
 
   def do_for_execution_strategy_variant(self, mapping):
     """Invoke the method in `mapping` with the key corresponding to the execution strategy.
@@ -45,7 +44,9 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
   @classmethod
   def register_options(cls, register):
     super(NailgunTaskBase, cls).register_options(register)
-    register('--execution-strategy', choices=[cls.NAILGUN, cls.SUBPROCESS, cls.HERMETIC], default=cls.NAILGUN,
+    # TODO: make a custom option type for enum classes to avoid boilerplate!
+    register('--execution-strategy', choices=cls.ExecutionStrategy.allowed_values,
+             default=cls.ExecutionStrategy.default_value,
              help='If set to nailgun, nailgun will be enabled and repeated invocations of this '
                   'task will be quicker. If set to subprocess, then the task will be run without nailgun.')
     register('--nailgun-timeout-seconds', advanced=True, default=10, type=float,

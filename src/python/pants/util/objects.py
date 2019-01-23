@@ -13,7 +13,7 @@ from future.utils import PY2
 from twitter.common.collections import OrderedSet
 
 from pants.util.collections_abc_backport import OrderedDict
-from pants.util.memo import memoized, memoized_classproperty
+from pants.util.memo import memoized, memoized_classproperty, memoized_property
 from pants.util.meta import AbstractClass
 
 
@@ -170,29 +170,34 @@ def datatype(field_decls, superclass_name=None, **kwargs):
     return type(superclass_name.encode('utf-8'), (DataType,), {})
 
 
-def enum(field_name, all_values):
+class EnumVariantSelectionError(TypeError):
+  """???"""
+
+
+def enum(all_values):
   """A datatype which can take on a finite set of values. This method is experimental and unstable.
 
   Any enum subclass can be constructed with its create() classmethod. This method will use the first
   element of `all_values` as the enum value if none is specified.
 
-  :param field_name: A string used as the field for the datatype. Note that enum does not yet
-                     support type checking as with datatype.
   :param all_values: An iterable of objects representing all possible values for the enum.
                      NB: `all_values` must be a finite, non-empty iterable with unique values!
   """
-
   # This call to list() will eagerly evaluate any `all_values` which would otherwise be lazy, such
   # as a generator.
   all_values_realized = list(all_values)
+  if not all_values_realized:
+    raise ValueError("all_values provided to enum() was empty: {}".format(all_values_realized))
+
   # `OrderedSet` maintains the order of the input iterable, but is faster to check membership.
   allowed_values_set = OrderedSet(all_values_realized)
-
   if len(allowed_values_set) < len(all_values_realized):
     raise ValueError("When converting all_values ({}) to a set, at least one duplicate "
                      "was detected. The unique elements of all_values were: {}."
                      .format(all_values_realized, allowed_values_set))
 
+  # We want users to call .value, so this isn't overridable.
+  field_name = '_value'
   class ChoiceDatatype(datatype([field_name])):
     allowed_values = allowed_values_set
     default_value = next(iter(allowed_values))
@@ -206,8 +211,8 @@ def enum(field_name, all_values):
     def _check_value(cls, value):
       if value not in cls.allowed_values:
         raise cls.make_type_error(
-          "Value {!r} for '{}' must be one of: {!r}."
-          .format(value, field_name, cls.allowed_values))
+          "Value {!r} for enum '{}' must be one of: {!r}."
+          .format(value, cls.__name__, cls.allowed_values))
 
     @classmethod
     def create(cls, value=None):
@@ -227,14 +232,28 @@ def enum(field_name, all_values):
 
       return cls._singletons[value]
 
+    @property
+    def value(self):
+      return getattr(self, field_name)
+
     def __new__(cls, *args, **kwargs):
       this_object = super(ChoiceDatatype, cls).__new__(cls, *args, **kwargs)
-
-      field_value = getattr(this_object, field_name)
-
-      cls._check_value(field_value)
-
+      cls._check_value(this_object.value)
       return this_object
+
+    def resolve_for_enum_variant(self, mapping):
+      """Invoke the method in `mapping` with the key corresponding to the enum value.
+
+      `mapping` is a dict mapping execution strategy -> zero-argument lambda.
+      """
+      keys = frozenset(mapping.keys())
+      # Equality of an OrderedSet and frozenset isn't order-dependent.
+      if keys != self.allowed_values:
+        raise EnumVariantSelectionError(
+          "mapping for {} must have exactly the keys {} (was: {})"
+          .format(type(self).__name__, self.allowed_values, keys))
+      fun_for_variant = mapping[self.value]
+      return fun_for_variant()
 
   return ChoiceDatatype
 
