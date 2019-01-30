@@ -29,7 +29,8 @@ from pants.base.workunit import WorkUnitLabel
 from pants.build_graph.address import Address
 from pants.build_graph.target import Target
 from pants.engine.fs import Digest, DirectoryToMaterialize, PathGlobs, PathGlobsAndRoot
-from pants.engine.isolated_process import ExecuteProcessRequest, FallibleExecuteProcessResult
+from pants.engine.isolated_process import (ExecuteProcessRequest, FallibleExecuteProcessResult,
+                                           ProcessExecutionFailure)
 from pants.java.jar.jar_dependency import JarDependency
 from pants.reporting.reporting_utils import items_to_report_element
 from pants.util.contextutil import Timer
@@ -774,18 +775,22 @@ class RscCompile(ZincCompile):
       )
     ]
 
-  def _runtool_hermetic(self, main, tool_name, args, distribution, tgt=None, input_files=tuple(), input_digest=None, output_dir=None):
+  def _runtool_hermetic(self, main, tool_name, args, distribution, with_nailgun=False, tgt=None, input_files=tuple(), input_digest=None, output_dir=None):
     tool_classpath_abs = self.tool_classpath(tool_name)
     tool_classpath = fast_relpath_collection(tool_classpath_abs)
 
-    classpath_for_cmd = os.pathsep.join(tool_classpath)
-    cmd = [
-      distribution.java,
-    ]
-    cmd.extend(self.get_options().jvm_options)
-    cmd.extend(['-cp', classpath_for_cmd])
-    cmd.extend([main])
-    cmd.extend(args)
+    if self.execution_strategy == self.HERMETIC:
+      cmd = [
+        distribution.java,
+      ] + self.get_options().jvm_options + [
+        '-cp', os.pathsep.join(tool_classpath),
+        main,
+      ] + args
+    else:
+      cmd = [
+        './ng', main,
+        '--nailgun-compiler-cache-dir', '/tmp/compiler-cache',
+      ] + args
 
     pathglobs = list(tool_classpath)
     pathglobs.extend(f if os.path.isfile(f) else '{}/**'.format(f) for f in input_files)
@@ -797,13 +802,13 @@ class RscCompile(ZincCompile):
       # dont capture snapshot, if pathglobs is empty
       path_globs_input_digest = self.context._scheduler.capture_snapshots((root,))[0].directory_digest
 
-    if path_globs_input_digest and input_digest:
-      epr_input_files = self.context._scheduler.merge_directories(
-          (path_globs_input_digest, input_digest))
-    else:
-      epr_input_files = path_globs_input_digest or input_digest
+    epr_input_files = self.context._scheduler.merge_directories(
+      ((path_globs_input_digest,) if path_globs_input_digest else ())
+      + ((input_digest,) if input_digest else ())
+      # TODO: ensure the ng client is available!
+      + (Digest("c2547bbae7598ac25ee97db829317c7356ff696a478f2daf37cfd449f0a9eaeb", 80),))
 
-    epr = ExecuteProcessRequest(
+    req = ExecuteProcessRequest(
       argv=tuple(cmd),
       input_files=epr_input_files,
       output_files=tuple(),
@@ -814,10 +819,21 @@ class RscCompile(ZincCompile):
       # Since this is always hermetic, we need to use `underlying_dist`
       jdk_home=text_type(self._zinc.underlying_dist.home),
     )
-    res = self.context.execute_process_synchronously_without_raising(
-      epr,
-      self.name(),
-      [WorkUnitLabel.TOOL])
+
+    retry_iteration = 0
+
+    # TODO: any retries will cause workunits to fail!
+    while True:
+      try:
+        res = self.context.execute_process_synchronously_or_raise(req, self.name(), [WorkUnitLabel.TOOL])
+        break
+      except ProcessExecutionFailure as e:
+        if e.exit_code == 227:
+          env = {'_retry_iteration': '{}'.format(retry_iteration)}
+          retry_iteration += 1
+          req = req.copy(env=env)
+          continue
+        raise
 
     if res.exit_code != 0:
       raise TaskError(res.stderr)
@@ -861,7 +877,10 @@ class RscCompile(ZincCompile):
     with self.context.new_workunit(tool_name) as wu:
       return self.do_for_execution_strategy_variant({
         self.HERMETIC: lambda: self._runtool_hermetic(
-          main, tool_name, args, distribution,
+          main, tool_name, args, distribution, with_nailgun=False,
+          tgt=tgt, input_files=input_files, input_digest=input_digest, output_dir=output_dir),
+        self.HERMETIC_WITH_NAILGUN: lambda: self._runtool_hermetic(
+          main, tool_name, args, distribution, with_nailgun=True,
           tgt=tgt, input_files=input_files, input_digest=input_digest, output_dir=output_dir),
         self.SUBPROCESS: lambda: self._runtool_nonhermetic(
           wu, self.tool_classpath(tool_name), main, tool_name, args, distribution),
