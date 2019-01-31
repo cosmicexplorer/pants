@@ -13,7 +13,7 @@ from future.utils import PY2
 from twitter.common.collections import OrderedSet
 
 from pants.util.collections_abc_backport import OrderedDict
-from pants.util.memo import memoized, memoized_classproperty
+from pants.util.memo import memoized, memoized_classproperty, memoized_property
 from pants.util.meta import AbstractClass
 
 
@@ -170,6 +170,10 @@ def datatype(field_decls, superclass_name=None, **kwargs):
     return type(superclass_name.encode('utf-8'), (DataType,), {})
 
 
+class EnumVariantSelectionError(TypeError):
+  """???"""
+
+
 def enum(field_name, all_values):
   """A datatype which can take on a finite set of values. This method is experimental and unstable.
 
@@ -181,6 +185,8 @@ def enum(field_name, all_values):
   :param all_values: An iterable of objects representing all possible values for the enum.
                      NB: `all_values` must be a finite, non-empty iterable with unique values!
   """
+  if field_name is None:
+    field_name = 'private_field_name'
 
   # This call to list() will eagerly evaluate any `all_values` which would otherwise be lazy, such
   # as a generator.
@@ -227,14 +233,28 @@ def enum(field_name, all_values):
 
       return cls._singletons[value]
 
+    # TODO: change all field accesses to use this and remove the `field_name` arg to enum()!
+    @memoized_property
+    def value(self):
+      return getattr(self, field_name)
+
     def __new__(cls, *args, **kwargs):
       this_object = super(ChoiceDatatype, cls).__new__(cls, *args, **kwargs)
-
-      field_value = getattr(this_object, field_name)
-
-      cls._check_value(field_value)
-
+      cls._check_value(this_object.value)
       return this_object
+
+    def resolve_for_enum_variant(self, mapping):
+      """Invoke the method in `mapping` with the key corresponding to the enum value.
+
+      `mapping` is a dict mapping execution strategy -> zero-argument lambda.
+      """
+      keys = OrderedSet(mapping.keys())
+      if keys != self.allowed_values:
+        raise EnumVariantSelectionError(
+          "mapping for {} must have exactly the keys {} (was: {})"
+          .format(type(self).__name__, self.allowed_values, keys))
+      fun_for_variant = mapping[self.value]
+      return fun_for_variant()
 
   return ChoiceDatatype
 
