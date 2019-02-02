@@ -33,6 +33,7 @@ class OptionsBootstrapper(datatype([
   ('bootstrap_args', tuple),
   ('args', tuple),
   ('config', SubclassesOf(Config)),
+  ('goals', tuple),
 ])):
   """Holds the result of the first stage of options parsing, and assists with parsing full options."""
 
@@ -151,7 +152,12 @@ class OptionsBootstrapper(datatype([
     )
 
     env_tuples = tuple(sorted(iteritems(env), key=lambda x: x[0]))
-    return cls(env_tuples=env_tuples, bootstrap_args=bargs, args=args, config=post_bootstrap_config)
+    return cls(
+      env_tuples=env_tuples,
+      bootstrap_args=bargs,
+      args=args,
+      config=post_bootstrap_config,
+      goals=tuple(initial_bootstrap_options.goals))
 
   @memoized_property
   def env(self):

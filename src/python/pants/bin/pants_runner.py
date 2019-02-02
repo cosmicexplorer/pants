@@ -31,6 +31,11 @@ class PantsRunner(object):
     self._env = env or os.environ
     self._start_time = start_time
 
+  # This could be a bootstrap option, but it's preferable to keep these very limited to make it
+  # easier to make the daemon the default use case. Once the daemon lifecycle is stable enough we
+  # should be able to avoid needing to kill it at all.
+  _DAEMON_KILLING_GOALS = frozenset(['kill-pantsd', 'clean-all'])
+
   def run(self):
     # Register our exiter at the beginning of the run() method so that any code in this process from
     # this point onwards will use that exiter in the case of a fatal error.
@@ -39,15 +44,27 @@ class PantsRunner(object):
     options_bootstrapper = OptionsBootstrapper.create(env=self._env, args=self._args)
     bootstrap_options = options_bootstrapper.bootstrap_options
     global_bootstrap_options = bootstrap_options.for_global_scope()
+    goals = options_bootstrapper.goals
 
     ExceptionSink.reset_should_print_backtrace_to_terminal(global_bootstrap_options.print_exception_stacktrace)
     ExceptionSink.reset_log_location(global_bootstrap_options.pants_workdir)
 
     if global_bootstrap_options.enable_pantsd:
-      try:
-        return RemotePantsRunner(self._exiter, self._args, self._env, options_bootstrapper).run()
-      except RemotePantsRunner.Fallback as e:
-        logger.warn('caught client exception: {!r}, falling back to non-daemon mode'.format(e))
+      # NB: This branch isn't tested, because we shouldn't be relying on this behavior.
+      if frozenset(goals).issubset(self._DAEMON_KILLING_GOALS):
+        logger.debug(
+          'note: using non-daemon mode to execute the provided goals {}, '
+          'which only involve killing pantsd.'
+          .format(goals))
+        raise Exception(
+          'note: using non-daemon mode to execute the provided goals {}, '
+          'which only involve killing pantsd.'
+          .format(goals))
+      else:
+        try:
+          return RemotePantsRunner(self._exiter, self._args, self._env, options_bootstrapper).run()
+        except RemotePantsRunner.Fallback as e:
+          logger.warn('caught client exception: {!r}, falling back to non-daemon mode'.format(e))
 
     # N.B. Inlining this import speeds up the python thin client run by about 100ms.
     from pants.bin.local_pants_runner import LocalPantsRunner
