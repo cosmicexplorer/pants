@@ -27,7 +27,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
 
   class InvalidExecutionStrategyMapping(Exception): pass
 
-  _all_execution_strategies = frozenset([NAILGUN, SUBPROCESS, HERMETIC])
+  _all_execution_strategies = frozenset([NAILGUN, SUBPROCESS, HERMETIC, HERMETIC_WITH_NAILGUN])
 
   def do_for_execution_strategy_variant(self, mapping):
     """Invoke the method in `mapping` with the key corresponding to the execution strategy.

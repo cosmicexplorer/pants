@@ -420,21 +420,25 @@ class BaseZincCompile(JvmCompile):
       )
 
       # TODO: ensure the ng client is available!
-      merged_input_digest = self.context._scheduler.merge_directories(
-        tuple(s.directory_digest for s in (snapshots)) + directory_digests + (Digest("c2547bbae7598ac25ee97db829317c7356ff696a478f2daf37cfd449f0a9eaeb", 80),)
-      )
+
 
       # TODO: Extract something common from Executor._create_command to make the command line
       # TODO: Lean on distribution for the bin/java appending here
       if self.execution_strategy == self.HERMETIC:
+        merged_input_digest = self.context._scheduler.merge_directories(
+          tuple(s.directory_digest for s in (snapshots)) + directory_digests
+        )
         argv = ['.jdk/bin/java'] + jvm_options + [
           '-cp', zinc_relpath,
           Zinc.ZINC_COMPILE_MAIN
         ] + zinc_args
       else:
+        merged_input_digest = self.context._scheduler.merge_directories(
+          tuple(s.directory_digest for s in (snapshots)) + directory_digests + (Digest("c2547bbae7598ac25ee97db829317c7356ff696a478f2daf37cfd449f0a9eaeb", 80),)
+        )
         argv = [
           './ng', Zinc.ZINC_COMPILE_MAIN,
-          '--nailgun-compiler-cache-dir', '/tmp/compiler-cache',
+          # '--nailgun-compiler-cache-dir', '/tmp/compiler-cache',
         ] + zinc_args
 
       req = ExecuteProcessRequest(
