@@ -196,7 +196,7 @@ class RscCompile(ZincCompile):
       self.HERMETIC_WITH_NAILGUN: lambda: [],
     })
 
-  class _JvmTargetType(enum(['zinc', 'rsc'])): pass
+  class _JvmTargetType(enum(['zinc-only', 'rsc-compatible', 'zinc-java'])): pass
 
   @memoized_property
   def _exclude_regexps(self):
@@ -231,14 +231,14 @@ class RscCompile(ZincCompile):
           self.context.log.warn(
             'Target {} is marked rsc-compatible but has java sources! Compiling with zinc...'
             .format(target))
-          target_type = self._JvmTargetType.create('zinc')
+          target_type = self._JvmTargetType.create('zinc-java')
         else:
-          target_type = self._JvmTargetType.create('rsc')
+          target_type = self._JvmTargetType.create('rsc-compatible')
       else:
-        target_type = self._JvmTargetType.create('zinc')
+        target_type = self._JvmTargetType.create('zinc-only')
     elif target.has_sources('.java'):
       # This is just a java target.
-      target_type = self._JvmTargetType.create('zinc')
+      target_type = self._JvmTargetType.create('zinc-java')
     else:
       target_type = None
     return target_type
@@ -275,15 +275,33 @@ class RscCompile(ZincCompile):
       target_compile_type = self._classify_compile_target(target)
       if target_compile_type is not None:
         rsc_cc, compile_cc = compile_contexts[target]
+        mixed_zinc_rsc_product = CompositeProductAdder(
+          self.context.products.get_data('runtime_classpath'),
+          self.context.products.get_data('rsc_classpath'))
         target_compile_type.resolve_for_enum_variant({
-          'zinc': lambda: self.context.products.get_data('rsc_classpath').add_for_target(
-            compile_cc.target,
-            confify([compile_cc.jar_file])
-          ),
-          'rsc': lambda: self.context.products.get_data('rsc_classpath').add_for_target(
+          # 'zinc-java': lambda: self.context.products.get_data('rsc_classpath').add_for_target(
+          #   compile_cc.target,
+          #   confify([compile_cc.jar_file])
+          # ),
+          'zinc-java': lambda: None,
+          'zinc-only': lambda: None,
+          'rsc-compatible': lambda: mixed_zinc_rsc_product.add_for_target(
             rsc_cc.target,
             confify(to_classpath_entries([rsc_cc.rsc_mjar_file], self.context._scheduler))),
         })
+        # # Now do the same for adding rsc entries to the zinc classpath!
+        # zinc_analysis = self.context.products.get_data('zinc_analysis')
+        # if zinc_analysis is not None:
+        #   def add_rsc_entries_to_zinc():
+        #     zinc_analysis[rsc_cc.target] = (
+        #       rsc_cc.classes_dir,
+        #       rsc_cc.rsc_mjar_file,
+        #       None
+        #     )
+        #   target_compile_type.resolve_for_enum_variant({
+        #     'zinc': lambda: None,
+        #     'rsc': add_rsc_entries_to_zinc,
+        #   })
 
   def _is_scala_core_library(self, target):
     return target.address.spec in ('//:scala-library', '//:scala-library-synthetic')
@@ -305,11 +323,15 @@ class RscCompile(ZincCompile):
       return True
     return False
 
-  def _rsc_key_for_target(self, compile_target):
+  def _mixed_zinc_or_rsc_key_for_target_as_dep(self, compile_target):
     return self._classify_compile_target(compile_target).resolve_for_enum_variant({
-      'zinc': lambda: self._zinc_key_for_target(compile_target),
-      'rsc': lambda: 'rsc({})'.format(compile_target.address.spec),
+      'zinc-java': lambda: self._zinc_key_for_target(compile_target),
+      'zinc-only': lambda: self._zinc_key_for_target(compile_target),
+      'rsc-compatible': lambda: self._rsc_key_for_target(compile_target),
     })
+
+  def _rsc_key_for_target(self, compile_target):
+    return 'rsc({})'.format(compile_target.address.spec)
 
   def _zinc_key_for_target(self, compile_target):
     return 'zinc({})'.format(compile_target.address.spec)
@@ -354,6 +376,7 @@ class RscCompile(ZincCompile):
 
         dependencies_for_target = list(
           DependencyContext.global_instance().dependencies_respecting_strict_deps(target))
+        self.context.log.debug('DEPS: {}={}'.format(target, dependencies_for_target))
 
 
         rsc_deps_classpath_unprocessed = _paths_from_classpath(
@@ -432,25 +455,33 @@ class RscCompile(ZincCompile):
 
     # Create the rsc job.
     # Currently, rsc only supports outlining scala.
-    def rsc_invalid_dep_key(target):
-      # Rely on the results of zinc compiles for zinc-compatible targets
-      return self._classify_compile_target(target).resolve_for_enum_variant({
-        'zinc': lambda: self._zinc_key_for_target(target),
-        'rsc': lambda: self._rsc_key_for_target(target),
-      })
+    def all_mixed_zinc_rsc_invalid_dep_keys(invalid_deps):
+      for tgt in invalid_deps:
+        # None can occur for e.g. JarLibrary deps, which we don't need to compile as they are
+        # populated in the resolve goal.
+        if self._classify_compile_target(tgt) is not None:
+          # Rely on the results of zinc compiles for zinc-compatible targets
+          yield self._mixed_zinc_or_rsc_key_for_target_as_dep(tgt)
 
+    # TODO: find some way to make the rsc compiles populate a runtime_classpath that only the zinc
+    # jobs use!
     self._classify_compile_target(compile_target).resolve_for_enum_variant({
-      'zinc': lambda: None,
-      'rsc': lambda: rsc_jobs.append(
+      # zinc-only targets have no rsc job.
+      'zinc-java': lambda: None,
+      'zinc-only': lambda: None,
+      'rsc-compatible': lambda: rsc_jobs.append(
         Job(
           self._rsc_key_for_target(compile_target),
           functools.partial(
             work_for_vts_rsc,
             ivts,
             compile_context_pair[0]),
-          [rsc_invalid_dep_key(target) for target in invalid_dependencies],
+          # The rsc jobs depend on other rsc jobs, and on zinc jobs for zinc-only targets.
+          list(all_mixed_zinc_rsc_invalid_dep_keys(invalid_dependencies)),
           # TODO: It's not clear what compile_context_pair is referring to here.
           self._size_estimator(compile_context_pair[0].sources),
+          on_success=ivts.update,
+          on_failure=ivts.force_invalidate,
         )
       ),
     })
@@ -460,56 +491,39 @@ class RscCompile(ZincCompile):
     # - Java zinc compile jobs depend on the zinc compiles of their dependencies, because we can't
     #   generate mjars that make javac happy at this point.
 
-    def all_zinc_invalid_dep_keys(invalid_deps):
+    def only_zinc_invalid_dep_keys(invalid_deps):
       for tgt in invalid_deps:
         if self._classify_compile_target(tgt) is not None:
           yield self._zinc_key_for_target(tgt)
 
-    def all_rsc_invalid_dep_keys(invalid_deps):
-      for tgt in invalid_deps:
-        if self._classify_compile_target(tgt) is not None:
-          yield self._rsc_key_for_target(tgt)
+    def make_zinc_job(target, dep_keys):
+      return Job(key=self._zinc_key_for_target(target),
+                 fn=functools.partial(
+                   self._default_work_for_vts,
+                   ivts,
+                   compile_context_pair[1],
+                   'runtime_classpath',
+                   counter,
+                   compile_contexts,
+                   CompositeProductAdder(
+                     runtime_classpath_product,
+                     self.context.products.get_data('rsc_classpath'))),
+                 dependencies=list(dep_keys),
+                 size=self._size_estimator(compile_context_pair[1].sources),
+                 on_success=ivts.update,
+                 on_failure=ivts.force_invalidate,
+      )
 
     self._classify_compile_target(compile_target).resolve_for_enum_variant({
-      'zinc': lambda: zinc_jobs.append(
-        Job(
-          self._zinc_key_for_target(compile_target),
-          functools.partial(
-            self._default_work_for_vts,
-            ivts,
-            compile_context_pair[1],
-            'runtime_classpath',
-            counter,
-            compile_contexts,
-            CompositeProductAdder(
-              runtime_classpath_product,
-              self.context.products.get_data('rsc_classpath'))),
-          list(all_zinc_invalid_dep_keys(invalid_dependencies)),
-          self._size_estimator(compile_context_pair[1].sources),
-          on_failure=ivts.force_invalidate,
-        )
+      'zinc-java': lambda: zinc_jobs.append(
+        make_zinc_job(compile_target, only_zinc_invalid_dep_keys(invalid_dependencies))
       ),
-      'rsc': lambda: zinc_jobs.append(
-        Job(
-          self._zinc_key_for_target(compile_target),
-          functools.partial(
-            self._default_work_for_vts,
-            ivts,
-            compile_context_pair[1],
-            'rsc_classpath',
-            counter,
-            compile_contexts,
-            runtime_classpath_product),
-          [
-            self._rsc_key_for_target(compile_target)
-          ] + list(all_rsc_invalid_dep_keys(invalid_dependencies)),
-          self._size_estimator(compile_context_pair[1].sources),
-          # NB: right now, only the last job will write to the cache, because we don't
-          #     do multiple cache entries per target-task tuple.
-          on_success=ivts.update,
-          on_failure=ivts.force_invalidate,
-        )
-      ),
+      # zinc-only targets will depend on the rsc jobs of rsc-compatible target and zinc jobs of
+      # zinc-only dependencies.
+      'zinc-only': lambda: zinc_jobs.append(
+        make_zinc_job(compile_target, all_mixed_zinc_rsc_invalid_dep_keys(invalid_dependencies))),
+      'rsc-compatible': lambda: zinc_jobs.append(
+        make_zinc_job(compile_target, all_mixed_zinc_rsc_invalid_dep_keys(invalid_dependencies))),
     })
 
     return rsc_jobs + zinc_jobs

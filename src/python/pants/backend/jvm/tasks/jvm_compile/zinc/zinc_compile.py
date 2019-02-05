@@ -395,94 +395,109 @@ class BaseZincCompile(JvmCompile):
         fp.write(arg)
         fp.write('\n')
 
-    if self.execution_strategy in {self.HERMETIC, self.HERMETIC_WITH_NAILGUN}:
-      zinc_relpath = fast_relpath(self._zinc.zinc, get_buildroot())
+    return self.do_for_execution_strategy_variant({
+      self.HERMETIC: lambda: self._compile_hermetic(
+        jvm_options, ctx, classes_dir, zinc_args, compiler_bridge_classpath_entry, dependency_classpath,
+        scalac_classpath_entries,
+        with_nailgun=False),
+      self.HERMETIC_WITH_NAILGUN: lambda: self._compile_hermetic(
+        jvm_options, ctx, classes_dir, zinc_args, compiler_bridge_classpath_entry, dependency_classpath,
+        scalac_classpath_entries,
+        with_nailgun=True),
+      self.SUBPROCESS: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
+      self.NAILGUN: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
+    })
 
-      snapshots = [
-        self._zinc.snapshot(self.context._scheduler),
-        ctx.target.sources_snapshot(self.context._scheduler),
-      ]
+  class ZincCompileError(TaskError): pass
 
-      relevant_classpath_entries = dependency_classpath + [compiler_bridge_classpath_entry]
-      directory_digests = tuple(
-        entry.directory_digest for entry in relevant_classpath_entries if entry.directory_digest
+  def _compile_nonhermetic(self, jvm_options, zinc_args):
+    exit_code = self.runjava(classpath=self.get_zinc_compiler_classpath(),
+                             main=Zinc.ZINC_COMPILE_MAIN,
+                             jvm_options=jvm_options,
+                             args=zinc_args,
+                             workunit_name=self.name(),
+                             workunit_labels=[WorkUnitLabel.COMPILER],
+                             dist=self._zinc.dist)
+    if exit_code != 0:
+      raise self.ZincCompileError('Zinc compile failed.', exit_code=exit_code)
+
+  def _compile_hermetic(self, jvm_options, ctx, classes_dir, zinc_args, compiler_bridge_classpath_entry,
+                        dependency_classpath, scalac_classpath_entries, with_nailgun=False):
+    zinc_relpath = fast_relpath(self._zinc.zinc, get_buildroot())
+
+    snapshots = [
+      self._zinc.snapshot(self.context._scheduler),
+      ctx.target.sources_snapshot(self.context._scheduler),
+    ]
+
+    relevant_classpath_entries = dependency_classpath + [compiler_bridge_classpath_entry]
+    directory_digests = tuple(
+      entry.directory_digest for entry in relevant_classpath_entries if entry.directory_digest
+    )
+    if len(directory_digests) != len(relevant_classpath_entries):
+      for dep in relevant_classpath_entries:
+        if dep.directory_digest is None:
+          logger.warning(
+            "ClasspathEntry {} didn't have a Digest, so won't be present for hermetic "
+            "execution".format(dep)
+          )
+
+    snapshots.extend(
+      classpath_entry.directory_digest for classpath_entry in scalac_classpath_entries
+    )
+
+    # TODO: ensure the ng client is available!
+    # TODO: Extract something common from Executor._create_command to make the command line
+    # TODO: Lean on distribution for the bin/java appending here
+    if with_nailgun:
+      merged_input_digest = self.context._scheduler.merge_directories(
+        tuple(s.directory_digest for s in (snapshots)) + directory_digests + (Digest("c2547bbae7598ac25ee97db829317c7356ff696a478f2daf37cfd449f0a9eaeb", 80),)
       )
-      if len(directory_digests) != len(relevant_classpath_entries):
-        for dep in relevant_classpath_entries:
-          if dep.directory_digest is None:
-            logger.warning(
-              "ClasspathEntry {} didn't have a Digest, so won't be present for hermetic "
-              "execution".format(dep)
-            )
-
-      snapshots.extend(
-        classpath_entry.directory_digest for classpath_entry in scalac_classpath_entries
-      )
-
-      # TODO: ensure the ng client is available!
-
-
-      # TODO: Extract something common from Executor._create_command to make the command line
-      # TODO: Lean on distribution for the bin/java appending here
-      if self.execution_strategy == self.HERMETIC:
-        merged_input_digest = self.context._scheduler.merge_directories(
-          tuple(s.directory_digest for s in (snapshots)) + directory_digests
-        )
-        argv = ['.jdk/bin/java'] + jvm_options + [
-          '-cp', zinc_relpath,
-          Zinc.ZINC_COMPILE_MAIN
-        ] + zinc_args
-      else:
-        merged_input_digest = self.context._scheduler.merge_directories(
-          tuple(s.directory_digest for s in (snapshots)) + directory_digests + (Digest("c2547bbae7598ac25ee97db829317c7356ff696a478f2daf37cfd449f0a9eaeb", 80),)
-        )
-        argv = [
-          './ng', Zinc.ZINC_COMPILE_MAIN,
-          # '--nailgun-compiler-cache-dir', '/tmp/compiler-cache',
-        ] + zinc_args
-
-      req = ExecuteProcessRequest(
-        argv=tuple(argv),
-        input_files=merged_input_digest,
-        output_directories=(classes_dir,),
-        description="zinc compile for {}".format(ctx.target.address.spec),
-        # TODO: These should always be unicodes
-        # Since this is always hermetic, we need to use `underlying_dist`
-        jdk_home=text_type(self._zinc.underlying_dist.home),
-      )
-
-      retry_iteration = 0
-
-      # TODO: any retries will cause workunits to fail!
-      while True:
-        try:
-          res = self.context.execute_process_synchronously_or_raise(req, self.name(), [WorkUnitLabel.COMPILER])
-          break
-        except ProcessExecutionFailure as e:
-          if e.exit_code == 227:
-            env = {'_retry_iteration': '{}'.format(retry_iteration)}
-            retry_iteration += 1
-            req = req.copy(env=env)
-            continue
-          raise
-
-
-      # TODO: Materialize as a batch in do_compile or somewhere
-      self.context._scheduler.materialize_directories((
-        DirectoryToMaterialize(get_buildroot(), res.output_directory_digest),
-      ))
-
-      # TODO: This should probably return a ClasspathEntry rather than a Digest
-      return res.output_directory_digest
+      argv = [
+        './ng', Zinc.ZINC_COMPILE_MAIN,
+        # '--nailgun-compiler-cache-dir', '/tmp/compiler-cache',
+      ] + zinc_args
     else:
-      if self.runjava(classpath=self.get_zinc_compiler_classpath(),
-                      main=Zinc.ZINC_COMPILE_MAIN,
-                      jvm_options=jvm_options,
-                      args=zinc_args,
-                      workunit_name=self.name(),
-                      workunit_labels=[WorkUnitLabel.COMPILER],
-                      dist=self._zinc.dist):
-        raise TaskError('Zinc compile failed.')
+      merged_input_digest = self.context._scheduler.merge_directories(
+        tuple(s.directory_digest for s in (snapshots)) + directory_digests
+      )
+      argv = ['.jdk/bin/java'] + jvm_options + [
+        '-cp', zinc_relpath,
+        Zinc.ZINC_COMPILE_MAIN
+      ] + zinc_args
+
+    req = ExecuteProcessRequest(
+      argv=tuple(argv),
+      input_files=merged_input_digest,
+      output_directories=(classes_dir,),
+      description="zinc compile for {}".format(ctx.target.address.spec),
+      # TODO: These should always be unicodes
+      # Since this is always hermetic, we need to use `underlying_dist`
+      jdk_home=text_type(self._zinc.underlying_dist.home),
+    )
+
+    retry_iteration = 0
+
+    # TODO: any retries will cause workunits to fail!
+    while True:
+      try:
+        res = self.context.execute_process_synchronously_or_raise(req, self.name(), [WorkUnitLabel.COMPILER])
+        break
+      except ProcessExecutionFailure as e:
+        if e.exit_code == 227:
+          env = {'_retry_iteration': '{}'.format(retry_iteration)}
+          retry_iteration += 1
+          req = req.copy(env=env)
+          continue
+        raise
+
+    # TODO: Materialize as a batch in do_compile or somewhere
+    self.context._scheduler.materialize_directories((
+      DirectoryToMaterialize(get_buildroot(), res.output_directory_digest),
+    ))
+
+    # TODO: This should probably return a ClasspathEntry rather than a Digest
+    return res.output_directory_digest
 
   def get_zinc_compiler_classpath(self):
     """Get the classpath for the zinc compiler JVM tool.
