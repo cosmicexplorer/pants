@@ -110,7 +110,7 @@ class RscCompileContext(CompileContext):
                target,
                analysis_file,
                classes_dir,
-               rsc_mjar_file,
+               rsc_jar_file,
                jar_file,
                log_dir,
                zinc_args_file,
@@ -118,11 +118,11 @@ class RscCompileContext(CompileContext):
                rsc_index_dir):
     super(RscCompileContext, self).__init__(target, analysis_file, classes_dir, jar_file,
                                                log_dir, zinc_args_file, sources)
-    self.rsc_mjar_file = rsc_mjar_file
+    self.rsc_jar_file = rsc_jar_file
     self.rsc_index_dir = rsc_index_dir
 
   def ensure_output_dirs_exist(self):
-    safe_mkdir(os.path.dirname(self.rsc_mjar_file))
+    safe_mkdir(os.path.dirname(self.rsc_jar_file))
     safe_mkdir(self.rsc_index_dir)
 
 
@@ -292,7 +292,7 @@ class RscCompile(ZincCompile):
           'zinc-only': lambda: None,
           'rsc-compatible': lambda: mixed_zinc_rsc_product.add_for_target(
             rsc_cc.target,
-            confify(to_classpath_entries([rsc_cc.rsc_mjar_file], self.context._scheduler))),
+            confify(to_classpath_entries([rsc_cc.rsc_jar_file], self.context._scheduler))),
         })
 
   def _is_scala_core_library(self, target):
@@ -388,7 +388,7 @@ class RscCompile(ZincCompile):
         with Timer() as timer:
           # Outline Scala sources into SemanticDB
           # ---------------------------------------------
-          rsc_mjar_file = fast_relpath(ctx.rsc_mjar_file, get_buildroot())
+          rsc_jar_file = fast_relpath(ctx.rsc_jar_file, get_buildroot())
 
           sources_snapshot = ctx.target.sources_snapshot(scheduler=self.context._scheduler)
 
@@ -415,7 +415,7 @@ class RscCompile(ZincCompile):
           target_sources = ctx.sources
           args = [
                    '-cp', os.pathsep.join(classpath_entry_paths),
-                   '-d', rsc_mjar_file,
+                   '-d', rsc_jar_file,
                  ] + target_sources
 
           self._runtool(
@@ -426,7 +426,7 @@ class RscCompile(ZincCompile):
             tgt=tgt,
             input_files=tuple(rsc_classpath_rel),
             input_digest=input_digest,
-            output_dir=os.path.dirname(rsc_mjar_file))
+            output_dir=os.path.dirname(rsc_jar_file))
 
         self._record_target_stats(tgt,
           len(rsc_classpath_rel),
@@ -482,7 +482,7 @@ class RscCompile(ZincCompile):
     # Create the zinc compile jobs.
     # - Scala zinc compile jobs depend on the results of running rsc on the scala target.
     # - Java zinc compile jobs depend on the zinc compiles of their dependencies, because we can't
-    #   generate mjars that make javac happy at this point.
+    #   generate jars that make javac happy at this point.
 
     def only_zinc_invalid_dep_keys(invalid_deps):
       for tgt in invalid_deps:
@@ -546,7 +546,7 @@ class RscCompile(ZincCompile):
         classes_dir=None,
         jar_file=None,
         zinc_args_file=None,
-        rsc_mjar_file=os.path.join(rsc_dir, 'm.jar'),
+        rsc_jar_file=os.path.join(rsc_dir, 'm.jar'),
         log_dir=os.path.join(rsc_dir, 'logs'),
         sources=sources,
         rsc_index_dir=os.path.join(rsc_dir, 'index'),
