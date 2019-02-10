@@ -23,7 +23,7 @@ def _execution_strategies(strategies, workers_range=[1]):
 
 
 class RscCompileIntegration(BaseCompileIT):
-  @_execution_strategies(['nailgun', 'subprocess'])
+  @_execution_strategies(['graal'])
   def test_basic_binary_nonhermetic(self, execution_strategy, worker_count):
     with temporary_dir() as cache_dir:
       config = {
@@ -71,7 +71,7 @@ class RscCompileIntegration(BaseCompileIT):
           'm.jar')
         self.assertTrue(os.path.exists(path))
 
-  @_execution_strategies(['nailgun', 'subprocess'], [2])
+  @_execution_strategies(['graal'], [2])
   def test_executing_multi_target_binary_nonhermetic(self, execution_strategy, worker_count):
     with temporary_dir() as cache_dir:
       config = {
@@ -113,7 +113,7 @@ class RscCompileIntegration(BaseCompileIT):
         self.assert_success(pants_run)
         self.assertIn('Hello, Resource World!', pants_run.stdout_data)
 
-  @_execution_strategies(['nailgun', 'subprocess'], [2])
+  @_execution_strategies(['graal'], [2])
   def test_java_with_transitive_exported_scala_dep_nonhermetic(self, execution_strategy, worker_count):
     with temporary_dir() as cache_dir:
       config = {

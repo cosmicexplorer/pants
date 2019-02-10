@@ -290,7 +290,8 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
     self._targets_to_compile_settings = None
 
     # JVM options for running the compiler.
-    self._jvm_options = self.get_options().jvm_options
+    # self._jvm_options = self.get_options().jvm_options
+    self._jvm_options = ['-Xmx8g']
 
     self._args = list(self.get_options().args)
     if self.get_options().warnings:

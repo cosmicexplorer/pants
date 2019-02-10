@@ -11,6 +11,7 @@ import shutil
 from future.utils import text_type
 
 from pants.backend.jvm.subsystems.jvm_tool_mixin import JvmToolMixin
+from pants.backend.native.config.environment import Platform
 from pants.base.build_environment import get_pants_cachedir
 from pants.base.hash_utils import stable_json_hash
 from pants.binaries.binary_tool import NativeTool
@@ -112,7 +113,19 @@ class GraalCE(NativeTool, JvmToolMixin):
       '--verbose',
       '--enable-all-security-services',
       '--allow-incomplete-classpath',
-      '-O9',
+      # This is suggested when you see an error.
+      '-H:+ReportExceptionStackTraces',
+      # Using a single thread during native image generation makes the stacktraces actually match
+      # the errors.
+      '-H:NumberOfThreads=1',
+      '--no-server',
+      '--tool:truffle',
+      '-R:+PrintGC',
+      '-R:+PrintGCTimeStamps',
+      '-R:+VerboseGC',
+      '-R:+PrintGCTimes',
+      # TODO: make this -O9!
+      '-O0',
     ] + [
       '-J{}'.format(opt) for opt in jvm_options
     ] + [
@@ -122,8 +135,14 @@ class GraalCE(NativeTool, JvmToolMixin):
       argv.append('--report-unsupported-elements-at-runtime')
 
     pprinted_argv = safe_shlex_join(argv)
+    logger.debug('graal native-image argv: {}'.format(pprinted_argv))
     with temporary_dir() as tmp_dir:
-      image_output_path = os.path.join(tmp_dir, main_class)
+      output_file_name = Platform.create().resolve_for_enum_variant({
+        'darwin': main_class,
+        # TODO: figure out why and how precisely the class name is mangled here!
+        'linux': main_class.lower(),
+      })
+      image_output_path = os.path.join(tmp_dir, output_file_name)
 
       logger.info('Building graal native image for {}...'.format(main_class))
       rc = subprocess.check_call(argv, cwd=tmp_dir)

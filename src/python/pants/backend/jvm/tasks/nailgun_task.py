@@ -88,18 +88,18 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
     Call only in execute() or later. TODO: Enforce this.
     """
     dist = dist or self.dist
-    if self.execution_strategy == self.NAILGUN:
-      classpath = os.pathsep.join(self.tool_classpath('nailgun-server'))
-      return NailgunExecutor(self._identity,
-                             self._executor_workdir,
-                             classpath,
-                             dist,
-                             connect_timeout=self.get_options().nailgun_timeout_seconds,
-                             connect_attempts=self.get_options().nailgun_connect_attempts)
-    elif self.execution_strategy == self.GRAAL:
-      return GraalExecutor(dist, self._graal_ce, input_fingerprint=input_fingerprint)
-    else:
-      return SubprocessExecutor(dist)
+    return self.execution_strategy_enum.resolve_for_enum_variant({
+      self.NAILGUN: lambda: NailgunExecutor(self._identity,
+                                            self._executor_workdir,
+                                            os.pathsep.join(self.tool_classpath('nailgun-server')),
+                                            dist,
+                                            connect_timeout=self.get_options().nailgun_timeout_seconds,
+                                            connect_attempts=self.get_options().nailgun_connect_attempts),
+      self.GRAAL: lambda: GraalExecutor(dist, self._graal_ce, input_fingerprint=input_fingerprint),
+      self.SUBPROCESS: lambda: SubprocessExecutor(dist),
+      self.HERMETIC: lambda: SubprocessExecutor(dist),
+      self.HERMETIC_WITH_NAILGUN: lambda: SubprocessExecutor(dist),
+    })()
 
   _extra_workunit_labels = {
     GraalExecutor: [WorkUnitLabel.RUN],

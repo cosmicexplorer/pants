@@ -32,6 +32,7 @@ class ScalaFmt(RewriteBase):
     super(ScalaFmt, cls).register_options(register)
     register('--configuration', advanced=True, type=file_option, fingerprint=True,
               help='Path to scalafmt config file, if not specified default scalafmt config used')
+    # TODO: use WorkerPool like in jvm_compile.py (probably)!
     register('--files-per-process', type=int, default=0, advanced=True,
              help='If nonzero, split all the relevant source files into this many files per'
                   'subprocess invoked in parallel.')
