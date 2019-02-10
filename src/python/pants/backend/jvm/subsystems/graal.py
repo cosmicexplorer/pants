@@ -44,7 +44,7 @@ class GraalCEUrlGenerator(BinaryToolUrlGenerator):
 class GraalCE(NativeTool, JvmToolMixin):
 
   options_scope = 'graal'
-  default_version = '1.0.0-rc10'
+  default_version = '1.0.0-rc12'
   archive_type = 'tgz'
 
   def get_external_url_generator(self):
@@ -113,6 +113,17 @@ class GraalCE(NativeTool, JvmToolMixin):
       '--verbose',
       '--enable-all-security-services',
       '--allow-incomplete-classpath',
+      # This is suggested when you see an error.
+      '-H:+ReportExceptionStackTraces',
+      # Using a single thread during native image generation makes the stacktraces actually match
+      # the errors.
+      '-H:NumberOfThreads=1',
+      '--no-server',
+      '--tool:truffle',
+      '-R:+PrintGC',
+      '-R:+PrintGCTimeStamps',
+      '-R:+VerboseGC',
+      '-R:+PrintGCTimes',
       # TODO: make this -O9!
       '-O0',
     ] + [
@@ -124,11 +135,12 @@ class GraalCE(NativeTool, JvmToolMixin):
       argv.append('--report-unsupported-elements-at-runtime')
 
     pprinted_argv = safe_shlex_join(argv)
+    logger.debug('graal native-image argv: {}'.format(pprinted_argv))
     with temporary_dir() as tmp_dir:
-      output_file_name = Platform.current.resolve_platform_specific({
-        'darwin': lambda: main_class,
+      output_file_name = Platform.create().resolve_for_enum_variant({
+        'darwin': main_class,
         # TODO: figure out why and how precisely the class name is mangled here!
-        'linux': lambda: main_class.lower(),
+        'linux': main_class.lower(),
       })
       image_output_path = os.path.join(tmp_dir, output_file_name)
 

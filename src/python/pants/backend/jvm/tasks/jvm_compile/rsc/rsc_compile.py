@@ -694,7 +694,8 @@ class RscCompile(ZincCompile):
   def _runtool_nonhermetic(self, parent_workunit, classpath, main, tool_name, args, distribution):
     result = self.runjava(classpath=classpath,
                           main=main,
-                          jvm_options=self.get_options().jvm_options,
+                          jvm_options=['-Xmx4g'],
+                          # jvm_options=self.get_options().jvm_options,
                           args=args,
                           workunit_name=tool_name,
                           workunit_labels=[WorkUnitLabel.TOOL],
