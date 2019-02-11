@@ -110,10 +110,10 @@ class ScalacCompile(JvmCompile):
 
   def select(self, target):
     # TODO: figure out scala_library()s with java_sources= (probably just call into JavacCompile?)!
-    return isinstance(target, JvmTarget) and target.has_sources('.scala')
+    return isinstance(target, JvmTarget)
 
   def select_source(self, source_file_path):
-    return source_file_path.endswith('.scala')
+    return source_file_path.endswith('.java') or source_file_path.endswith('.scala')
 
   @memoized_property
   def _scalac_cp_entries(self):

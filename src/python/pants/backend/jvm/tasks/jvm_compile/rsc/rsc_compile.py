@@ -425,9 +425,9 @@ class RscCompile(ScalacCompile):
         if self._classify_compile_target(tgt) is not None:
           yield self._scalac_key_for_target(tgt)
 
-    def make_zinc_job(target, input_product_key, output_products, dep_keys):
+    def make_scalac_job(target, input_product_key, output_products, dep_keys):
       return Job(
-        key=self._zinc_key_for_target(target),
+        key=self._scalac_key_for_target(target),
         fn=functools.partial(
           self._default_work_for_vts,
           ivts,
@@ -456,7 +456,7 @@ class RscCompile(ScalacCompile):
     workflow.resolve_for_enum_variant({
       # NB: zinc-only zinc jobs run zinc and depend on zinc compile outputs.
       'zinc-only': lambda: scalac_jobs.append(
-        make_zinc_job(
+        make_scalac_job(
           compile_target,
           input_product_key='runtime_classpath',
           output_products=[
@@ -465,7 +465,7 @@ class RscCompile(ScalacCompile):
           dep_keys=only_zinc_invalid_dep_keys(invalid_dependencies))),
       'rsc-then-zinc': lambda: scalac_jobs.append(
         # NB: rsc-then-zinc jobs run zinc and depend on both rsc and zinc compile outputs.
-        make_zinc_job(
+        make_scalac_job(
           compile_target,
           input_product_key='rsc_classpath',
           output_products=[
@@ -490,14 +490,12 @@ class RscCompile(ScalacCompile):
     # rsc/
     #   - outline/ -- semanticdbs for the current target as created by rsc
     #   - m.jar    -- reified scala signature jar
-    # zinc/
+    # scalac/
     #   - classes/   -- class files
-    #   - z.analysis -- zinc analysis for the target
     #   - z.jar      -- final jar for the target
-    #   - zinc_args  -- file containing the used zinc args
     sources = self._compute_sources_for_target(target)
     rsc_dir = os.path.join(target_workdir, "rsc")
-    zinc_dir = os.path.join(target_workdir, "zinc")
+    scalac_dir = os.path.join(target_workdir, "scalac")
     return [
       RscCompileContext(
         target=target,
@@ -512,9 +510,9 @@ class RscCompile(ScalacCompile):
       CompileContext(
         target=target,
         analysis_file=None,
-        classes_dir=ClasspathEntry(os.path.join(zinc_dir, 'classes'), None),
-        jar_file=ClasspathEntry(os.path.join(zinc_dir, 'z.jar'), None),
-        log_dir=os.path.join(zinc_dir, 'logs'),
+        classes_dir=ClasspathEntry(os.path.join(scalac_dir, 'classes'), None),
+        jar_file=ClasspathEntry(os.path.join(scalac_dir, 'z.jar'), None),
+        log_dir=os.path.join(scalac_dir, 'logs'),
         zinc_args_file=None,
         sources=sources,
       )
