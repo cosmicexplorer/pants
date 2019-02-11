@@ -3,13 +3,18 @@
 
 This is done as an experiment in compiling scala using the GraalVM's ~native-image~ /(link!)/ tool, executing through the SubstrateVM.
 
-* TODO [0/2]
-- [ ] add reflections and substitutions per-tool
-    - this should be configurable with an option, as it will depend on the tool used
-        - different than a scalac plugin, but *maybe similar*
-    - see [[file:///home/cosmicexplorer/tools/graalvm-demos/scala-days-2018/scalac-native/scalac-image.sh][scalac-image.sh]]
-- [ ] let the task hook into the ~GraalExecutor~ to add things like the bootclasspath
-    - see [[file:///home/cosmicexplorer/tools/pants/scalac-native][scalac-native]]
+* TODO [3/3]
+- [X] add reflections and substitutions per-tool
+  - this should be configurable with an option, as it will depend on the tool used
+    - different than a scalac plugin, but *maybe similar*
+  - see [[file:///home/cosmicexplorer/tools/graalvm-demos/scala-days-2018/scalac-native/scalac-image.sh][scalac-image.sh]]
+- [X] let the task hook into the ~GraalExecutor~ to add things like the bootclasspath
+  - see [[file:///home/cosmicexplorer/tools/pants/scalac-native][scalac-native]]
+  - done -- see ~GraalNativeImageConfiguration~
+    - *this spuriously fails at linking sometimes -- don't worry about it right now!*
+- [X] bootstrap a jvm target from sources to slide into substitutions and reflection
+  - use ~mutable=True~ first to iterate!
 
-** Benchmark TODO [0/1]
+** Benchmark TODO [0/2]
+- [ ] make ~RscCompile~ use ~ScalacCompile~ for compiling scala!!!
 - [ ] use ~JavacCompile~ to compile ~java_sources~!

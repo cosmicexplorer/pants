@@ -9,7 +9,6 @@ import os
 from pants.backend.jvm.subsystems.graal import GraalCE
 from pants.backend.jvm.tasks.jvm_tool_task_mixin import JvmToolTaskMixin
 from pants.base.exceptions import TaskError
-from pants.base.hash_utils import stable_json_sha1
 from pants.base.workunit import WorkUnitLabel
 from pants.java import util
 from pants.java.executor import GraalExecutor, SubprocessExecutor
@@ -89,7 +88,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
   def execution_strategy(self):
     return self.execution_strategy_enum.value
 
-  def create_java_executor(self, dist=None, input_fingerprint=None):
+  def create_java_executor(self, dist=None, native_image_config=None):
     """Create java executor that uses this task's ng daemon, if allowed.
 
     Call only in execute() or later. TODO: Enforce this.
@@ -102,7 +101,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
                                             dist,
                                             connect_timeout=self.get_options().nailgun_timeout_seconds,
                                             connect_attempts=self.get_options().nailgun_connect_attempts),
-      self.GRAAL: lambda: GraalExecutor(dist, self._graal_ce, input_fingerprint=input_fingerprint),
+      self.GRAAL: lambda: GraalExecutor(dist, self._graal_ce, native_image_config=native_image_config),
       self.SUBPROCESS: lambda: SubprocessExecutor(dist),
       self.HERMETIC: lambda: SubprocessExecutor(dist),
       self.HERMETIC_WITH_NAILGUN: lambda: SubprocessExecutor(dist),
@@ -113,7 +112,8 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
   }
 
   def runjava(self, classpath, main, jvm_options=None, args=None, workunit_name=None,
-              workunit_labels=None, workunit_log_config=None, dist=None, async=False):
+              workunit_labels=None, workunit_log_config=None, dist=None, async=False,
+              native_image_config=None):
     """Runs the java main using the given classpath and args.
 
     If --execution-strategy=subprocess is specified then the java main is run in a freshly spawned
@@ -122,9 +122,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
 
     :API: public
     """
-    # TODO: in the v2 engine we don't need to do manual caching like this!
-    input_fingerprint = stable_json_sha1(sorted(classpath))
-    executor = self.create_java_executor(dist=dist, input_fingerprint=input_fingerprint)
+    executor = self.create_java_executor(dist=dist, native_image_config=native_image_config)
 
     for executor_cls, labels in self._extra_workunit_labels.items():
       if isinstance(executor, executor_cls):

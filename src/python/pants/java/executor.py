@@ -265,14 +265,14 @@ class GraalExecutor(SubprocessExecutor):
   :API: public
   """
 
-  def __init__(self, distribution, graal_ce, input_fingerprint):
+  def __init__(self, distribution, graal_ce, native_image_config):
     super(GraalExecutor, self).__init__(distribution=distribution)
     self._graal_ce = graal_ce
-    self._input_fingerprint = input_fingerprint
+    self._native_image_config = native_image_config
 
   def _runner(self, classpath, main, jvm_options, args, cwd=None):
     native_image_path = self._graal_ce.produce_native_image(
-      classpath, main, self._input_fingerprint, jvm_options=jvm_options)
+      classpath, main, self._native_image_config, jvm_options=jvm_options)
     full_command = [native_image_path] + args
 
     class GraalNativeImageRunner(self.Runner):

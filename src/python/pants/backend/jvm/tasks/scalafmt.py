@@ -72,6 +72,10 @@ class ScalaFmt(RewriteBase):
   # _calculate_sources() method is probably the one to change here.
   def _execute_for(self, targets):
     """If parallelism is enabled, spawn a process per target and wait on them all."""
+    raise NotImplementedError("""\
+need to provide an input_fingerprint to runjava by getting
+invalidation hash of all targets piped into invoke_tool() and invoke_tool_async()!""")
+
     num_files_per_proc = self.get_options().files_per_process
     if num_files_per_proc == 0:
       return super(ScalaFmt, self)._execute_for(targets)
