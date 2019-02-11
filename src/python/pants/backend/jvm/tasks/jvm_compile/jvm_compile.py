@@ -300,7 +300,9 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
     self._targets_to_compile_settings = None
 
     # JVM options for running the compiler.
-    self._jvm_options = self.get_options().jvm_options
+    hacked_graal_native_image_max_heap = ['-Xmx3g']
+    # self._jvm_options = self.get_options().jvm_options
+    self._jvm_options = hacked_graal_native_image_max_heap
 
     self._args = list(self.get_options().args)
     if self.get_options().warnings:

@@ -11,14 +11,14 @@ import shutil
 from future.utils import text_type
 
 from pants.backend.jvm.subsystems.jvm_tool_mixin import JvmToolMixin
-from pants.backend.native.config.environment import Platform
 from pants.base.build_environment import get_pants_cachedir
-from pants.base.hash_utils import stable_json_hash
+from pants.base.hash_utils import stable_json_sha1
 from pants.binaries.binary_tool import NativeTool
 from pants.binaries.binary_util import BinaryToolUrlGenerator
 from pants.util.contextutil import temporary_dir
 from pants.util.dirutil import safe_mkdir_for
 from pants.util.memo import memoized_method, memoized_property
+from pants.util.objects import datatype
 from pants.util.process_handler import subprocess
 from pants.util.strutil import safe_shlex_join
 
@@ -81,6 +81,10 @@ class GraalCE(NativeTool, JvmToolMixin):
     return os.path.join(self.select(), 'bin')
 
   @memoized_property
+  def runtime_jar(self):
+    return os.path.join(self.select(), 'jre/lib/rt.jar')
+
+  @memoized_property
   def _native_image_exe(self):
     return os.path.join(self.bin_dir, 'native-image')
 
@@ -88,25 +92,33 @@ class GraalCE(NativeTool, JvmToolMixin):
   def _cache_dir(self):
     return os.path.join(get_pants_cachedir(), 'graal-images')
 
+  class GraalNativeImageConfiguration(datatype([
+      ('extra_cp', tuple),
+      ('substitution_resources_paths', tuple),
+      ('reflection_resources_paths', tuple),
+      ('input_fingerprint', text_type),
+  ])): pass
+
   class NativeImageCreationError(Exception): pass
 
-  def produce_native_image(self, tool_classpath, main_class, input_fingerprint, jvm_options=None):
-    if not isinstance(input_fingerprint, text_type):
-      raise self.NativeImageCreationError(
-        "Input fingerprint provided must be an instance of {}: was {!r} (type {}). "
-        "JVM tools using the 'graal' execution_strategy must provide an 'input_fingerprint' "
-        "argument to self.runjava()."
-        .format(text_type.__name__, input_fingerprint, type(input_fingerprint).__name__))
-    jvm_options = jvm_options or []
+  def produce_native_image(self, tool_classpath, main_class, native_image_config, jvm_options):
+    if not native_image_config:
+      raise self.NativeImageCreationError("""\
+graal native-image config was not provided!
+JVM tools using the 'graal' execution_strategy must provide a 'native_image_config'
+argument to self.runjava().""")
 
-    input_hash = stable_json_hash([input_fingerprint, self._report_unsupported_elements] + jvm_options)
+    input_hash = stable_json_sha1([
+      native_image_config.input_fingerprint,
+      self._report_unsupported_elements,
+    ] + jvm_options)
     output_image_file_name = '{}-{}'.format(main_class, input_hash)
 
     fingerprinted_native_image_path = os.path.join(self._cache_dir, output_image_file_name)
     if os.path.isfile(fingerprinted_native_image_path):
       return fingerprinted_native_image_path
 
-    cp_formatted = ':'.join(tool_classpath)
+    cp_formatted = ':'.join(tool_classpath + list(native_image_config.extra_cp))
     argv = [
       self._native_image_exe,
       '-classpath', cp_formatted,
@@ -117,7 +129,7 @@ class GraalCE(NativeTool, JvmToolMixin):
       '-H:+ReportExceptionStackTraces',
       # Using a single thread during native image generation makes the stacktraces actually match
       # the errors.
-      '-H:NumberOfThreads=1',
+      '-H:NumberOfThreads=8',
       '--no-server',
       '--tool:truffle',
       '-R:+PrintGC',
@@ -129,19 +141,24 @@ class GraalCE(NativeTool, JvmToolMixin):
     ] + [
       '-J{}'.format(opt) for opt in jvm_options
     ] + [
-      main_class,
-    ]
-    if self._report_unsupported_elements:
-      argv.append('--report-unsupported-elements-at-runtime')
+      '-H:Class={}'.format(main_class),
+    ] + (
+      ['--report-unsupported-elements-at-runtime'] if self._report_unsupported_elements else []
+    ) + [
+      '-H:Name={}'.format(main_class),
+    ] + ([
+      '-H:SubstitutionResources={}'
+      .format(','.join(native_image_config.substitution_resources_paths))
+    ] if native_image_config.substitution_resources_paths else []) + ([
+      '-H:ReflectionConfigurationResources={}'
+      .format(','.join(native_image_config.reflection_resources_paths))
+    ] if native_image_config.reflection_resources_paths else [])
 
     pprinted_argv = safe_shlex_join(argv)
     logger.debug('graal native-image argv: {}'.format(pprinted_argv))
     with temporary_dir() as tmp_dir:
-      output_file_name = Platform.create().resolve_for_enum_variant({
-        'darwin': main_class,
-        # TODO: figure out why and how precisely the class name is mangled here!
-        'linux': main_class.lower(),
-      })
+      # TODO: we can set the output file name to whatever we want with `-H:Name={}` above!
+      output_file_name = main_class
       image_output_path = os.path.join(tmp_dir, output_file_name)
 
       logger.info('Building graal native image for {}...'.format(main_class))

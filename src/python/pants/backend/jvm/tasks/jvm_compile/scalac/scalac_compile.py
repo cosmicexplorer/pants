@@ -9,21 +9,29 @@ import logging
 import os
 import textwrap
 from contextlib import closing
+from hashlib import sha1
 from xml.etree import ElementTree
 
+from future.utils import text_type
+
+from pants.backend.jvm.subsystems.graal import GraalCE
 from pants.backend.jvm.subsystems.jvm_platform import JvmPlatform
 from pants.backend.jvm.subsystems.scala_platform import ScalaPlatform
 from pants.backend.jvm.targets.jvm_target import JvmTarget
 from pants.backend.jvm.targets.scalac_plugin import ScalacPlugin
+from pants.backend.jvm.tasks.classpath_entry import ClasspathEntry
 from pants.backend.jvm.tasks.classpath_util import ClasspathUtil
 from pants.backend.jvm.tasks.jvm_compile.jvm_compile import JvmCompile
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
+from pants.engine.fs import PathGlobs, PathGlobsAndRoot
 from pants.java.distribution.distribution import DistributionLocator
+from pants.java.jar.jar_dependency import JarDependency
+from pants.util.collections import assert_single_element
 from pants.util.contextutil import open_zip
 from pants.util.dirutil import fast_relpath, safe_open
-from pants.util.memo import memoized_classmethod, memoized_property
+from pants.util.memo import memoized_classmethod, memoized_method, memoized_property
 from pants.util.meta import classproperty
 
 
@@ -73,6 +81,10 @@ class ScalacCompile(JvmCompile):
   def register_options(cls, register):
     super(ScalacCompile, cls).register_options(register)
 
+    cls.register_jvm_tool(register, 'native-image-stubs', classpath=[
+      JarDependency(org='org.pantsbuild', name='native-image-stubs', rev='???'),
+    ])
+
   # TODO: move these to the top of the file!
   @classmethod
   def subsystem_dependencies(cls):
@@ -118,7 +130,6 @@ class ScalacCompile(JvmCompile):
 
     output_dir = self.execution_strategy_enum.resolve_for_enum_variant({
       self.HERMETIC: '.',
-      self.HERMETIC_WITH_NAILGUN: '.',
       self.SUBPROCESS: ctx.classes_dir.path,
       self.NAILGUN: ctx.classes_dir.path,
       # TODO: GRAAL_HERMETIC strategy for remoting!
@@ -169,37 +180,81 @@ class ScalacCompile(JvmCompile):
       self.HERMETIC: lambda: self._compile_hermetic(
         jvm_options, ctx, classes_dir, scalac_merged_args, dependency_classpath,
         self._scalac_cp_entries, with_nailgun=False),
-      self.HERMETIC_WITH_NAILGUN: lambda: self._compile_hermetic(
-        jvm_options, ctx, classes_dir, scalac_merged_args, dependency_classpath,
-        self._scalac_cp_entries, with_nailgun=True),
       self.SUBPROCESS: lambda: self._compile_nonhermetic(jvm_options, scalac_merged_args),
       self.NAILGUN: lambda: self._compile_nonhermetic(jvm_options, scalac_merged_args),
-      # TODO: this is currently running (not finished yet) using the args:
-      # pushd ~/tools/pants/ && /home/cosmicexplorer/.cache/pants/bin/graal/linux/x86_64/1.0.0-rc12/graal/graalvm-ce-1.0.0-rc12/bin/native-image -classpath /home/cosmicexplorer/tools/pants/.pants.d/ng/ScalacCompile_compile_scalac/tmpzPkbqR.jar:/home/cosmicexplorer/tools/graalvm-demos/scala-days-2018/scalac-native/scalac-substitutions/target/scala-2.12/scalac-substitutions_2.12-0.1.0-SNAPSHOT.jar --verbose --enable-all-security-services --allow-incomplete-classpath -H:+ReportExceptionStackTraces -H:NumberOfThreads=8 --no-server --tool:truffle -R:+PrintGC -R:+PrintGCTimeStamps -R:+VerboseGC -R:+PrintGCTimes -O0 -J-Xmx3g -H:Class=scala.tools.nsc.Main --report-unsupported-elements-at-runtime -H:SubstitutionResources=substitutions.json,substitutions-2.12.json -H:ReflectionConfigurationFiles=/home/cosmicexplorer/tools/graalvm-demos/scala-days-2018/scalac-native/scalac-substitutions/reflection-config.json -H:Name=scalac
-      # ...and using the reflection and substitution args worked in the demo project, and when NOT
-      # used (without the substitutions jar and reflect/sub args), it failed at exactly the class
-      # which is noted for reflection in the reflection-config.json, so this *should* work!
-      # TODO: ^so figure out how to register reflections and substitutions for a specific jvm tool!
-      # ^(this should't be be too hard!)
-      self.GRAAL: lambda: self._compile_nonhermetic(jvm_options, scalac_merged_args),
+      self.GRAAL: lambda: self._compile_graal_nonhermetic(jvm_options, scalac_merged_args),
     })()
 
   class ScalacCompileError(TaskError):
     """An exception type specifically to signal a failed scalac execution."""
 
-  def _compile_nonhermetic(self, jvm_options, scalac_args):
+  @memoized_property
+  def _scalac_classpath_fingerprint(self):
+    hasher = sha1()
+    # TODO: there is definitely a better way to get the hash of a set of digests than this!
+    cp_entry_digests= sorted(repr(cp.directory_digest) for cp in self._scalac_cp_entries)
+    for digest_hash in cp_entry_digests:
+      hasher.update(digest_hash.encode('utf-8'))
+    return text_type(hasher.hexdigest())
+
+  @memoized_property
+  def _scalac_bootstrap_classpath_paths(self):
     # Entries for the compiler and library: see
     # https://www.scala-lang.org/files/archive/nightly/docs/manual/html/scalac.html.
     # Note that we do not (yet) use the -bootstrap-classpath option for this!
-    bootstrap_classpath = [cp.path for cp in self._scalac_cp_entries]
-    exit_code = self.runjava(classpath=bootstrap_classpath,
+    return [cp.path for cp in self._scalac_cp_entries]
+
+  # TODO: this allows us to remote the graal compilation -- do we want to do that though? (I think
+  # so!?
+  @memoized_property
+  def _substitutions_cp_entries(self):
+    substitutions_jar = self.tool_jar('native-image-stubs')
+    jar_rel = fast_relpath(substitutions_jar, get_buildroot())
+    return self._memoized_classpath_entries_with_digests(tuple([jar_rel]), self.context._scheduler)
+
+  @memoized_method
+  def _memoized_classpath_entries_with_digests(self, classpath_paths, scheduler):
+    snapshots = scheduler.capture_snapshots(tuple(
+      PathGlobsAndRoot(PathGlobs([path]), get_buildroot())
+      for path in classpath_paths
+    ))
+    return [ClasspathEntry(path, snapshot) for path, snapshot in list(zip(classpath_paths, snapshots))]
+
+  def _compile_graal_nonhermetic(self, jvm_options, scalac_args):
+    bootstrap_classpath_with_graal_runtime = self._scalac_bootstrap_classpath_paths + [
+      self._graal_ce.runtime_jar,
+    ]
+    args_with_graal_bootstrap_cp = [
+      '-Dscala.boot.class.path={}'.format(':'.join(bootstrap_classpath_with_graal_runtime)),
+      '-Dscala.usejavacp=true',
+    ] + scalac_args
+    substitutions_jar_path = assert_single_element(self._substitutions_cp_entries).path
+    # TODO: this absoluting needs to be removed to be made remotable!
+    absolute_substitutions_jar_path = os.path.join(get_buildroot(), substitutions_jar_path)
+    return self._compile_nonhermetic(
+      jvm_options, args_with_graal_bootstrap_cp,
+      native_image_config=GraalCE.GraalNativeImageConfiguration(
+        extra_cp=tuple([absolute_substitutions_jar_path]),
+        substitution_resources_paths=tuple([
+          'org/pantsbuild/zinc/native-image-stubs/substitutions.json',
+          'org/pantsbuild/zinc/native-image-stubs/substitutions-2.12.json',
+        ]),
+        reflection_resources_paths=tuple([
+          'org/pantsbuild/zinc/native-image-stubs/reflection-config.json',
+        ]),
+        input_fingerprint=self._scalac_classpath_fingerprint,
+      ))
+
+  def _compile_nonhermetic(self, jvm_options, scalac_args, **kwargs):
+    exit_code = self.runjava(classpath=self._scalac_bootstrap_classpath_paths,
                              main=self._scala.compiler_main(),
                              jvm_options=jvm_options,
                              args=scalac_args,
                              workunit_name=self.name(),
                              workunit_labels=[WorkUnitLabel.COMPILER],
                              # NB: Set with self.set_distribution() in __init__!
-                             dist=self._dist)
+                             dist=self._dist,
+                             **kwargs)
     if exit_code != 0:
       raise self.ScalacCompileError('Scalac compile failed.', exit_code=exit_code)
 

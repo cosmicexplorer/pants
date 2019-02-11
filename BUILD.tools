@@ -49,3 +49,13 @@ jar_library(
     jar(org='org.apache.avro', name='avro-ipc', rev=avro_rev),
   ],
 )
+
+jar_library(
+  name = 'native-image-stubs',
+  jars = [
+    jar(org='org.pantsbuild', name='native-image-stubs',
+        # TODO: from src/scala/org/pantsbuild/zinc/native-image-stubs:bin!
+        url='file:///home/cosmicexplorer/tools/pants/dist/native-image-stubs.jar',
+        mutable=True),
+  ]
+)
