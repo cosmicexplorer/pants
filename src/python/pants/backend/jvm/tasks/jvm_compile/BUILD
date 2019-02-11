@@ -9,6 +9,7 @@ target(
     'src/python/pants/backend/jvm/tasks/jvm_compile/javac',
     'src/python/pants/backend/jvm/tasks/jvm_compile/rsc',
     'src/python/pants/backend/jvm/tasks/jvm_compile/zinc',
+    'src/python/pants/backend/jvm/tasks/jvm_compile/scalac',
   ],
 )
 

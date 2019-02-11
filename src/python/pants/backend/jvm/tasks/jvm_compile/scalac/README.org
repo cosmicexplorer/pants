@@ -1,0 +1,15 @@
+#+TITLE: scalac compilation with graal native-image
+#+STARTUP: showall
+
+This is done as an experiment in compiling scala using the GraalVM's ~native-image~ /(link!)/ tool, executing through the SubstrateVM.
+
+* TODO [0/2]
+- [ ] add reflections and substitutions per-tool
+    - this should be configurable with an option, as it will depend on the tool used
+        - different than a scalac plugin, but *maybe similar*
+    - see [[file:///home/cosmicexplorer/tools/graalvm-demos/scala-days-2018/scalac-native/scalac-image.sh][scalac-image.sh]]
+- [ ] let the task hook into the ~GraalExecutor~ to add things like the bootclasspath
+    - see [[file:///home/cosmicexplorer/tools/pants/scalac-native][scalac-native]]
+
+** Benchmark TODO [0/1]
+- [ ] use ~JavacCompile~ to compile ~java_sources~!
