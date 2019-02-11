@@ -160,7 +160,7 @@ class RscCompile(ScalacCompile):
     register('--include-rsc-compatible-target-regexps', type=list, member_type=str,
              metavar='<regexp>', default=['.*'],
              help='If a target matches this regexp, compile it with rsc, unless the target also '
-                  'matches an exlcude regexp.')
+                  'matches an exclude regexp.')
     register('--exclude-rsc-compatible-target-regexps', type=list, member_type=str,
              metavar='<regexp>',
              help="If a target isn't tagged as rsc-compatible, but matches any of these regexps, "
@@ -373,6 +373,14 @@ class RscCompile(ScalacCompile):
       'rsc-scala': lambda: self._rsc_key_for_target(compile_target),
     })()
 
+  def _scalac_or_javac_only_key_for_target(self, compile_target):
+    return self._classify_compile_target(compile_target).resolve_for_enum_variant({
+      'javac-java': lambda: self._javac_key_for_target(compile_target),
+      'scalac-scala': lambda: self._scalac_key_for_target(compile_target),
+      'rsc-java': lambda: self._javac_key_for_target(compile_target),
+      'rsc-scala': lambda: self._scalac_key_for_target(compile_target),
+    })
+
   def _rsc_key_for_target(self, compile_target):
     return 'rsc({})'.format(compile_target.address.spec)
 
@@ -540,12 +548,12 @@ class RscCompile(ScalacCompile):
     def only_scalac_invalid_dep_keys(invalid_deps):
       for tgt in invalid_deps:
         if self._classify_compile_target(tgt) is not None:
-          yield self._scalac_key_for_target(tgt)
+          yield self._scalac_or_javac_only_key_for_target(tgt)
 
     # NB: scalac/javac jobs for rsc-compatible targets never depend on their own corresponding rsc
     # jobs, just the rsc jobs of their dependencies!
-    def make_scalac_job(target, input_product_key, dep_keys):
-      return Job(key=self._scalac_key_for_target(target),
+    def make_scalac_or_javac_job(target, input_product_key, dep_keys):
+      return Job(key=self._scalac_or_javac_only_key_for_target(target),
                  fn=functools.partial(
                    self._default_work_for_vts,
                    ivts,
@@ -572,18 +580,18 @@ class RscCompile(ScalacCompile):
     if target_classification:
       target_classification.resolve_for_enum_variant({
         'javac-java': lambda: scalac_jobs.append(
-          make_scalac_job(compile_target, 'runtime_classpath',
+          make_scalac_or_javac_job(compile_target, 'runtime_classpath',
                           only_scalac_invalid_dep_keys(invalid_dependencies))),
         # scalac-scala targets will depend on the rsc jobs of rsc-scala targets and zinc jobs of
         # scalac-scala dependencies.
         'scalac-scala': lambda: scalac_jobs.append(
-          make_scalac_job(compile_target, 'nonjava_classpath_from_rsc',
+          make_scalac_or_javac_job(compile_target, 'nonjava_classpath_from_rsc',
                         all_mixed_scalac_javac_rsc_invalid_dep_keys(invalid_dependencies))),
         'rsc-java': lambda: scalac_jobs.append(
-          make_scalac_job(compile_target, 'runtime_classpath',
+          make_scalac_or_javac_job(compile_target, 'runtime_classpath',
                           only_scalac_invalid_dep_keys(invalid_dependencies))),
         'rsc-scala': lambda: scalac_jobs.append(
-          make_scalac_job(compile_target, 'nonjava_classpath_from_rsc',
+          make_scalac_or_javac_job(compile_target, 'nonjava_classpath_from_rsc',
                           all_mixed_scalac_javac_rsc_invalid_dep_keys(invalid_dependencies))),
       })()
 
