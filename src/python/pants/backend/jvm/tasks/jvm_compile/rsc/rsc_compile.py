@@ -14,7 +14,6 @@ from twitter.common.collections import OrderedSet
 
 from pants.backend.jvm.subsystems.dependency_context import DependencyContext  # noqa
 from pants.backend.jvm.subsystems.graal import GraalCE
-from pants.backend.jvm.subsystems.jvm_platform import JvmPlatform
 from pants.backend.jvm.subsystems.shader import Shader
 from pants.backend.jvm.targets.jvm_target import JvmTarget
 from pants.backend.jvm.tasks.classpath_entry import ClasspathEntry
@@ -157,6 +156,8 @@ class RscCompile(ScalacCompile):
 
     register('--rsc-compatible-target-tag', default='rsc-compatible', metavar='<tag>',
              help='Always compile any target with rsc marked with this tag.')
+    register('--rsc-incompatible-target-tag', default='not-rsc-compatible', metavar='<tag>',
+             help='Never compile any target with rsc marked with this tag.')
     register('--include-rsc-compatible-target-regexps', type=list, member_type=str,
              metavar='<regexp>', default=['.*'],
              help='If a target matches this regexp, compile it with rsc, unless the target also '
@@ -251,6 +252,8 @@ class RscCompile(ScalacCompile):
   def _identify_rsc_compatible_target(self, target):
     if self.get_options().rsc_compatible_target_tag in target.tags:
       return True
+    if self.get_options().rsc_incompatible_target_tag in target.tags:
+      return False
     spec = target.address.spec
     for no_thanks_do_not_use_rsc_regexp in self._exclude_regexps:
       if no_thanks_do_not_use_rsc_regexp.match(target.address.spec):
@@ -379,7 +382,7 @@ class RscCompile(ScalacCompile):
       'scalac-scala': lambda: self._scalac_key_for_target(compile_target),
       'rsc-java': lambda: self._javac_key_for_target(compile_target),
       'rsc-scala': lambda: self._scalac_key_for_target(compile_target),
-    })
+    })()
 
   def _rsc_key_for_target(self, compile_target):
     return 'rsc({})'.format(compile_target.address.spec)
@@ -775,59 +778,6 @@ class RscCompile(ScalacCompile):
         self.NAILGUN: lambda: self._runtool_nonhermetic(
           wu, self._nailgunnable_combined_classpath, main, tool_name, args, distribution),
       })()
-
-  _JDK_LIB_NAMES = ['rt.jar', 'dt.jar', 'jce.jar', 'tools.jar']
-
-  @memoized_method
-  def _jdk_libs_paths_and_digest(self, hermetic_dist):
-    jdk_libs_rel, jdk_libs_globs = hermetic_dist.find_libs_path_globs(self._JDK_LIB_NAMES)
-    jdk_libs_digest = self.context._scheduler.capture_snapshots(
-      (jdk_libs_globs,))[0].directory_digest
-    return (jdk_libs_rel, jdk_libs_digest)
-
-  @memoized_method
-  def _jdk_libs_abs(self, nonhermetic_dist):
-    return nonhermetic_dist.find_libs(self._JDK_LIB_NAMES)
-
-  class _HermeticDistribution(object):
-    def __init__(self, home_path, distribution):
-      self._underlying = distribution
-      self._home = home_path
-
-    def find_libs(self, names):
-      underlying_libs = self._underlying.find_libs(names)
-      return [os.path.join(self.home, self._unroot_lib_path(l)) for l in underlying_libs]
-
-    def find_libs_path_globs(self, names):
-      libs_abs = self._underlying.find_libs(names)
-      libs_unrooted = [self._unroot_lib_path(l) for l in libs_abs]
-      path_globs = PathGlobsAndRoot(
-        PathGlobs(tuple(libs_unrooted)),
-        text_type(self._underlying.home))
-      return (libs_unrooted, path_globs)
-
-    @property
-    def java(self):
-      return os.path.join(self._home, 'bin', 'java')
-
-    def _unroot_lib_path(self, path):
-      return path[len(self._underlying.home)+1:]
-
-    def _rehome(self, l):
-      return os.path.join(self._home, self._unroot_lib_path(l))
-
-  @memoized_method
-  def _hermetic_jvm_distribution(self):
-    # TODO We may want to use different jvm distributions depending on what
-    # java version the target expects to be compiled against.
-    # See: https://github.com/pantsbuild/pants/issues/6416 for covering using
-    #      different jdks in remote builds.
-    local_distribution = JvmPlatform.preferred_jvm_distribution([], strict=True)
-    return self._HermeticDistribution('.jdk', local_distribution)
-
-  @memoized_method
-  def _nonhermetic_jvm_distribution(self):
-    return JvmPlatform.preferred_jvm_distribution([], strict=True)
 
   # TODO: I think this should use self._classify_compile_target()!
   def _on_invalid_compile_dependency(self, dep, compile_target):

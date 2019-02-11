@@ -25,7 +25,8 @@ from pants.backend.jvm.tasks.jvm_compile.jvm_compile import JvmCompile
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
-from pants.engine.fs import PathGlobs, PathGlobsAndRoot
+from pants.engine.fs import DirectoryToMaterialize, PathGlobs, PathGlobsAndRoot
+from pants.engine.isolated_process import ExecuteProcessRequest, ProcessExecutionFailure
 from pants.java.distribution.distribution import DistributionLocator
 from pants.java.jar.jar_dependency import JarDependency
 from pants.util.collections import assert_single_element
@@ -169,9 +170,9 @@ class ScalacCompile(JvmCompile):
     )
 
     scalac_merged_args = [
-      '-classpath', ':'.join(user_cp_abs),
+      '-classpath', ':'.join(fast_relpath_collection(user_cp_abs)),
       '-d', output_dir,
-    ] + trailing_args + ctx.sources
+    ]  + trailing_args + ctx.sources
 
     jvm_options = self._jvm_options
 
@@ -188,9 +189,12 @@ class ScalacCompile(JvmCompile):
       self.HERMETIC_WITH_NAILGUN: lambda: self._compile_hermetic(
         jvm_options, ctx, classes_dir, scalac_merged_args, dependency_classpath,
         self._scalac_cp_entries, with_nailgun=True),
-      self.SUBPROCESS: lambda: self._compile_nonhermetic(jvm_options, scalac_merged_args),
-      self.NAILGUN: lambda: self._compile_nonhermetic(jvm_options, scalac_merged_args),
-      self.GRAAL: lambda: self._compile_graal_nonhermetic(jvm_options, scalac_merged_args),
+      self.SUBPROCESS: lambda: self._compile_nonhermetic(
+        jvm_options, scalac_merged_args),
+      self.NAILGUN: lambda: self._compile_nonhermetic(
+        jvm_options, scalac_merged_args),
+      self.GRAAL: lambda: self._compile_graal_nonhermetic(
+        jvm_options, scalac_merged_args),
     })()
 
   class ScalacCompileError(TaskError):
@@ -273,9 +277,71 @@ class ScalacCompile(JvmCompile):
     if exit_code != 0:
       raise self.ScalacCompileError('Scalac compile failed.', exit_code=exit_code)
 
-  def _compile_hermetic(self, jvm_options, ctx, classes_dir, zinc_args, dependency_classpath,
+  def _compile_hermetic(self, jvm_options, ctx, classes_dir, args, dependency_classpath,
                         scalac_classpath_entries, with_nailgun=False):
-    raise NotImplementedError('TIME TO DO HERMETIC SCALAC!!!')
+    # TODO: fix this -- ClasspathEntry()s should be constructed with a digest, not a snapshot, or
+    # the field name should be changed!
+    digests = [
+      cp.directory_digest.directory_digest for cp in self._scalac_cp_entries
+    ] + [
+      ctx.target.sources_snapshot(self.context._scheduler).directory_digest,
+    ]
+    for dep_entry in dependency_classpath:
+      if dep_entry.directory_digest:
+        digests.append(dep_entry.directory_digest)
+      else:
+        logger.warning(
+          "ClasspathEntry {} didn't have a Digest, so won't be present for hermetic execution"
+          .format(dep_entry))
+
+    scalac_classpath_rel = fast_relpath_collection(self.scalac_bootstrap_classpath_paths())
+
+    hermetic_dist = self._hermetic_jvm_distribution()
+    jdk_libs_rel, jdk_libs_digest = self._jdk_libs_paths_and_digest(hermetic_dist)
+    classpath_rel_jdk = scalac_classpath_rel + jdk_libs_rel
+
+    if with_nailgun:
+      raise NotImplementedError('nailgunned hermetic execution is not available for scalac!')
+    else:
+      argv = ['.jdk/bin/java'] + jvm_options + [
+        '-cp', ':'.join(classpath_rel_jdk),
+        self._scala.compiler_main(),
+      ] + args
+      self.context.log.debug('digests: {}'.format(digests))
+      merged_input_digest = self.context._scheduler.merge_directories(tuple(
+        digests + [jdk_libs_digest]
+      ))
+
+    req = ExecuteProcessRequest(
+      argv=tuple(argv),
+      input_files=merged_input_digest,
+      output_directories=(classes_dir,),
+      description="scalac compile for {}".format(ctx.target.address.spec),
+      jdk_home=text_type(hermetic_dist._underlying._home),
+    )
+
+    retry_iteration = 0
+
+    # TODO: any retries will cause workunits to fail!
+    while True:
+      try:
+        res = self.context.execute_process_synchronously_or_raise(req, self.name(), [WorkUnitLabel.COMPILER])
+        break
+      except ProcessExecutionFailure as e:
+        if e.exit_code == 227:
+          env = {'_retry_iteration': '{}'.format(retry_iteration)}
+          retry_iteration += 1
+          req = req.copy(env=env)
+          continue
+        raise
+
+    # TODO: Materialize as a batch in do_compile or somewhere
+    self.context._scheduler.materialize_directories((
+      DirectoryToMaterialize(get_buildroot(), res.output_directory_digest),
+    ))
+
+    # TODO: This should probably return a ClasspathEntry rather than a Digest
+    return res.output_directory_digest
 
   # NB: lots of methods cribbed from zinc_compile.py -- delete if they error!
   @staticmethod
@@ -397,3 +463,52 @@ class ScalacCompile(JvmCompile):
         except KeyError:
           pass
     return None
+
+  _JDK_LIB_NAMES = ['rt.jar', 'dt.jar', 'jce.jar', 'tools.jar']
+
+  @memoized_method
+  def _jdk_libs_paths_and_digest(self, hermetic_dist):
+    jdk_libs_rel, jdk_libs_globs = hermetic_dist.find_libs_path_globs(self._JDK_LIB_NAMES)
+    jdk_libs_digest = self.context._scheduler.capture_snapshots(
+      (jdk_libs_globs,))[0].directory_digest
+    return (jdk_libs_rel, jdk_libs_digest)
+
+  @memoized_method
+  def _jdk_libs_abs(self, nonhermetic_dist):
+    return nonhermetic_dist.find_libs(self._JDK_LIB_NAMES)
+
+  class _HermeticDistribution(object):
+    def __init__(self, home_path, distribution):
+      self._underlying = distribution
+      self._home = home_path
+
+    def find_libs_path_globs(self, names):
+      libs_abs = self._underlying.find_libs(names)
+      libs_unrooted = [self._unroot_lib_path(l) for l in libs_abs]
+      path_globs = PathGlobsAndRoot(
+        PathGlobs(tuple(libs_unrooted)),
+        text_type(self._underlying.home))
+      return (libs_unrooted, path_globs)
+
+    @property
+    def java(self):
+      return os.path.join(self._home, 'bin', 'java')
+
+    def _unroot_lib_path(self, path):
+      return path[len(self._underlying.home)+1:]
+
+    def _rehome(self, l):
+      return os.path.join(self._home, self._unroot_lib_path(l))
+
+  @memoized_method
+  def _hermetic_jvm_distribution(self):
+    # TODO We may want to use different jvm distributions depending on what
+    # java version the target expects to be compiled against.
+    # See: https://github.com/pantsbuild/pants/issues/6416 for covering using
+    #      different jdks in remote builds.
+    local_distribution = self._dist
+    return self._HermeticDistribution('.jdk', local_distribution)
+
+  @memoized_method
+  def _nonhermetic_jvm_distribution(self):
+    return JvmPlatform.preferred_jvm_distribution([], strict=True)

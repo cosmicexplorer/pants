@@ -37,13 +37,14 @@ class ExecuteProcessRequest(datatype([
   def __str__(self):
     scheduler_url = os.environ.get('SCHEDULER_URL')
     apiserver_url = os.environ.get('APISERVER_URL')
-    cache_key_gen_version = os.environ['PANTS_CACHE_KEY_GEN_VERSION']
+    cache_key_gen_version = os.environ.get('PANTS_CACHE_KEY_GEN_VERSION')
     cmdline = [
       '/var/lib/jenkins/pants-github/src/rust/engine/target/debug/process_executor',
       '--input-digest', self.input_files.fingerprint,
       '--input-digest-length', str(self.input_files.serialized_bytes_length),
-      '--cache-key-gen-version', cache_key_gen_version,
     ]
+    if cache_key_gen_version:
+      cmdline.extend(['--cache-key-gen-version', cache_key_gen_version])
     if self.env:
       cmdline.extend(['--env'] + [
         '{}={}'.format(self.env[st], self.env[st + 1])

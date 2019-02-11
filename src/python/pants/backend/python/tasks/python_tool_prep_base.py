@@ -13,6 +13,7 @@ from pex.pex_builder import PEXBuilder
 from pants.backend.python.interpreter_cache import PythonInterpreterCache
 from pants.backend.python.python_requirement import PythonRequirement
 from pants.backend.python.subsystems.pex_build_util import PexBuilderWrapper
+from pants.base.build_environment import get_pants_cachedir
 from pants.base.workunit import WorkUnitLabel
 from pants.task.task import Task
 from pants.util.dirutil import safe_concurrent_creation
@@ -100,7 +101,9 @@ class PythonToolPrepBase(Task):
   def execute(self):
     tool_subsystem = self.tool_subsystem_cls.scoped_instance(self)
     pex_name = tool_subsystem.options_scope
-    pex_path = os.path.join(self.workdir, self.fingerprint, '{}.pex'.format(pex_name))
+    pex_path = os.path.join(get_pants_cachedir(), 'python-tools',
+                            self.fingerprint,
+                            '{}.pex'.format(pex_name))
 
     interpreter_cache = PythonInterpreterCache.global_instance()
     interpreter = interpreter_cache.select_interpreter_for_targets([])
