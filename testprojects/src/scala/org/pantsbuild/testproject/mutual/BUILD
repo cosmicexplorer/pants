@@ -1,4 +1,6 @@
-scala_library()
+scala_library(
+    tags = {'rsc-compatible'},
+)
 
 jvm_binary(
     name = "bin",

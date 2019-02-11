@@ -872,7 +872,8 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
       is_incremental = self.should_compile_incrementally(vts, ctx)
       if not is_incremental:
         # Purge existing analysis file in non-incremental mode.
-        safe_delete(ctx.analysis_file)
+        if ctx.analysis_file:
+          safe_delete(ctx.analysis_file)
         # Work around https://github.com/pantsbuild/pants/issues/3670
         safe_rmtree(ctx.classes_dir.path)
 
