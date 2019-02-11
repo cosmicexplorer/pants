@@ -291,7 +291,7 @@ class RscCompile(ScalacCompile):
       'scalac-scala': lambda: self._scalac_key_for_target(compile_target),
       'rsc-java': lambda: self._javac_key_for_target(compile_target),
       'rsc-scala': lambda: self._scalac_key_for_target(compile_target),
-    })
+    })()
 
   def _rsc_key_for_target(self, compile_target):
     return 'rsc({})'.format(compile_target.address.spec)
