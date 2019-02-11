@@ -64,21 +64,9 @@ class JavacCompile(JvmCompile):
   def get_fatal_warnings_enabled_args_default(cls):
     return ('-Werror',)
 
-  @classproperty
-  def get_fatal_warnings_disabled_args_default(cls):
-    return ()
-
-  @classmethod
-  def register_options(cls, register):
-    super(JavacCompile, cls).register_options(register)
-
   @classmethod
   def subsystem_dependencies(cls):
     return super(JavacCompile, cls).subsystem_dependencies() + (JvmPlatform,)
-
-  @classmethod
-  def prepare(cls, options, round_manager):
-    super(JavacCompile, cls).prepare(options, round_manager)
 
   @classmethod
   def product_types(cls):

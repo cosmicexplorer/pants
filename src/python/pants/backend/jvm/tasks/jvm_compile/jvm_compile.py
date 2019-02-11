@@ -42,6 +42,7 @@ from pants.util.dirutil import (fast_relpath, read_file, safe_delete, safe_mkdir
                                 safe_walk)
 from pants.util.fileutil import create_size_estimators
 from pants.util.memo import memoized_method, memoized_property
+from pants.util.meta import classproperty
 
 
 class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
@@ -154,9 +155,18 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
 
   # Subclasses must implement.
   # --------------------------
-  _name = None
-  # The name used in JvmPlatform to refer to this compiler task.
-  compiler_name = None
+  @classproperty
+  def _name(cls):
+    raise NotImplementedError('???/name')
+
+  @classproperty
+  def compiler_name(cls):
+    """The name used in JvmPlatform to refer to this compiler task."""
+    raise NotImplementedError('???/name')
+
+  @classproperty
+  def _compiler_enum(cls):
+    return JvmPlatform._CompilerChoices.create(cls.compiler_name)
 
   @classmethod
   def subsystem_dependencies(cls):
@@ -289,8 +299,7 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
     self._targets_to_compile_settings = None
 
     # JVM options for running the compiler.
-    # self._jvm_options = self.get_options().jvm_options
-    self._jvm_options = ['-Xmx8g']
+    self._jvm_options = self.get_options().jvm_options
 
     self._args = list(self.get_options().args)
     if self.get_options().warnings:
@@ -336,7 +345,7 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
                           self._compute_sources_for_target(target))
 
   def execute(self):
-    if JvmPlatform.global_instance().get_options().compiler != self.compiler_name:
+    if self._compiler_enum != JvmPlatform.global_instance().get_compiler_enum():
       # If the requested compiler is not the one supported by this task,
       # bail early.
       return
