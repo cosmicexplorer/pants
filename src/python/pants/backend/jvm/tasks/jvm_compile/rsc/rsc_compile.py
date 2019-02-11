@@ -285,6 +285,14 @@ class RscCompile(ScalacCompile):
       'rsc-then-zinc': lambda: self._rsc_key_for_target(target),
     })()
 
+  def _scalac_or_javac_only_key_for_target(self, compile_target):
+    return self._classify_compile_target(compile_target).resolve_for_enum_variant({
+      'javac-java': lambda: self._javac_key_for_target(compile_target),
+      'scalac-scala': lambda: self._scalac_key_for_target(compile_target),
+      'rsc-java': lambda: self._javac_key_for_target(compile_target),
+      'rsc-scala': lambda: self._scalac_key_for_target(compile_target),
+    })
+
   def _rsc_key_for_target(self, compile_target):
     return 'rsc({})'.format(compile_target.address.spec)
 
@@ -423,62 +431,52 @@ class RscCompile(ScalacCompile):
     def only_zinc_invalid_dep_keys(invalid_deps):
       for tgt in invalid_deps:
         if self._classify_compile_target(tgt) is not None:
-          yield self._scalac_key_for_target(tgt)
+          yield self._scalac_or_javac_only_key_for_target(tgt)
 
-    def make_scalac_job(target, input_product_key, output_products, dep_keys):
-      return Job(
-        key=self._scalac_key_for_target(target),
-        fn=functools.partial(
-          self._default_work_for_vts,
-          ivts,
-          zinc_compile_context,
-          input_product_key,
-          counter,
-          compile_contexts,
-          CompositeProductAdder(*output_products)),
-        dependencies=list(dep_keys),
-        size=self._size_estimator(zinc_compile_context.sources),
-        on_success=ivts.update,
+    # NB: scalac/javac jobs for rsc-compatible targets never depend on their own corresponding rsc
+    # jobs, just the rsc jobs of their dependencies!
+    def make_scalac_or_javac_job(target, input_product_key, dep_keys):
+      return Job(key=self._scalac_or_javac_only_key_for_target(target),
+                 fn=functools.partial(
+                   self._default_work_for_vts,
+                   ivts,
+                   zinc_compile_context,
+                   input_product_key,
+                   counter,
+                   compile_contexts,
+                   CompositeProductAdder(
+                     runtime_classpath_product,
+                     self.context.products.get_data('nonjava_classpath_from_rsc'),
+                     self.context.products.get_data('rsc_classpath'))),
+                 dependencies=list(dep_keys),
+                 size=self._size_estimator(zinc_compile_context.sources),
+                 on_success=ivts.update,
+                 on_failure=ivts.force_invalidate,
       )
 
-    # Create the rsc job.
-    # Currently, rsc only supports outlining scala.
-    workflow = self._classify_compile_target(compile_target)
-    workflow.resolve_for_enum_variant({
-      'zinc-only': lambda: None,
-      'rsc-then-zinc': lambda: rsc_jobs.append(make_rsc_job(compile_target, invalid_dependencies)),
-    })()
-
-    # Create the zinc compile jobs.
-    # - Scala zinc compile jobs depend on the results of running rsc on the scala target.
-    # - Java zinc compile jobs depend on the zinc compiles of their dependencies, because we can't
-    #   generate jars that make javac happy at this point.
-    workflow.resolve_for_enum_variant({
-      # NB: zinc-only zinc jobs run zinc and depend on zinc compile outputs.
-      'zinc-only': lambda: scalac_jobs.append(
-        make_scalac_job(
-          compile_target,
-          input_product_key='runtime_classpath',
-          output_products=[
-            runtime_classpath_product,
-            self.context.products.get_data('rsc_classpath')],
-          dep_keys=only_zinc_invalid_dep_keys(invalid_dependencies))),
-      'rsc-then-zinc': lambda: scalac_jobs.append(
-        # NB: rsc-then-zinc jobs run zinc and depend on both rsc and zinc compile outputs.
-        make_scalac_job(
-          compile_target,
-          input_product_key='rsc_classpath',
-          output_products=[
-            runtime_classpath_product,
-          ],
-          dep_keys=[
-            # TODO we could remove the dependency on the rsc target in favor of bumping
-            # the cache separately. We would need to bring that dependency back for
-            # sub-target parallelism though.
-            self._rsc_key_for_target(compile_target)
-          ] + list(all_zinc_rsc_invalid_dep_keys(invalid_dependencies))
-        )),
-    })()
+    # TODO: (this is noted in two other places as well) rsc's produced header jars don't yet work
+    # with javac, so we introduce the 'nonjava_classpath_from_rsc' intermediate product, which
+    # contains rsc header jars and scalac/javac output. javac compilations for java targets then are
+    # scheduled strictly after scalac/javac compilations of their dependencies, and only use the
+    # 'runtime_classpath' product.
+    target_classification = self._classify_compile_target(compile_target)
+    if target_classification:
+      target_classification.resolve_for_enum_variant({
+        'javac-java': lambda: scalac_jobs.append(
+          make_scalac_or_javac_job(compile_target, 'runtime_classpath',
+                          only_zinc_invalid_dep_keys(invalid_dependencies))),
+        # scalac-scala targets will depend on the rsc jobs of rsc-scala targets and zinc jobs of
+        # scalac-scala dependencies.
+        'scalac-scala': lambda: scalac_jobs.append(
+          make_scalac_or_javac_job(compile_target, 'nonjava_classpath_from_rsc',
+                        all_zinc_rsc_invalid_dep_keys(invalid_dependencies))),
+        'rsc-java': lambda: scalac_jobs.append(
+          make_scalac_or_javac_job(compile_target, 'runtime_classpath',
+                          only_zinc_invalid_dep_keys(invalid_dependencies))),
+        'rsc-scala': lambda: scalac_jobs.append(
+          make_scalac_or_javac_job(compile_target, 'nonjava_classpath_from_rsc',
+                          all_zinc_rsc_invalid_dep_keys(invalid_dependencies))),
+      })()
 
     return rsc_jobs + scalac_jobs
 
