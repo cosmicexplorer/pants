@@ -158,7 +158,7 @@ class RscCompile(ScalacCompile):
     register('--rsc-compatible-target-tag', default='rsc-compatible', metavar='<tag>',
              help='Always compile any target with rsc marked with this tag.')
     register('--include-rsc-compatible-target-regexps', type=list, member_type=str,
-             metavar='<regexp>',
+             metavar='<regexp>', default=['.*'],
              help='If a target matches this regexp, compile it with rsc, unless the target also '
                   'matches an exlcude regexp.')
     register('--exclude-rsc-compatible-target-regexps', type=list, member_type=str,
@@ -271,14 +271,12 @@ class RscCompile(ScalacCompile):
       if target.has_sources('.java'):
       # TODO: Currently rsc header jars are not consumable by javac, so we need to make sure any
       # java compilation occurs after all of its dependencies are compiled with scalac/javac.
-        raise NotImplementedError('rsc-java targets not yet supported: {}'.format(target))
         target_type = self._JvmTargetType.create('rsc-java')
       elif target.has_sources('.scala'):
         target_type = self._JvmTargetType.create('rsc-scala')
       else:
         target_type = None
     elif target.has_sources('.java'):
-      raise NotImplementedError('javac-java targets not yet supported: {}'.format(target))
       target_type = self._JvmTargetType.create('javac-java')
     elif target.has_sources('.scala'):
       target_type = self._JvmTargetType.create('scalac-scala')
@@ -523,13 +521,15 @@ class RscCompile(ScalacCompile):
         on_failure=ivts.force_invalidate,
       )
 
-    self._classify_compile_target(compile_target).resolve_for_enum_variant({
-      # scalac-scala targets have no rsc job, by definition.
-      'javac-java': lambda: None,
-      'scalac-scala': lambda: None,
-      'rsc-java': lambda: rsc_jobs.append(make_rsc_job(compile_target, invalid_dependencies)),
-      'rsc-scala': lambda: rsc_jobs.append(make_rsc_job(compile_target, invalid_dependencies)),
-    })()
+    target_classification = self._classify_compile_target(compile_target)
+    if target_classification:
+      target_classification.resolve_for_enum_variant({
+        # scalac-scala targets have no rsc job, by definition.
+        'javac-java': lambda: None,
+        'scalac-scala': lambda: None,
+        'rsc-java': lambda: rsc_jobs.append(make_rsc_job(compile_target, invalid_dependencies)),
+        'rsc-scala': lambda: rsc_jobs.append(make_rsc_job(compile_target, invalid_dependencies)),
+      })()
 
     # Create the scalac compile jobs.
     # - Scalac compile jobs depend on the results of running rsc on the scala target.
@@ -563,31 +563,29 @@ class RscCompile(ScalacCompile):
                  on_failure=ivts.force_invalidate,
       )
 
-    def make_javac_job(target, input_product_key, dep_keys):
-      raise NotImplementedError("javac compilation isn't implemented yet (for target {})"
-                                .format(target))
-
     # TODO: (this is noted in two other places as well) rsc's produced header jars don't yet work
     # with javac, so we introduce the 'nonjava_classpath_from_rsc' intermediate product, which
     # contains rsc header jars and scalac/javac output. javac compilations for java targets then are
     # scheduled strictly after scalac/javac compilations of their dependencies, and only use the
     # 'runtime_classpath' product.
-    self._classify_compile_target(compile_target).resolve_for_enum_variant({
-      'javac-java': lambda: scalac_jobs.append(
-        make_javac_job(compile_target, 'runtime_classpath',
-                      only_scalac_invalid_dep_keys(invalid_dependencies))),
-      # scalac-scala targets will depend on the rsc jobs of rsc-scala targets and zinc jobs of
-      # scalac-scala dependencies.
-      'scalac-scala': lambda: scalac_jobs.append(
-        make_scalac_job(compile_target, 'nonjava_classpath_from_rsc',
-                      all_mixed_scalac_javac_rsc_invalid_dep_keys(invalid_dependencies))),
-      'rsc-java': lambda: scalac_jobs.append(
-        make_javac_job(compile_target, 'runtime_classpath',
-                      only_scalac_invalid_dep_keys(invalid_dependencies))),
-      'rsc-scala': lambda: scalac_jobs.append(
-        make_scalac_job(compile_target, 'nonjava_classpath_from_rsc',
-                      all_mixed_scalac_javac_rsc_invalid_dep_keys(invalid_dependencies))),
-    })()
+    target_classification = self._classify_compile_target(compile_target)
+    if target_classification:
+      target_classification.resolve_for_enum_variant({
+        'javac-java': lambda: scalac_jobs.append(
+          make_scalac_job(compile_target, 'runtime_classpath',
+                          only_scalac_invalid_dep_keys(invalid_dependencies))),
+        # scalac-scala targets will depend on the rsc jobs of rsc-scala targets and zinc jobs of
+        # scalac-scala dependencies.
+        'scalac-scala': lambda: scalac_jobs.append(
+          make_scalac_job(compile_target, 'nonjava_classpath_from_rsc',
+                        all_mixed_scalac_javac_rsc_invalid_dep_keys(invalid_dependencies))),
+        'rsc-java': lambda: scalac_jobs.append(
+          make_scalac_job(compile_target, 'runtime_classpath',
+                          only_scalac_invalid_dep_keys(invalid_dependencies))),
+        'rsc-scala': lambda: scalac_jobs.append(
+          make_scalac_job(compile_target, 'nonjava_classpath_from_rsc',
+                          all_mixed_scalac_javac_rsc_invalid_dep_keys(invalid_dependencies))),
+      })()
 
     return rsc_jobs + scalac_jobs
 
@@ -600,14 +598,12 @@ class RscCompile(ScalacCompile):
     #   - index/   -- metacp results
     #   - outline/ -- semanticdbs for the current target as created by rsc
     #   - m.jar    -- reified scala signature jar
-    # zinc/
+    # scalac/
     #   - classes/   -- class files
-    #   - z.analysis -- zinc analysis for the target
     #   - z.jar      -- final jar for the target
-    #   - zinc_args  -- file containing the used zinc args
     sources = self._compute_sources_for_target(target)
     rsc_dir = os.path.join(target_workdir, "rsc")
-    zinc_dir = os.path.join(target_workdir, "zinc")
+    scalac_dir = os.path.join(target_workdir, "scalac")
     return [
       RscCompileContext(
         target=target,
@@ -623,9 +619,9 @@ class RscCompile(ScalacCompile):
       CompileContext(
         target=target,
         analysis_file=None,
-        classes_dir=ClasspathEntry(os.path.join(zinc_dir, 'classes'), None),
-        jar_file=ClasspathEntry(os.path.join(zinc_dir, 'z.jar'), None),
-        log_dir=os.path.join(zinc_dir, 'logs'),
+        classes_dir=ClasspathEntry(os.path.join(scalac_dir, 'classes'), None),
+        jar_file=ClasspathEntry(os.path.join(scalac_dir, 'z.jar'), None),
+        log_dir=os.path.join(scalac_dir, 'logs'),
         zinc_args_file=None,
         sources=sources,
       )

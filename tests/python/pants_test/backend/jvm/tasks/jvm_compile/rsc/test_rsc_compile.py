@@ -5,7 +5,6 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-from textwrap import dedent
 
 from pants.backend.jvm.subsystems.scala_platform import ScalaPlatform
 from pants.backend.jvm.targets.jar_library import JarLibrary
@@ -97,25 +96,11 @@ class RscCompileTest(TaskTestBase):
       exec_graph = ExecutionGraph(jobs, task.get_options().print_exception_stacktrace)
       dependee_graph = exec_graph.format_dependee_graph()
 
-      self.assertEqual(dedent("""
-                     metacp(jdk) -> {
-                       metacp(java/classpath:java_lib),
-                       rsc(java/classpath:scala_lib),
-                       compile_against_rsc(java/classpath:scala_lib),
-                       metacp(java/classpath:jar_lib)
-                     }
-                     metacp(java/classpath:java_lib) -> {}
-                     compile_against_rsc(java/classpath:java_lib) -> {
-                       metacp(java/classpath:java_lib)
-                     }
-                     rsc(java/classpath:scala_lib) -> {
-                       compile_against_rsc(java/classpath:scala_lib)
-                     }
-                     compile_against_rsc(java/classpath:scala_lib) -> {}
-                     metacp(java/classpath:jar_lib) -> {
-                       metacp(java/classpath:java_lib),
-                       rsc(java/classpath:scala_lib)
-                     }""").strip(),
+      self.assertEqual("""
+rsc(java/classpath:java_lib) -> {}
+scalac(java/classpath:java_lib) -> {}
+rsc(java/classpath:scala_lib) -> {}
+scalac(java/classpath:scala_lib) -> {}""".strip(),
         dependee_graph)
 
   def test_scala_lib_with_java_sources_not_passed_to_rsc(self):
@@ -175,24 +160,12 @@ class RscCompileTest(TaskTestBase):
       exec_graph = ExecutionGraph(jobs, task.get_options().print_exception_stacktrace)
       dependee_graph = exec_graph.format_dependee_graph()
 
-      self.assertEqual(dedent("""
-                     metacp(jdk) -> {
-                       metacp(java/classpath:java_lib),
-                       metacp(java/classpath:scala_and_java_lib),
-                       metacp(java/classpath:jar_lib)
-                     }
-                     metacp(java/classpath:java_lib) -> {}
-                     compile_against_rsc(java/classpath:java_lib) -> {
-                       metacp(java/classpath:java_lib)
-                     }
-                     metacp(java/classpath:scala_and_java_lib) -> {}
-                     compile_against_rsc(java/classpath:scala_and_java_lib) -> {
-                       metacp(java/classpath:scala_and_java_lib)
-                     }
-                     metacp(java/classpath:jar_lib) -> {
-                       metacp(java/classpath:java_lib),
-                       metacp(java/classpath:scala_and_java_lib)
-                     }""").strip(),
+      self.assertEqual("""
+rsc(java/classpath:java_lib) -> {}
+scalac(java/classpath:java_lib) -> {}
+rsc(java/classpath:scala_and_java_lib) -> {}
+scalac(java/classpath:scala_and_java_lib) -> {}
+""".strip(),
         dependee_graph)
 
   def test_desandbox_fn(self):
