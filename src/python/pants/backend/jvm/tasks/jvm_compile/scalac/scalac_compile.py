@@ -30,7 +30,7 @@ from pants.java.distribution.distribution import DistributionLocator
 from pants.java.jar.jar_dependency import JarDependency
 from pants.util.collections import assert_single_element
 from pants.util.contextutil import open_zip
-from pants.util.dirutil import fast_relpath, safe_open
+from pants.util.dirutil import fast_relpath, fast_relpath_optional, safe_open
 from pants.util.memo import memoized_classmethod, memoized_method, memoized_property
 from pants.util.meta import classproperty
 
@@ -40,6 +40,10 @@ logger = logging.getLogger(__name__)
 
 # Well known metadata file required to register scalac plugins with nsc.
 _SCALAC_PLUGIN_INFO_FILE = 'scalac-plugin.xml'
+
+
+def fast_relpath_collection(collection, root=get_buildroot()):
+  return [fast_relpath_optional(c, root) or c for c in collection]
 
 
 class ScalacCompile(JvmCompile):
@@ -188,29 +192,36 @@ class ScalacCompile(JvmCompile):
   class ScalacCompileError(TaskError):
     """An exception type specifically to signal a failed scalac execution."""
 
-  @memoized_property
-  def _scalac_classpath_fingerprint(self):
+  @memoized_method
+  def classpath_fingerprint(self, cp_entries):
     hasher = sha1()
     # TODO: there is definitely a better way to get the hash of a set of digests than this!
-    cp_entry_digests= sorted(repr(cp.directory_digest) for cp in self._scalac_cp_entries)
+    cp_entry_digests= sorted(repr(cp.directory_digest) for cp in cp_entries)
     for digest_hash in cp_entry_digests:
       hasher.update(digest_hash.encode('utf-8'))
     return text_type(hasher.hexdigest())
 
   @memoized_property
-  def _scalac_bootstrap_classpath_paths(self):
+  def _scalac_classpath_fingerprint(self):
+    return self.classpath_fingerprint(tuple(self._scalac_cp_entries))
+
+  def scalac_bootstrap_classpath_paths(self):
     # Entries for the compiler and library: see
     # https://www.scala-lang.org/files/archive/nightly/docs/manual/html/scalac.html.
     # Note that we do not (yet) use the -bootstrap-classpath option for this!
     return [cp.path for cp in self._scalac_cp_entries]
 
+  @memoized_method
+  def cp_entries_for_tool(self, key):
+    tool_cp = self.tool_classpath(key)
+    cp_rel = fast_relpath_collection(tool_cp)
+    return self._memoized_classpath_entries_with_digests(tuple(cp_rel), self.context._scheduler)
+
   # TODO: this allows us to remote the graal compilation -- do we want to do that though? (I think
   # so!?
   @memoized_property
   def _substitutions_cp_entries(self):
-    substitutions_jar = self.tool_jar('native-image-stubs')
-    jar_rel = fast_relpath(substitutions_jar, get_buildroot())
-    return self._memoized_classpath_entries_with_digests(tuple([jar_rel]), self.context._scheduler)
+    return self.cp_entries_for_tool('native-image-stubs')
 
   @memoized_method
   def _memoized_classpath_entries_with_digests(self, classpath_paths, scheduler):
@@ -221,7 +232,7 @@ class ScalacCompile(JvmCompile):
     return [ClasspathEntry(path, snapshot) for path, snapshot in list(zip(classpath_paths, snapshots))]
 
   def _compile_graal_nonhermetic(self, jvm_options, scalac_args):
-    bootstrap_classpath_with_graal_runtime = self._scalac_bootstrap_classpath_paths + [
+    bootstrap_classpath_with_graal_runtime = self.scalac_bootstrap_classpath_paths() + [
       self._graal_ce.runtime_jar,
     ]
     args_with_graal_bootstrap_cp = [
@@ -246,7 +257,7 @@ class ScalacCompile(JvmCompile):
       ))
 
   def _compile_nonhermetic(self, jvm_options, scalac_args, **kwargs):
-    exit_code = self.runjava(classpath=self._scalac_bootstrap_classpath_paths,
+    exit_code = self.runjava(classpath=self.scalac_bootstrap_classpath_paths(),
                              main=self._scala.compiler_main(),
                              jvm_options=jvm_options,
                              args=scalac_args,

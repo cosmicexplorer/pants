@@ -13,6 +13,7 @@ from future.utils import PY3, text_type
 from twitter.common.collections import OrderedSet
 
 from pants.backend.jvm.subsystems.dependency_context import DependencyContext  # noqa
+from pants.backend.jvm.subsystems.graal import GraalCE
 from pants.backend.jvm.subsystems.shader import Shader
 from pants.backend.jvm.targets.junit_tests import JUnitTests
 from pants.backend.jvm.targets.jvm_target import JvmTarget
@@ -20,7 +21,7 @@ from pants.backend.jvm.targets.scala_library import ScalaLibrary
 from pants.backend.jvm.tasks.classpath_entry import ClasspathEntry
 from pants.backend.jvm.tasks.jvm_compile.compile_context import CompileContext
 from pants.backend.jvm.tasks.jvm_compile.execution_graph import Job
-from pants.backend.jvm.tasks.jvm_compile.zinc.zinc_compile import ZincCompile
+from pants.backend.jvm.tasks.jvm_compile.scalac.scalac_compile import ScalacCompile
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
@@ -45,9 +46,8 @@ from pants.util.objects import enum
 logger = logging.getLogger(__name__)
 
 
-def fast_relpath_collection(collection):
-  buildroot = get_buildroot()
-  return [fast_relpath_optional(c, buildroot) or c for c in collection]
+def fast_relpath_collection(collection, root=get_buildroot()):
+  return [fast_relpath_optional(c, root) or c for c in collection]
 
 
 def stdout_contents(wu):
@@ -144,7 +144,7 @@ class RscCompileContext(CompileContext):
     safe_mkdir(os.path.dirname(self.rsc_jar_file))
 
 
-class RscCompile(ZincCompile):
+class RscCompile(ScalacCompile):
   """Compile Scala and Java code to classfiles using Rsc."""
 
   _name = 'rsc' # noqa
@@ -155,18 +155,31 @@ class RscCompile(ZincCompile):
     return super(RscCompile, cls).implementation_version() + [('RscCompile', 172)]
 
   @classmethod
+  def product_types(cls):
+    return super(RscCompile, cls).product_types() + [
+      'rsc_classpath',
+      'nonjava_classpath_from_rsc',
+    ]
+
+  @classmethod
   def register_options(cls, register):
     super(RscCompile, cls).register_options(register)
+
+    rsc_toolchain_version = '0.0.0-733-05951a97-20190208-1804'
 
     cls.register_jvm_tool(
       register,
       'rsc',
       classpath=[
-        JarDependency(
-          org='com.twitter',
-          name='rsc_2.11',
-          rev='0.0.0-734-e57e96eb',
-        ),
+          JarDependency(
+              org='com.twitter',
+              # TODO: update this comment for scalac!
+              # NB: Rsc must be published with 2.12 to keep up with the recent change in upstream
+              # pants which uses zinc with 2.12! This causes one test to fail in the rsc repo and must
+              # be published with publish-m2 (ivy publishes don't produce a pom, or something).
+              name='rsc_2.12',
+              rev=rsc_toolchain_version,
+          ),
       ],
       custom_rules=[
         Shader.exclude_package('rsc', recursive=True),
@@ -183,17 +196,17 @@ class RscCompile(ZincCompile):
     """
     cp = []
     cp.extend(self.tool_classpath('rsc'))
-    # Add zinc's classpath so that it can be invoked from the same nailgun instance.
-    cp.extend(super(RscCompile, self).get_zinc_compiler_classpath())
+    # Add scalac's classpath so that it can be invoked from the same nailgun instance.
+    cp.extend(super(RscCompile, self).scalac_bootstrap_classpath_paths())
     return cp
 
   # Overrides the normal zinc compiler classpath, which only contains zinc.
-  def get_zinc_compiler_classpath(self):
+  def scalac_bootstrap_classpath_paths(self):
     return self.execution_strategy_enum.resolve_for_enum_variant({
-      self.HERMETIC: lambda: super(RscCompile, self).get_zinc_compiler_classpath(),
-      self.SUBPROCESS: lambda: super(RscCompile, self).get_zinc_compiler_classpath(),
+      self.HERMETIC: lambda: super(RscCompile, self).scalac_bootstrap_classpath_paths(),
+      self.SUBPROCESS: lambda: super(RscCompile, self).scalac_bootstrap_classpath_paths(),
+      self.GRAAL: lambda: super(RscCompile, self).scalac_bootstrap_classpath_paths(),
       self.NAILGUN: lambda: self._nailgunnable_combined_classpath,
-      self.GRAAL: lambda: super(RscCompile, self).get_zinc_compiler_classpath(),
     })()
 
   def register_extra_products_from_contexts(self, targets, compile_contexts):
@@ -225,6 +238,10 @@ class RscCompile(ZincCompile):
       return [(conf, e) for e in entries for conf in self._confs]
 
     # Ensure that the jar/rsc jar is on the rsc_classpath.
+    # TODO: there's a little bit of duplication here -- in the super() call, ScalacCompile will
+    # populate classpaths for scalac/javac invocations, but we only need to populate the classpaths from the
+    # rsc outputs here because we call register_extra_products_from_contexts() manually in
+    # work_for_vts_rsc().
     for target in targets:
       rsc_cc, compile_cc = compile_contexts[target]
       target_compile_type = self._classify_compile_target(target)
@@ -376,7 +393,7 @@ class RscCompile(ZincCompile):
       self.register_extra_products_from_contexts([ctx.target], compile_contexts)
 
     rsc_jobs = []
-    zinc_jobs = []
+    scalac_jobs = []
 
     # Invalidated targets are a subset of relevant targets: get the context for this one.
     compile_target = ivts.target
@@ -406,7 +423,7 @@ class RscCompile(ZincCompile):
     def only_zinc_invalid_dep_keys(invalid_deps):
       for tgt in invalid_deps:
         if self._classify_compile_target(tgt) is not None:
-          yield self._zinc_key_for_target(tgt)
+          yield self._scalac_key_for_target(tgt)
 
     def make_zinc_job(target, input_product_key, output_products, dep_keys):
       return Job(
@@ -438,7 +455,7 @@ class RscCompile(ZincCompile):
     #   generate jars that make javac happy at this point.
     workflow.resolve_for_enum_variant({
       # NB: zinc-only zinc jobs run zinc and depend on zinc compile outputs.
-      'zinc-only': lambda: zinc_jobs.append(
+      'zinc-only': lambda: scalac_jobs.append(
         make_zinc_job(
           compile_target,
           input_product_key='runtime_classpath',
@@ -446,7 +463,7 @@ class RscCompile(ZincCompile):
             runtime_classpath_product,
             self.context.products.get_data('rsc_classpath')],
           dep_keys=only_zinc_invalid_dep_keys(invalid_dependencies))),
-      'rsc-then-zinc': lambda: zinc_jobs.append(
+      'rsc-then-zinc': lambda: scalac_jobs.append(
         # NB: rsc-then-zinc jobs run zinc and depend on both rsc and zinc compile outputs.
         make_zinc_job(
           compile_target,
@@ -463,7 +480,7 @@ class RscCompile(ZincCompile):
         )),
     })()
 
-    return rsc_jobs + zinc_jobs
+    return rsc_jobs + scalac_jobs
 
   def select_runtime_context(self, ccs):
     return ccs[1]
@@ -494,11 +511,11 @@ class RscCompile(ZincCompile):
       ),
       CompileContext(
         target=target,
-        analysis_file=os.path.join(zinc_dir, 'z.analysis'),
+        analysis_file=None,
         classes_dir=ClasspathEntry(os.path.join(zinc_dir, 'classes'), None),
         jar_file=ClasspathEntry(os.path.join(zinc_dir, 'z.jar'), None),
         log_dir=os.path.join(zinc_dir, 'logs'),
-        zinc_args_file=os.path.join(zinc_dir, 'zinc_args'),
+        zinc_args_file=None,
         sources=sources,
       )
     ]
@@ -559,6 +576,33 @@ class RscCompile(ZincCompile):
       # TODO drop a file containing the digest, named maybe output_dir.digest
     return res
 
+  @memoized_property
+  def _rsc_cp_entries(self):
+    # TODO: We might want to add scala-library to the classpath because it makes graal native-image avoid complaining that "Warning: class initialization of class rsc.cli.Main$ failed with exception java.lang.NoClassDefFoundError: scala/collection/immutable/List"!
+    return self.cp_entries_for_tool('rsc')
+
+  @memoized_property
+  def _rsc_classpath_fingerprint(self):
+    return self.classpath_fingerprint(tuple(self._rsc_cp_entries))
+
+  def _runtool_graal_nonhermetic(self, parent_workunit, classpath, main, tool_name, args,
+                                 distribution):
+    bootstrap_classpath_with_graal_runtime = self.scalac_bootstrap_classpath_paths() + [
+      self._graal_ce.runtime_jar,
+    ] + classpath
+    args_with_graal_bootstrap_cp = [
+      '-Dscala.boot.class.path={}'.format(':'.join(bootstrap_classpath_with_graal_runtime)),
+      '-Dscala.usejavacp=true',
+    ] + args
+    return self._runtool_nonhermetic(parent_workunit, bootstrap_classpath_with_graal_runtime, main,
+                                     tool_name, args_with_graal_bootstrap_cp, distribution,
+                                     native_image_config=GraalCE.GraalNativeImageConfiguration(
+                                       extra_cp=tuple(),
+                                       substitution_resources_paths=tuple(),
+                                       reflection_resources_paths=tuple(),
+                                       input_fingerprint=self._rsc_classpath_fingerprint,
+                                     ))
+
   # The classpath is parameterized so that we can have a single nailgun instance serving all of our
   # execution requests.
   def _runtool_nonhermetic(self, parent_workunit, classpath, main, tool_name, args, distribution):
@@ -592,7 +636,7 @@ class RscCompile(ZincCompile):
           tgt=tgt, input_files=input_files, input_digest=input_digest, output_dir=output_dir),
         self.SUBPROCESS: lambda: self._runtool_nonhermetic(
           wu, self.tool_classpath(tool_name), main, tool_name, args, distribution),
-        self.GRAAL: lambda: self._runtool_nonhermetic(
+        self.GRAAL: lambda: self._runtool_graal_nonhermetic(
           wu, self.tool_classpath(tool_name), main, tool_name, args, distribution),
         self.NAILGUN: lambda: self._runtool_nonhermetic(
           wu, self._nailgunnable_combined_classpath, main, tool_name, args, distribution),

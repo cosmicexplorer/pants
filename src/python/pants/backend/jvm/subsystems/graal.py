@@ -132,10 +132,6 @@ argument to self.runjava().""")
       '-H:NumberOfThreads=8',
       '--no-server',
       '--tool:truffle',
-      '-R:+PrintGC',
-      '-R:+PrintGCTimeStamps',
-      '-R:+VerboseGC',
-      '-R:+PrintGCTimes',
       # TODO: make this -O9!
       '-O0',
     ] + [
