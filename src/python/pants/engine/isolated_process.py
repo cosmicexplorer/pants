@@ -39,7 +39,7 @@ class ExecuteProcessRequest(datatype([
     apiserver_url = os.environ.get('APISERVER_URL')
     cache_key_gen_version = os.environ.get('PANTS_CACHE_KEY_GEN_VERSION')
     cmdline = [
-      '/var/lib/jenkins/pants-github/src/rust/engine/target/debug/process_executor',
+      'src/rust/engine/target/debug/process_executor',
       '--input-digest', self.input_files.fingerprint,
       '--input-digest-length', str(self.input_files.serialized_bytes_length),
     ]

@@ -25,11 +25,10 @@ from pants.backend.jvm.tasks.jvm_compile.jvm_compile import JvmCompile
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
-from pants.engine.fs import DirectoryToMaterialize, PathGlobs, PathGlobsAndRoot
+from pants.engine.fs import Digest, DirectoryToMaterialize, PathGlobs, PathGlobsAndRoot, Snapshot
 from pants.engine.isolated_process import ExecuteProcessRequest, ProcessExecutionFailure
 from pants.java.distribution.distribution import DistributionLocator
 from pants.java.jar.jar_dependency import JarDependency
-from pants.util.collections import assert_single_element
 from pants.util.contextutil import open_zip
 from pants.util.dirutil import fast_relpath, fast_relpath_optional, safe_open
 from pants.util.memo import memoized_classmethod, memoized_method, memoized_property
@@ -133,13 +132,15 @@ class ScalacCompile(JvmCompile):
     if self.get_options().capture_classpath:
       self._record_compile_classpath(user_cp_abs, ctx.target, ctx.classes_dir.path)
 
+    # NB: For hermetic, we want a relative path.
+    classes_dir = fast_relpath(ctx.classes_dir.path, get_buildroot())
+
     output_dir = self.execution_strategy_enum.resolve_for_enum_variant({
       self.HERMETIC: '.',
       self.HERMETIC_WITH_NAILGUN: '.',
       self.SUBPROCESS: ctx.classes_dir.path,
       self.NAILGUN: ctx.classes_dir.path,
-      # TODO: GRAAL_HERMETIC strategy for remoting!
-      self.GRAAL: ctx.classes_dir.path,
+      self.GRAAL: classes_dir,
     })
 
     # Search for scalac plugins on the classpath.
@@ -176,9 +177,6 @@ class ScalacCompile(JvmCompile):
 
     jvm_options = self._jvm_options
 
-    # NB: For hermetic, we want a relative path.
-    classes_dir = fast_relpath(ctx.classes_dir.path, get_buildroot())
-
     return self.execution_strategy_enum.resolve_for_enum_variant({
       # TODO: the hermetic strategies reference variables that don't exist, that we should also crib
       # from compile() in zinc_compile.py! Also see the _execute_hermetic_compile() method in
@@ -193,8 +191,8 @@ class ScalacCompile(JvmCompile):
         jvm_options, scalac_merged_args),
       self.NAILGUN: lambda: self._compile_nonhermetic(
         jvm_options, scalac_merged_args),
-      self.GRAAL: lambda: self._compile_graal_nonhermetic(
-        jvm_options, scalac_merged_args),
+      self.GRAAL: lambda: self._compile_graal(
+        jvm_options, ctx, classes_dir, scalac_merged_args, dependency_classpath),
     })()
 
   class ScalacCompileError(TaskError):
@@ -231,6 +229,7 @@ class ScalacCompile(JvmCompile):
   def _substitutions_cp_entries(self):
     return self.cp_entries_for_tool('native-image-stubs')
 
+  # TODO: is this still used?
   @memoized_method
   def _memoized_classpath_entries_with_digests(self, classpath_paths, scheduler):
     snapshots = scheduler.capture_snapshots(tuple(
@@ -239,43 +238,95 @@ class ScalacCompile(JvmCompile):
     ))
     return [ClasspathEntry(path, snapshot) for path, snapshot in list(zip(classpath_paths, snapshots))]
 
-  def _compile_graal_nonhermetic(self, jvm_options, scalac_args):
-    bootstrap_classpath_with_graal_runtime = self.scalac_bootstrap_classpath_paths() + [
-      self._graal_ce.runtime_jar,
-    ]
+  @memoized_method
+  def _capture_dependency_classpath(self, classpath_entries, scheduler):
+    without_dep_classpath = []
+    with_cp = []
+    for entry in classpath_entries:
+      if entry.directory_digest:
+        with_cp.append(entry)
+      else:
+        # TODO: every entry should have a digest!! also consider memoizing individual entries if
+        # we're spending a lot of time snapshotting!
+        logger.warning(
+          "ClasspathEntry {} didn't have a Digest, so we're recapturing it for hermetic execution"
+          .format(entry))
+        without_dep_classpath.append(entry)
+    now_captured_empty_entries = self._memoized_classpath_entries_with_digests(
+      tuple(fast_relpath_collection(cp.path for cp in without_dep_classpath)), scheduler)
+    return with_cp + now_captured_empty_entries
+
+  def _compile_graal(self,  jvm_options, ctx, classes_dir, scalac_args, dependency_classpath):
+    boot_cp_entries = self._memoized_classpath_entries_with_digests(
+      tuple(self.scalac_bootstrap_classpath_paths()),
+      self.context._scheduler)
+    # TODO: `graal_rt` provides the rt.jar necessary to run native images. We can provide it through
+    # the .jdk symlink with just .jdk/jre/lib/rt.jar, but since it's graal-specific, it seems
+    # reasonable to "pin" it with its own directory digest (this also makes it remotable, I think).
+    graal_rt = self._graal_ce.runtime_jar_cp_entry(self.context._scheduler)
     args_with_graal_bootstrap_cp = [
-      '-Dscala.boot.class.path={}'.format(':'.join(bootstrap_classpath_with_graal_runtime)),
+      # Join relative paths to elements of the bootstrap classpath (these will be their paths in the
+      # sandbox).
+      '-Dscala.boot.class.path={}'.format(':'.join(
+        [cp.path for cp in boot_cp_entries]
+        + [graal_rt.path]
+      )),
       '-Dscala.usejavacp=true',
     ] + scalac_args
-    substitutions_jar_path = assert_single_element(self._substitutions_cp_entries).path
-    # TODO: this absoluting needs to be removed to be made remotable!
-    absolute_substitutions_jar_path = os.path.join(get_buildroot(), substitutions_jar_path)
+    build_digests = [cp.directory_digest.directory_digest for cp in boot_cp_entries]
+    build_config = GraalCE.GraalNativeImageConfiguration(
+      extra_build_cp=tuple(self._substitutions_cp_entries),
+      digests=tuple(build_digests),
+      substitution_resources_paths=tuple([
+        'org/pantsbuild/zinc/native-image-stubs/substitutions.json',
+        'org/pantsbuild/zinc/native-image-stubs/substitutions-2.12.json',
+      ]),
+      reflection_resources_paths=tuple([
+        'org/pantsbuild/zinc/native-image-stubs/reflection-config.json',
+      ]),
+      context=self.context,
+    )
+    run_digests = [
+      ctx.target.sources_snapshot(self.context._scheduler).directory_digest,
+    ] + build_digests + [
+      graal_rt.directory_digest.directory_digest
+    ] + [
+      cp.directory_digest.directory_digest
+      if isinstance(cp.directory_digest, Snapshot) else cp.directory_digest
+      for cp in
+      self._capture_dependency_classpath(tuple(dependency_classpath), self.context._scheduler)
+    ]
+    logger.debug('classes_dir: {}'.format(classes_dir))
     return self._compile_nonhermetic(
       jvm_options, args_with_graal_bootstrap_cp,
-      native_image_config=GraalCE.GraalNativeImageConfiguration(
-        extra_cp=tuple([absolute_substitutions_jar_path]),
-        substitution_resources_paths=tuple([
-          'org/pantsbuild/zinc/native-image-stubs/substitutions.json',
-          'org/pantsbuild/zinc/native-image-stubs/substitutions-2.12.json',
-        ]),
-        reflection_resources_paths=tuple([
-          'org/pantsbuild/zinc/native-image-stubs/reflection-config.json',
-        ]),
-        input_fingerprint=self._scalac_classpath_fingerprint,
+      native_image_execution=self.GraalNativeImageExecution(
+        build_config=build_config,
+        run_digests=tuple(run_digests),
+        output_dir=classes_dir,
       ))
 
   def _compile_nonhermetic(self, jvm_options, scalac_args, **kwargs):
-    exit_code = self.runjava(classpath=self.scalac_bootstrap_classpath_paths(),
-                             main=self._scala.compiler_main(),
-                             jvm_options=jvm_options,
-                             args=scalac_args,
-                             workunit_name=self.name(),
-                             workunit_labels=[WorkUnitLabel.COMPILER],
-                             # NB: Set with self.set_distribution() in __init__!
-                             dist=self._dist,
-                             **kwargs)
+    try:
+      result = self.runjava(classpath=self.scalac_bootstrap_classpath_paths(),
+                            main=self._scala.compiler_main(),
+                            jvm_options=jvm_options,
+                            args=scalac_args,
+                            workunit_name=self.name(),
+                            workunit_labels=[WorkUnitLabel.COMPILER],
+                            # NB: Set with self.set_distribution() in __init__!
+                            dist=self._dist,
+                            **kwargs)
+      if isinstance(result, Digest):
+        exit_code = 0
+      else:
+        exit_code = result
+    except ProcessExecutionFailure as e:
+      exit_code = e.exit_code
+
     if exit_code != 0:
       raise self.ScalacCompileError('Scalac compile failed.', exit_code=exit_code)
+
+    return result
 
   def _compile_hermetic(self, jvm_options, ctx, classes_dir, args, dependency_classpath,
                         scalac_classpath_entries, with_nailgun=False):

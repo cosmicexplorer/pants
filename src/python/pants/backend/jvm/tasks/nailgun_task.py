@@ -6,10 +6,13 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 
+from future.utils import text_type
+
 from pants.backend.jvm.subsystems.graal import GraalCE
 from pants.backend.jvm.tasks.jvm_tool_task_mixin import JvmToolTaskMixin
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
+from pants.engine.fs import Digest
 from pants.java import util
 from pants.java.executor import GraalExecutor, SubprocessExecutor
 from pants.java.jar.jar_dependency import JarDependency
@@ -17,7 +20,7 @@ from pants.java.nailgun_executor import NailgunExecutor, NailgunProcessGroup
 from pants.process.subprocess import Subprocess
 from pants.task.task import Task, TaskBase
 from pants.util.memo import memoized_property
-from pants.util.objects import enum, register_enum_option
+from pants.util.objects import Exactly, TypedCollection, datatype, enum, register_enum_option
 
 
 class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
@@ -88,7 +91,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
   def execution_strategy(self):
     return self.execution_strategy_enum.value
 
-  def create_java_executor(self, dist=None, native_image_config=None):
+  def create_java_executor(self, dist=None, native_image_execution=None):
     """Create java executor that uses this task's ng daemon, if allowed.
 
     Call only in execute() or later. TODO: Enforce this.
@@ -101,7 +104,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
                                             dist,
                                             connect_timeout=self.get_options().nailgun_timeout_seconds,
                                             connect_attempts=self.get_options().nailgun_connect_attempts),
-      self.GRAAL: lambda: GraalExecutor(dist, self._graal_ce, native_image_config=native_image_config),
+      self.GRAAL: lambda: GraalExecutor(dist, self._graal_ce, native_image_execution=native_image_execution),
       self.SUBPROCESS: lambda: SubprocessExecutor(dist),
       self.HERMETIC: lambda: SubprocessExecutor(dist),
       self.HERMETIC_WITH_NAILGUN: lambda: SubprocessExecutor(dist),
@@ -111,9 +114,15 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
     GraalExecutor: [WorkUnitLabel.RUN],
   }
 
+  class GraalNativeImageExecution(datatype([
+      ('build_config', GraalCE.GraalNativeImageConfiguration),
+      ('run_digests', TypedCollection(Exactly(Digest))),
+      ('output_dir', text_type),
+  ])): pass
+
   def runjava(self, classpath, main, jvm_options=None, args=None, workunit_name=None,
               workunit_labels=None, workunit_log_config=None, dist=None, async=False,
-              native_image_config=None):
+              native_image_execution=None):
     """Runs the java main using the given classpath and args.
 
     If --execution-strategy=subprocess is specified then the java main is run in a freshly spawned
@@ -122,7 +131,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
 
     :API: public
     """
-    executor = self.create_java_executor(dist=dist, native_image_config=native_image_config)
+    executor = self.create_java_executor(dist=dist, native_image_execution=native_image_execution)
 
     for executor_cls, labels in self._extra_workunit_labels.items():
       if isinstance(executor, executor_cls):

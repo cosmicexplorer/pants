@@ -15,10 +15,14 @@ from six import string_types
 from twitter.common.collections import maybe_list
 
 from pants.base.build_environment import get_buildroot
+from pants.base.workunit import WorkUnitLabel
+from pants.engine.fs import DirectoryToMaterialize
+from pants.engine.isolated_process import ExecuteProcessRequest, ProcessExecutionFailure
 from pants.util.contextutil import environment_as
 from pants.util.dirutil import relativize_paths
 from pants.util.meta import AbstractClass
 from pants.util.process_handler import subprocess
+from pants.util.strutil import safe_shlex_join
 
 
 logger = logging.getLogger(__name__)
@@ -265,15 +269,29 @@ class GraalExecutor(SubprocessExecutor):
   :API: public
   """
 
-  def __init__(self, distribution, graal_ce, native_image_config):
+  def __init__(self, distribution, graal_ce, native_image_execution):
+    if native_image_execution is None:
+      raise ValueError("""\
+graal native-image execution configuration was not provided!
+`NailgunTask`s using the 'graal' execution_strategy must provide a 'native_image_execution'
+argument to self.runjava().""")
     super(GraalExecutor, self).__init__(distribution=distribution)
     self._graal_ce = graal_ce
-    self._native_image_config = native_image_config
+    self._native_image_execution = native_image_execution
 
   def _runner(self, classpath, main, jvm_options, args, cwd=None):
-    native_image_path = self._graal_ce.produce_native_image(
-      classpath, main, self._native_image_config, jvm_options=jvm_options)
-    full_command = [native_image_path] + args
+    if cwd is not None:
+      raise NotImplementedError('`cwd` is not supported for exeucting graal images!')
+    build_config = self._native_image_execution.build_config
+    graal_dist, native_image_relpath, digest = self._graal_ce.produce_native_image(
+      classpath, main, build_config, jvm_options)
+
+    full_command = [native_image_relpath] + args
+
+    context = build_config.context
+    scheduler = context._scheduler
+    merged_digest = scheduler.merge_directories(
+      tuple([digest]) + self._native_image_execution.run_digests)
 
     class GraalNativeImageRunner(self.Runner):
       @property
@@ -285,9 +303,55 @@ class GraalExecutor(SubprocessExecutor):
         return full_command
 
       def spawn(_, stdout=None, stderr=None, stdin=None):
-        return self._spawn(full_command, cwd, stdout=stdout, stderr=stderr, stdin=stdin)
+        raise NotImplementedError(
+          'spawn() not supported for graal images. use ExecutionGraph and WorkerPool, or v2 rules')
 
       def run(_, stdout=None, stderr=None, stdin=None):
-        return self._spawn(full_command, cwd, stdout=stdout, stderr=stderr, stdin=stdin).wait()
+        if stdin is not None:
+          raise NotImplementedError(
+            'stdin not yet supported for graal images. '
+            'take a snapshot and merge it with input_files in ExecuteProcessRequest!')
+        # TODO: studiously ignore stdout and stderr args for now!
+        # execute_process_synchronously_or_raise() will do the workunit redirection for us!
+
+        mkdir_before_command = [
+          '/bin/sh',
+          '-c',
+          '/bin/mkdir -p {} && {}'.format(
+            self._native_image_execution.output_dir,
+            safe_shlex_join(full_command),
+          )
+        ]
+        req = ExecuteProcessRequest(
+          argv=tuple(mkdir_before_command),
+          input_files=merged_digest,
+          description='execution a native image for {}'.format(main),
+          output_directories=tuple([self._native_image_execution.output_dir]),
+          jdk_home=graal_dist.home,
+        )
+        logger.debug('graal native-image invocation request: {}'.format(req))
+
+        retry_iteration = 0
+
+        # TODO: any retries will cause workunits to fail!
+        while True:
+          try:
+            res = context.execute_process_synchronously_or_raise(
+              # TODO: pipe in workunit name!!!
+              req, 'graal-native-image-execute', [WorkUnitLabel.COMPILER])
+            break
+          except ProcessExecutionFailure as e:
+            if e.exit_code == 227:
+              env = {'_retry_iteration': '{}'.format(retry_iteration)}
+              retry_iteration += 1
+              req = req.copy(env=env)
+              continue
+            raise
+
+        scheduler.materialize_directories(
+          tuple([DirectoryToMaterialize(get_buildroot(), res.output_directory_digest)]))
+
+        return res.output_directory_digest
+
 
     return GraalNativeImageRunner()
