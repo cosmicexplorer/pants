@@ -25,7 +25,7 @@ from pants.backend.jvm.tasks.jvm_compile.jvm_compile import JvmCompile
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
-from pants.engine.fs import Digest, DirectoryToMaterialize, PathGlobs, PathGlobsAndRoot, Snapshot
+from pants.engine.fs import DirectoryToMaterialize, PathGlobs, PathGlobsAndRoot, Snapshot
 from pants.engine.isolated_process import ExecuteProcessRequest, ProcessExecutionFailure
 from pants.java.distribution.distribution import DistributionLocator
 from pants.java.jar.jar_dependency import JarDependency
@@ -312,10 +312,10 @@ class ScalacCompile(JvmCompile):
                             # NB: Set with self.set_distribution() in __init__!
                             dist=self._dist,
                             **kwargs)
-      if isinstance(result, Digest):
-        exit_code = 0
-      else:
+      if isinstance(result, int):
         exit_code = result
+      else:
+        exit_code = 0
     except ProcessExecutionFailure as e:
       exit_code = e.exit_code
 

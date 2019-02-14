@@ -153,6 +153,20 @@ class GraalCE(NativeTool, JvmToolMixin):
         + self.reflection_resources_paths
       )
 
+  class _GraalDist(Distribution):
+
+    def find_libs_path_globs(self, names):
+      libs_abs = self.find_libs(names)
+      libs_rel = fast_relpath_collection(libs_abs, root=self.home)
+      path_globs = PathGlobsAndRoot(
+        PathGlobs(tuple(libs_rel)),
+        self.home)
+      return (libs_rel, path_globs)
+
+  @memoized_property
+  def graal_dist(self):
+    return self._GraalDist(home_path=self.select())
+
   class NativeImageCreationError(Exception): pass
 
   @memoized_method
@@ -186,13 +200,11 @@ class GraalCE(NativeTool, JvmToolMixin):
     ] + jvm_options)
     output_image_file_name = '{}-{}'.format(main_class, input_hash)
 
-    graal_dist = Distribution(home_path=self.select())
-
     # If the image already exists, just snapshot it and pass it on.
     fingerprinted_native_image_path = os.path.join(self._cache_dir, output_image_file_name)
     if os.path.isfile(fingerprinted_native_image_path):
       return (
-        graal_dist,
+        self.graal_dist,
         output_image_file_name,
         self._snapshot_native_image(scheduler, fingerprinted_native_image_path).directory_digest,
       )
@@ -202,9 +214,6 @@ class GraalCE(NativeTool, JvmToolMixin):
     tool_cp_entries = (
       self._memoized_classpath_entries_with_digests(tuple(tool_classpath), scheduler)
       + list(build_config.extra_build_cp)
-      # + self._memoized_classpath_entries_with_digests(tuple(
-      #   graal_dist.find_libs(['rt.jar', 'dt.jar', 'jce.jar', 'tools.jar'])
-      # ), scheduler, root=graal_dist.home)
     )
     native_image_exe, image_snap = self._native_image_exe(scheduler)
     # native-image needs gcc (specifically) and a linker and assembler to build things.
@@ -221,13 +230,6 @@ class GraalCE(NativeTool, JvmToolMixin):
       ])
     )
     merged_digest = scheduler.merge_directories(all_digests)
-
-    # jdk_entries = [
-    #   '.jdk/{}'.format(rel_lib)
-    #   for rel_lib in
-    #   fast_relpath_collection(graal_dist.find_libs(self._JDK_LIB_NAMES), root=graal_dist.home)
-    # ]
-    # logger.debug('jdk_entries: {}'.format(jdk_entries))
 
     # Otherwise, build it with a remotable process execution.
     argv = [
@@ -270,7 +272,7 @@ class GraalCE(NativeTool, JvmToolMixin):
       input_files=merged_digest,
       description='graal native-image for {}'.format(main_class),
       output_files=tuple([output_image_file_name]),
-      jdk_home=graal_dist.home,
+      jdk_home=self.graal_dist.home,
     )
     logger.debug('req: {}'.format(req))
     try:
@@ -285,4 +287,4 @@ class GraalCE(NativeTool, JvmToolMixin):
       DirectoryToMaterialize(self._cache_dir, res.output_directory_digest),
     ]))
 
-    return (graal_dist, output_image_file_name, res.output_directory_digest)
+    return (self.graal_dist, output_image_file_name, res.output_directory_digest)
