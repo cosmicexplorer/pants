@@ -11,6 +11,7 @@ from future.utils import text_type
 
 from pants.backend.jvm.subsystems.jvm_tool_mixin import JvmToolMixin
 from pants.backend.jvm.tasks.classpath_products import ClasspathEntry
+from pants.backend.native.config.environment import Platform
 from pants.backend.native.subsystems.binaries.binutils import Binutils
 from pants.backend.native.subsystems.binaries.gcc import GCC
 from pants.base.build_environment import get_buildroot, get_pants_cachedir
@@ -216,18 +217,20 @@ class GraalCE(NativeTool, JvmToolMixin):
       + list(build_config.extra_build_cp)
     )
     native_image_exe, image_snap = self._native_image_exe(scheduler)
-    # native-image needs gcc (specifically) and a linker and assembler to build things.
-    gcc_snapshot = self._gcc_install(scheduler)
-    binutils_snapshot = self._binutils_install(scheduler)
 
     all_digests = (
       build_config.digests
       + tuple(cp.directory_digest.directory_digest for cp in tool_cp_entries)
       + tuple([
         image_snap.directory_digest,
-        gcc_snapshot.directory_digest,
-        binutils_snapshot.directory_digest,
-      ])
+        # native-image needs gcc (specifically) and a linker and assembler (on Linux) to build
+        # things.
+        self._gcc_install(scheduler).directory_digest,
+      ] + Platform.create().resolve_for_enum_variant({
+        'darwin': lambda: [],
+        # TODO: use the NativeToolchain to get the appropriate linker?
+        'linux': lambda: [self._binutils_install(scheduler).directory_digest],
+      })())
     )
     merged_digest = scheduler.merge_directories(all_digests)
 
@@ -263,6 +266,8 @@ class GraalCE(NativeTool, JvmToolMixin):
       .format(','.join(build_config.reflection_resources_paths))
     ] if build_config.reflection_resources_paths else [])
 
+    # TODO: this fails on osx, it needs _stdio.h! This can probably be fixed by adding XCodeCLITools
+    # to it, or something.
     req = ExecuteProcessRequest(
       # TODO: /bin/sh is still breaking isolation a bit, even if we use it in testing.
       argv=tuple([
