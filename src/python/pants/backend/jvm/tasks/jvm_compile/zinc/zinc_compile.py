@@ -357,6 +357,7 @@ class BaseZincCompile(JvmCompile):
       self.HERMETIC: '-classpath',
       self.SUBPROCESS: '-classpath',
       self.NAILGUN: '-classpath',
+      self.GRAAL: '-classpath',
     })
     zinc_args.extend([
       # TODO: for some reason this argument isn't accepted (although it is also later on the command
