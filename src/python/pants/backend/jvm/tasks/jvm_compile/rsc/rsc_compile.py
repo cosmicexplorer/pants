@@ -451,8 +451,11 @@ class RscCompile(ScalacCompile):
 
           sources_snapshot = ctx.target.sources_snapshot(scheduler=self.context._scheduler)
 
-          def hermetic_digest_classpath():
-            hermetic_dist = self._hermetic_jvm_distribution()
+          def hermetic_digest_classpath(with_graal=False):
+            if with_graal:
+              hermetic_dist = self._graal_ce.graal_dist
+            else:
+              hermetic_dist = self._hermetic_jvm_distribution()
             jdk_libs_rel, jdk_libs_digest = self._jdk_libs_paths_and_digest(hermetic_dist)
             merged_sources_and_jdk_digest = self.context._scheduler.merge_directories(
               (jdk_libs_digest, sources_snapshot.directory_digest))
@@ -465,10 +468,10 @@ class RscCompile(ScalacCompile):
             return (empty_digest, classpath_abs_jdk, nonhermetic_dist)
 
           (input_digest, classpath_entry_paths, distribution) = self.execution_strategy_enum.resolve_for_enum_variant({
-            self.HERMETIC: hermetic_digest_classpath,
-            self.HERMETIC_WITH_NAILGUN: hermetic_digest_classpath,
+            self.HERMETIC: lambda: hermetic_digest_classpath(with_graal=False),
+            self.HERMETIC_WITH_NAILGUN: lambda: hermetic_digest_classpath(with_graal=False),
             self.SUBPROCESS: nonhermetic_digest_classpath,
-            self.GRAAL: nonhermetic_digest_classpath,
+            self.GRAAL: lambda: hermetic_digest_classpath(with_graal=True),
             self.NAILGUN: nonhermetic_digest_classpath,
           })()
 
@@ -718,39 +721,80 @@ class RscCompile(ScalacCompile):
   def _rsc_classpath_fingerprint(self):
     return self.classpath_fingerprint(tuple(self._rsc_cp_entries))
 
-  def _runtool_graal_nonhermetic(self, parent_workunit, classpath, main, tool_name, args,
-                                 distribution):
-    bootstrap_classpath_with_graal_runtime = self.scalac_bootstrap_classpath_paths() + [
-      self._graal_ce.runtime_jar,
-    ] + classpath
+  def _runtool_graal(self, parent_workunit, classpath, main, tool_name, args, input_files=tuple(), input_digest=None, output_dir=None):
+    boot_cp_entries = self._memoized_classpath_entries_with_digests(
+      tuple(self.scalac_bootstrap_classpath_paths()),
+      self.context._scheduler)
+    # TODO: `graal_rt` provides the rt.jar necessary to run native images. We can provide it through
+    # the .jdk symlink with just .jdk/jre/lib/rt.jar, but since it's graal-specific, it seems
+    # reasonable to "pin" it with its own directory digest (this also makes it remotable, I think).
+    graal_rt = self._graal_ce.runtime_jar_cp_entry(self.context._scheduler)
     args_with_graal_bootstrap_cp = [
-      '-Dscala.boot.class.path={}'.format(':'.join(bootstrap_classpath_with_graal_runtime)),
+      # Join relative paths to elements of the bootstrap classpath (these will be their paths in the
+      # sandbox).
+      '-Dscala.boot.class.path={}'.format(':'.join(
+        [cp.path for cp in boot_cp_entries]
+        + [graal_rt.path]
+      )),
       '-Dscala.usejavacp=true',
     ] + args
+    build_digests = [cp.directory_digest.directory_digest for cp in boot_cp_entries]
+    build_config = GraalCE.GraalNativeImageConfiguration(
+      extra_build_cp=tuple(),
+      digests=tuple(build_digests),
+      substitution_resources_paths=tuple(),
+      reflection_resources_paths=tuple(),
+      context=self.context,
+    )
+
+    # Now to generate the run configuration ???
+    pathglobs = [f if os.path.isfile(f) else '{}/**'.format(f) for f in input_files]
+
+    # dont capture snapshot, if pathglobs is empty
+    if pathglobs:
+      root = PathGlobsAndRoot(
+      PathGlobs(tuple(pathglobs)),
+      text_type(get_buildroot()))
+      path_globs_input_digest = self.context._scheduler.capture_snapshots((root,))[0].directory_digest
+
+    merged_input_files = self.context._scheduler.merge_directories(
+      ((path_globs_input_digest,) if path_globs_input_digest else ())
+      + ((input_digest,) if input_digest else ()))
+
+    run_digests = [merged_input_files] + build_digests + [
+      graal_rt.directory_digest.directory_digest
+    ]
+    logger.debug('output_dir: {}'.format(output_dir))
+    bootstrap_classpath_with_graal_runtime = self.scalac_bootstrap_classpath_paths() + classpath
     return self._runtool_nonhermetic(parent_workunit, bootstrap_classpath_with_graal_runtime, main,
-                                     tool_name, args_with_graal_bootstrap_cp, distribution,
-                                     native_image_config=GraalCE.GraalNativeImageConfiguration(
-                                       extra_cp=tuple(),
-                                       substitution_resources_paths=tuple(),
-                                       reflection_resources_paths=tuple(),
-                                       input_fingerprint=self._rsc_classpath_fingerprint,
+                                     tool_name, args_with_graal_bootstrap_cp,
+                                     native_image_execution=self.GraalNativeImageExecution(
+                                       build_config=build_config,
+                                       run_digests=tuple(run_digests),
+                                       output_dir=output_dir,
                                      ))
 
   # The classpath is parameterized so that we can have a single nailgun instance serving all of our
   # execution requests.
-  def _runtool_nonhermetic(self, parent_workunit, classpath, main, tool_name, args, distribution,
-                           **kwargs):
-    result = self.runjava(classpath=classpath,
-                          main=main,
-                          jvm_options=['-Xmx4g'],
-                          # jvm_options=self.get_options().jvm_options,
-                          args=args,
-                          workunit_name=tool_name,
-                          workunit_labels=[WorkUnitLabel.TOOL],
-                          dist=distribution,
-                          **kwargs)
-    if result != 0:
-      raise TaskError('Running {} failed'.format(tool_name))
+  def _runtool_nonhermetic(self, parent_workunit, classpath, main, tool_name, args, **kwargs):
+    try:
+      result = self.runjava(classpath=classpath,
+                            main=main,
+                            jvm_options=['-Xmx4g'],
+                            # jvm_options=self.get_options().jvm_options,
+                            args=args,
+                            workunit_name=tool_name,
+                            workunit_labels=[WorkUnitLabel.TOOL],
+                            **kwargs)
+      if isinstance(result, int):
+        exit_code = result
+      else:
+        exit_code = 0
+    except ProcessExecutionFailure as e:
+      exit_code = e.exit_code
+    if exit_code != 0:
+      raise TaskError('Running {} failed'.format(tool_name), exit_code=exit_code)
+
     runjava_workunit = None
     for c in parent_workunit.children:
       if c.name is tool_name:
@@ -772,11 +816,12 @@ class RscCompile(ScalacCompile):
           main, tool_name, args, distribution, with_nailgun=True,
           tgt=tgt, input_files=input_files, input_digest=input_digest, output_dir=output_dir),
         self.SUBPROCESS: lambda: self._runtool_nonhermetic(
-          wu, self.tool_classpath(tool_name), main, tool_name, args, distribution),
-        self.GRAAL: lambda: self._runtool_graal_nonhermetic(
-          wu, self.tool_classpath(tool_name), main, tool_name, args, distribution),
+          wu, self.tool_classpath(tool_name), main, tool_name, args, dist=distribution),
+        self.GRAAL: lambda: self._runtool_graal(
+          wu, self.tool_classpath(tool_name), main, tool_name, args,
+          input_files=input_files, input_digest=input_digest, output_dir=output_dir),
         self.NAILGUN: lambda: self._runtool_nonhermetic(
-          wu, self._nailgunnable_combined_classpath, main, tool_name, args, distribution),
+          wu, self._nailgunnable_combined_classpath, main, tool_name, args, dist=distribution),
       })()
 
   # TODO: I think this should use self._classify_compile_target()!
