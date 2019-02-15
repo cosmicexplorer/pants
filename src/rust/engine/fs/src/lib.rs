@@ -374,10 +374,13 @@ impl PathGlob {
       if !canonical_dir_parent.0.pop() {
         let mut symbolic_path = symbolic_path_parent;
         symbolic_path.extend(parts.iter().map(|p| p.as_str()));
-        return Err(format!(
-          "Globs may not traverse outside of the buildroot: {:?}",
-          symbolic_path,
-        ));
+        // TODO: we don't really want to do this in general, it is a temporary hack to fingerprint
+        // the xcode cli tools!
+        // return Err(format!(
+        //   "Globs may not traverse outside of the buildroot: {:?}",
+        //   symbolic_path,
+        // ));
+        return Ok(vec![]);
       }
       symbolic_path_parent.push(Path::new(*PARENT_DIR));
       PathGlob::parse_globs(canonical_dir_parent, symbolic_path_parent, &parts[1..])

@@ -14,6 +14,7 @@ from pants.backend.jvm.tasks.classpath_products import ClasspathEntry
 from pants.backend.native.config.environment import Platform
 from pants.backend.native.subsystems.binaries.binutils import Binutils
 from pants.backend.native.subsystems.binaries.gcc import GCC
+from pants.backend.native.subsystems.xcode_cli_tools import XCodeCLITools
 from pants.base.build_environment import get_buildroot, get_pants_cachedir
 from pants.base.hash_utils import stable_json_sha1
 from pants.base.workunit import WorkUnitLabel
@@ -78,6 +79,7 @@ class GraalCE(NativeTool, JvmToolMixin):
     return super(GraalCE, cls).subsystem_dependencies() + (
       Binutils.scoped(cls),
       GCC.scoped(cls),
+      XCodeCLITools.scoped(cls),
     )
 
   @memoized_method
@@ -91,6 +93,29 @@ class GraalCE(NativeTool, JvmToolMixin):
 
   def _gcc_install(self, scheduler):
     return self._snapshot_everything_under(scheduler, GCC.scoped_instance(self).select())
+
+  def _xcode_cli_tools_install(self, scheduler):
+    cpp_compiler = XCodeCLITools.scoped_instance(self).cpp_compiler()
+    bin_dirs = cpp_compiler.path_entries
+    lib_dirs = cpp_compiler.library_dirs
+    include_dirs = cpp_compiler.include_dirs
+
+    # Attempt to capture snapshots which would put each directory at the top level of the sandbox.
+    all_globs_with_roots = []
+    for resource_dir in bin_dirs + lib_dirs + include_dirs:
+      containing_dir = os.path.dirname(resource_dir)
+      directory_basename = os.path.basename(resource_dir)
+      globs_with_dir = PathGlobsAndRoot(PathGlobs(['{}/**/*'.format(directory_basename)]),
+                                        containing_dir)
+      all_globs_with_roots.append(globs_with_dir)
+
+    # System/Library/Frameworks/CoreFoundation.framework/Versions/A/Headers/CoreFoundation.h
+    framework_glob = 'System/Library/Frameworks/CoreFoundation.framework/Versions/A/Headers/*'
+    framework_dir = '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
+    all_globs_with_roots.append(PathGlobsAndRoot(PathGlobs([framework_glob]), framework_dir))
+
+    all_snapshots = scheduler.capture_snapshots(tuple(all_globs_with_roots))
+    return all_snapshots
 
   _FINAL_PATH_COMPONENTS = {
     'mac': ['Contents', 'home'],
@@ -210,8 +235,6 @@ class GraalCE(NativeTool, JvmToolMixin):
         self._snapshot_native_image(scheduler, fingerprinted_native_image_path).directory_digest,
       )
 
-    # TODO: we can just make this instead of putting it in the build config!
-
     tool_cp_entries = (
       self._memoized_classpath_entries_with_digests(tuple(tool_classpath), scheduler)
       + list(build_config.extra_build_cp)
@@ -227,7 +250,10 @@ class GraalCE(NativeTool, JvmToolMixin):
         # things.
         self._gcc_install(scheduler).directory_digest,
       ] + Platform.create().resolve_for_enum_variant({
-        'darwin': lambda: [],
+        'darwin': lambda: [
+          snap.directory_digest
+          for snap in self._xcode_cli_tools_install(scheduler)
+        ],
         # TODO: use the NativeToolchain to get the appropriate linker?
         'linux': lambda: [self._binutils_install(scheduler).directory_digest],
       })())
@@ -273,7 +299,18 @@ class GraalCE(NativeTool, JvmToolMixin):
       argv=tuple([
         '/bin/sh',
         '-c',
-        '/bin/ln -s gcc bin/cc && PATH=$(pwd)/bin:$PATH {}'.format(safe_shlex_join(argv))]),
+        ' ; '.join([
+          '([[ -f bin/cc ]] || /bin/ln -s gcc bin/cc)',
+          # TODO: native-image complains about not being able to find
+          # CoreFoundation/CoreFoundation.h, which isn't even a path that exists (no CoreFoundation
+          # dir exists), so we have to make a directory named that, and stick it in the root of the
+          # sandbox so native-image can pick it up.
+          """\
+/bin/mkdir -p CoreFoundation && \
+/bin/cp System/Library/Frameworks/CoreFoundation.framework/Versions/A/Headers/* CoreFoundation/""",
+          'PATH=$(pwd)/bin:$PATH CPATH=$(pwd) {}'.format(safe_shlex_join(argv))
+        ]),
+      ]),
       input_files=merged_digest,
       description='graal native-image for {}'.format(main_class),
       output_files=tuple([output_image_file_name]),

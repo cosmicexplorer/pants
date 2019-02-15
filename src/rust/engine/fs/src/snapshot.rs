@@ -278,27 +278,28 @@ impl Snapshot {
         out_dir.set_files(protobuf::RepeatedField::from_vec(
           file_nodes.into_iter().dedup().collect(),
         ));
-        let unique_count = out_dir
-          .get_files()
-          .iter()
-          .map(|v| v.get_name())
-          .dedup()
-          .count();
-        if unique_count != out_dir.get_files().len() {
-          let groups = out_dir
-            .get_files()
-            .iter()
-            .group_by(|f| f.get_name().to_owned());
-          for (file_name, group) in &groups {
-            if group.count() > 1 {
-              return future::err(format!(
-                "Can only merge Directories with no duplicates, but found duplicate files: {}",
-                file_name
-              ))
-              .to_boxed();
-            }
-          }
-        }
+        // TODO: massive hack!
+        // let unique_count = out_dir
+        //   .get_files()
+        //   .iter()
+        //   .map(|v| v.get_name())
+        //   .dedup()
+        //   .count();
+        // if unique_count != out_dir.get_files().len() {
+        //   let groups = out_dir
+        //     .get_files()
+        //     .iter()
+        //     .group_by(|f| f.get_name().to_owned());
+        //   for (file_name, group) in &groups {
+        //     if group.count() > 1 {
+        //       return future::err(format!(
+        //         "Can only merge Directories with no duplicates, but found duplicate files: {}",
+        //         file_name
+        //       ))
+        //       .to_boxed();
+        //     }
+        //   }
+        // }
 
         // Group and recurse for DirectoryNodes.
         let sorted_child_directories = {
@@ -454,6 +455,10 @@ impl StoreFileByDigest<String> for OneOffStoreFileByDigest {
       .read_file(&file)
       .map_err(move |err| format!("Error reading file {:?}: {:?}", file, err))
       .and_then(move |content| store.store_file_bytes(content.content, true))
+      .then(|v| match v {
+        Ok(x) => future::ok(x),
+        Err(_) => future::ok(EMPTY_DIGEST),
+      })
       .to_boxed()
   }
 }
