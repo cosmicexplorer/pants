@@ -7,6 +7,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import errno
 import logging
 import os
+import re
 import textwrap
 from contextlib import closing
 from hashlib import sha1
@@ -256,7 +257,24 @@ class ScalacCompile(JvmCompile):
       tuple(fast_relpath_collection(cp.path for cp in without_dep_classpath)), scheduler)
     return with_cp + now_captured_empty_entries
 
+  def _filter_scalac_args(self, args):
+    valid_args = []
+    prev_was_continued_invalid = False
+    for arg in args:
+      if prev_was_continued_invalid:
+        prev_was_continued_invalid = False
+        continue
+      elif re.match(r'^-C', arg):
+        continue
+      elif arg in ['-file-filter', '-log-level']:
+        prev_was_continued_invalid = True
+        continue
+      else:
+        valid_args.append(re.sub(r'^-S', '', arg))
+    return valid_args
+
   def _compile_graal(self,  jvm_options, ctx, classes_dir, scalac_args, dependency_classpath):
+    scalac_args = self._filter_scalac_args(scalac_args)
     boot_cp_entries = self._memoized_classpath_entries_with_digests(
       tuple(self.scalac_bootstrap_classpath_paths()),
       self.context._scheduler)
@@ -279,7 +297,8 @@ class ScalacCompile(JvmCompile):
       digests=tuple(build_digests),
       substitution_resources_paths=tuple([
         'org/pantsbuild/zinc/native-image-stubs/substitutions.json',
-        'org/pantsbuild/zinc/native-image-stubs/substitutions-2.12.json',
+        # TODO: add this automatically iff the scala version is 2.12!
+        # 'org/pantsbuild/zinc/native-image-stubs/substitutions-2.12.json',
       ]),
       reflection_resources_paths=tuple([
         'org/pantsbuild/zinc/native-image-stubs/reflection-config.json',

@@ -53,9 +53,9 @@ jar_library(
 jar_library(
   name = 'native-image-stubs',
   jars = [
-    jar(org='org.pantsbuild', name='native-image-stubs',
+    jar(org='org.pantsbuild', name='native-image-stubs', rev='xxx',
         # TODO: from src/scala/org/pantsbuild/zinc/native-image-stubs:bin!
-        url='file:///home/cosmicexplorer/tools/pants/dist/native-image-stubs.jar',
+        url='file:///Users/dmcclanahan/tools/pants/dist/native-image-stubs.jar',
         mutable=True),
   ]
 )
@@ -67,11 +67,11 @@ jar_library(
     # at SHA f30fafa8d13974389ea8bb1797645e7ea37728dc, after changing the `scala` field at the very
     # top of the build.sbt to "2.12.8".
     jar(org='com.twitter', name='rsc_2.12', rev='xxx',
-        url='file:///home/cosmicexplorer/.m2/repository/com/twitter/rsc_2.12/0.0.0-732-f30fafa8-20190210-2019/rsc_2.12-0.0.0-732-f30fafa8-20190210-2019.jar',
+        url='file:///Users/dmcclanahan/.m2/repository/com/twitter/rsc_2.12/0.0.0-732-f30fafa8-20190213-2201/rsc_2.12-0.0.0-732-f30fafa8-20190213-2201.jar',
         mutable=True),
     jar(org='org.scalameta', name='semanticdb-scalac_2.12.8', rev='4.1.1'),
     jar(org='com.twitter', name='scalasig_2.12', rev='xxx',
-        url='file:///home/cosmicexplorer/.m2/repository/com/twitter/scalasig_2.12/0.0.0-732-f30fafa8-20190210-2019/scalasig_2.12-0.0.0-732-f30fafa8-20190210-2019.jar',
+        url='file:///Users/dmcclanahan/.m2/repository/com/twitter/scalasig_2.12/0.0.0-732-f30fafa8-20190213-2201/scalasig_2.12-0.0.0-732-f30fafa8-20190213-2201.jar',
         mutable=True),
     jar(org='org.ow2.asm', name='asm', rev='6.0'),
     jar(org='org.ow2.asm', name='asm-tree', rev='6.0'),

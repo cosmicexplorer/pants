@@ -414,6 +414,12 @@ trait GlobMatchingImplementation<E: Display + Send + Sync + 'static>: VFS<E> {
           })
           .unwrap_or_else(|| vec![])
       })
+      .then(|v| match v {
+        Ok(x) => future::ok(x),
+        // TODO: This ignores every possible error -- we only want to ignore reading absolute
+        // symlinks!
+        Err(_) => future::ok(vec![]),
+      })
       .and_then(move |link_globs| {
         future::result(PathGlobs::from_globs(link_globs))
           .map_err(|e| Self::mk_error(e.as_str()))
