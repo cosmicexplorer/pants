@@ -288,14 +288,18 @@ class ScalacCompile(JvmCompile):
       '-Dscala.usejavacp=true',
     ] + scalac_args
     build_digests = [cp.directory_digest.directory_digest for cp in boot_cp_entries]
+    scala_is_probably_2_12 = (
+      (self._scala.version == '2.12')
+      or (self._scala.version == 'custom' and (self._scala.get_options().suffix_version == '2.12')))
+    substitution_resources_paths = [
+      'org/pantsbuild/zinc/native-image-stubs/substitutions.json',
+    ] + ([
+      'org/pantsbuild/zinc/native-image-stubs/substitutions-2.12.json',
+    ] if scala_is_probably_2_12 else [])
     build_config = GraalCE.GraalNativeImageConfiguration(
       extra_build_cp=tuple(self._substitutions_cp_entries),
       digests=tuple(build_digests),
-      substitution_resources_paths=tuple([
-        'org/pantsbuild/zinc/native-image-stubs/substitutions.json',
-        # TODO: add this automatically iff the scala version is 2.12!
-        # 'org/pantsbuild/zinc/native-image-stubs/substitutions-2.12.json',
-      ]),
+      substitution_resources_paths=tuple(substitution_resources_paths),
       reflection_resources_paths=tuple([
         'org/pantsbuild/zinc/native-image-stubs/reflection-config.json',
       ]),
