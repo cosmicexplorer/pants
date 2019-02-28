@@ -398,6 +398,7 @@ class BaseZincCompile(JvmCompile):
         dependency_classpath, scalac_classpath_entries),
       self.SUBPROCESS: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
       self.NAILGUN: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
+      self.GRAAL: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
     })()
 
   class ZincCompileError(TaskError):

@@ -17,7 +17,6 @@ from pants.java.jar.jar_dependency import JarDependency
 from pants.option.custom_types import file_option
 from pants.task.fmt_task_mixin import FmtTaskMixin
 from pants.task.lint_task_mixin import LintTaskMixin
-from pants.util.collections import assert_single_element
 from pants.util.process_handler import SubprocessProcessHandler
 
 
@@ -84,7 +83,7 @@ class ScalaFmt(RewriteBase):
 
     sources_per_process = [
       all_sources[x:x+num_files_per_proc]
-      for x in xrange(0, len(all_sources), num_files_per_proc)
+      for x in range(0, len(all_sources), num_files_per_proc)
     ]
     with self.context.new_workunit('scalafmt-multiprocessing') as workunit:
       subprocs = [
