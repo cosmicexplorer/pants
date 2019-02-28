@@ -11,7 +11,6 @@ from pants.backend.jvm.tasks.jvm_tool_task_mixin import JvmToolTaskMixin
 from pants.base.exceptions import TaskError
 from pants.base.hash_utils import stable_json_hash
 from pants.base.workunit import WorkUnitLabel
-from pants.init.subprocess import Subprocess
 from pants.java import util
 from pants.java.executor import GraalExecutor, SubprocessExecutor
 from pants.java.jar.jar_dependency import JarDependency
