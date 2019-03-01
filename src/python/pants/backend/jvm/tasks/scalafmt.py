@@ -6,17 +6,21 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import os
 from abc import abstractproperty
+from builtins import zip
 
 from twitter.common.collections import OrderedSet
 
+from pants.backend.jvm.tasks.classpath_entry import ClasspathEntry
 from pants.backend.jvm.tasks.rewrite_base import RewriteBase
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnit
+from pants.engine.fs import PathGlobs, PathGlobsAndRoot
 from pants.java.jar.jar_dependency import JarDependency
 from pants.option.custom_types import file_option
 from pants.task.fmt_task_mixin import FmtTaskMixin
 from pants.task.lint_task_mixin import LintTaskMixin
+from pants.util.memo import memoized_method
 from pants.util.process_handler import SubprocessProcessHandler
 
 
@@ -108,6 +112,14 @@ invalidation hash of all targets piped into invoke_tool() and invoke_tool_async(
 
       workunit.set_outcome(WorkUnit.SUCCESS)
 
+  @memoized_method
+  def _memoized_classpath_entries_with_digests(self, classpath_paths, scheduler):
+    snapshots = scheduler.capture_snapshots(tuple(
+      PathGlobsAndRoot(PathGlobs([path]), get_buildroot())
+      for path in classpath_paths
+    ))
+    return [ClasspathEntry(path, snapshot) for path, snapshot in list(zip(classpath_paths, snapshots))]
+
   # TODO: remove the repeated boilerplate here!
   def invoke_tool_async(self, target_sources):
     # If no config file is specified, use default scalafmt config.
@@ -135,6 +147,11 @@ invalidation hash of all targets piped into invoke_tool() and invoke_tool_async(
         config_file = os.path.join(get_buildroot(), config_file)
       args.extend(['--config', config_file])
     args.extend([source for _target, source in target_sources])
+
+    # build_config = GraalCE.GraalNativeImageConfiguration(
+    #   extra_build_cp=tuple(),
+    #   digests=tuple(self.tool_classpath('scalafmt'))
+    # )
 
     return self.runjava(classpath=self.tool_classpath('scalafmt'),
                         main='org.scalafmt.cli.Cli',

@@ -9,17 +9,20 @@ import os
 from future.utils import text_type
 
 from pants.backend.jvm.subsystems.graal import GraalCE
+from pants.backend.jvm.tasks.classpath_entry import ClasspathEntry
 from pants.backend.jvm.tasks.jvm_tool_task_mixin import JvmToolTaskMixin
+from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
-from pants.engine.fs import Digest
+from pants.engine.fs import Digest, PathGlobs, PathGlobsAndRoot
+from pants.engine.isolated_process import ExecuteProcessRequest
 from pants.java import util
 from pants.java.executor import GraalExecutor, SubprocessExecutor
 from pants.java.jar.jar_dependency import JarDependency
 from pants.java.nailgun_executor import NailgunExecutor, NailgunProcessGroup
 from pants.process.subprocess import Subprocess
 from pants.task.task import Task, TaskBase
-from pants.util.memo import memoized_property
+from pants.util.memo import memoized_method, memoized_property
 from pants.util.objects import Exactly, TypedCollection, datatype, enum
 
 class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
@@ -84,7 +87,34 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
   def execution_strategy(self):
     return self.execution_strategy_enum.value
 
-  def create_java_executor(self, dist=None, native_image_execution=None):
+  @memoized_method
+  def _snapshot_classpath(self, classpath_paths, scheduler):
+    snapshots = scheduler.capture_snapshots(tuple(
+      PathGlobsAndRoot(PathGlobs([path]), get_buildroot())
+      for path in classpath_paths
+    ))
+    return [ClasspathEntry(path, snapshot) for path, snapshot in list(zip(classpath_paths, snapshots))]
+
+  def create_graal_build_config(self, classpath_paths):
+    """???/subclasses can override to add substitution/reflection config!!!"""
+    snapshotted_cp_entries = self._snapshot_classpath(classpath_paths, self.context._scheduler)
+    return GraalCE.GraalNativeImageConfiguration(
+      extra_build_cp=tuple(),
+      digests=tuple(cp.directory_digest.directory_digest for cp in snapshotted_cp_entries),
+      substitution_resources_paths=tuple(),
+      reflection_resources_paths=tuple(),
+      context=self.context,
+    )
+
+  class HermeticExecutionConfig(datatype([
+      ('exe_req', ExecuteProcessRequest),
+      'context',
+      ('materialize_to_dir', Exactly(text_type, type(None))),
+  ])): pass
+
+  def create_java_executor(self, dist=None,
+                           # hermetic_execution_config=None,
+                           native_image_execution=None):
     """Create java executor that uses this task's ng daemon, if allowed.
 
     Call only in execute() or later. TODO: Enforce this.

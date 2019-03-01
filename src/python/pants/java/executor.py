@@ -262,6 +262,18 @@ class SubprocessExecutor(Executor):
       except OSError as e:
         raise self.Error('Problem executing {0}: {1}'.format(self._distribution.java, e))
 
+# class HermeticExecutor(Executor):
+#   """???/execute hermetically
+#   :API: public
+#   """
+#   def __init__(self, hermetic_execution_config):
+#     self._hermetic_execution_config = hermetic_execution_config
+#   def _runner(self, classpath, main, jvm_options, args, cwd=None):
+#     if cwd is not None:
+#       raise NotImplementedError(
+#         '`cwd` is not supported for hermetic execution! use HermeticExecutionConfig instead!')
+#     context = self._hermetic_execution_config.context
+#     scheduler =
 
 class GraalExecutor(SubprocessExecutor):
   """An Executor which bundles the classpath into a native image built with the Graal VM.
