@@ -69,15 +69,17 @@ class GraphIntegrationTest(PantsRunIntegrationTest):
       "Snapshot(PathGlobs(include=({unicode_literal}\'testprojects/src/python/sources/*.scala\',), exclude=({unicode_literal}\'testprojects/src/python/sources/*Test.scala\', {unicode_literal}\'testprojects/src/python/sources/*Spec.scala\'), glob_match_error_behavior<Exactly(GlobMatchErrorBehavior)>=GlobMatchErrorBehavior(value=error), conjunction<Exactly(GlobExpansionConjunction)>=GlobExpansionConjunction(value=any_match)))".format(unicode_literal='u' if PY2 else ''),
       "Globs did not match. Excludes were: [\"testprojects/src/python/sources/*Test.scala\", \"testprojects/src/python/sources/*Spec.scala\"]. Unmatched globs were: [\"testprojects/src/python/sources/*.scala\"].",
     ],
-    'testprojects/src/java/org/pantsbuild/testproject/bundle:missing-bundle-fileset': [
-      "['a/b/file1.txt']",
-      "RGlobs('*.aaaa', '*.bbbb')",
-      "Globs('*.aaaa')",
-      "ZGlobs('**/*.abab')",
-      "['file1.aaaa', 'file2.aaaa']",
-      "Snapshot(PathGlobs(include=({unicode_literal}\'testprojects/src/java/org/pantsbuild/testproject/bundle/*.aaaa\',), exclude=(), glob_match_error_behavior<Exactly(GlobMatchErrorBehavior)>=GlobMatchErrorBehavior(value=error), conjunction<Exactly(GlobExpansionConjunction)>=GlobExpansionConjunction(value=all_match)))".format(unicode_literal='u' if PY2 else ''),
-      "Globs did not match. Excludes were: []. Unmatched globs were: [\"testprojects/src/java/org/pantsbuild/testproject/bundle/*.aaaa\"].",
-    ]
+    # TODO(#6787): This is nondeterministically failing in CI, with several PathGlobs having
+    # GlobMatchErrorBehavior(value=ignore) for a currently unknown reason.
+    # 'testprojects/src/java/org/pantsbuild/testproject/bundle:missing-bundle-fileset': [
+    #   "['a/b/file1.txt']",
+    #   "RGlobs('*.aaaa', '*.bbbb')",
+    #   "Globs('*.aaaa')",
+    #   "ZGlobs('**/*.abab')",
+    #   "['file1.aaaa', 'file2.aaaa']",
+    #   "Snapshot(PathGlobs(include=({unicode_literal}\'testprojects/src/java/org/pantsbuild/testproject/bundle/*.aaaa\',), exclude=(), glob_match_error_behavior<Exactly(GlobMatchErrorBehavior)>=GlobMatchErrorBehavior(value=error), conjunction<Exactly(GlobExpansionConjunction)>=GlobExpansionConjunction(value=all_match)))".format(unicode_literal='u' if PY2 else ''),
+    #   "Globs did not match. Excludes were: []. Unmatched globs were: [\"testprojects/src/java/org/pantsbuild/testproject/bundle/*.aaaa\"].",
+    # ]
   }
 
   def _list_target_check_error(self, target_name):
