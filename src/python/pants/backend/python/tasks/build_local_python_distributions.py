@@ -23,7 +23,7 @@ from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TargetDefinitionException, TaskError
 from pants.base.workunit import WorkUnitLabel
 from pants.build_graph.address import Address
-from pants.task.task import Task
+from pants.task.simple_codegen_task import SimpleCodegenTask
 from pants.util.collections import assert_single_element
 from pants.util.contextutil import pushd
 from pants.util.dirutil import safe_mkdir_for, split_basename_and_dirname
@@ -32,7 +32,7 @@ from pants.util.strutil import safe_shlex_join
 
 
 # TODO: make this a SimpleCodegenTask!!!
-class BuildLocalPythonDistributions(Task):
+class BuildLocalPythonDistributions(SimpleCodegenTask):
   """Create python distributions (.whl) from python_dist targets."""
 
   options_scope = 'python-create-distributions'
@@ -48,6 +48,18 @@ class BuildLocalPythonDistributions(Task):
   # This defines the output directory when building the dist, so we know where the output wheel is
   # located. It is a subdirectory of `_DIST_SOURCE_SUBDIR`.
   _DIST_OUTPUT_DIR = 'dist'
+
+  gentarget_type = PythonDistribution
+  # TODO: more specific?
+  sources_globs = ('**/*',)
+
+  validate_sources_present = True
+
+  # TODO: implement `synthetic_target_extra_dependencies` to allow depending on other
+  # `python_library()`s!!!
+
+  def synthetic_target_type(self, target):
+    return PythonRequirementLibrary
 
   @classmethod
   def product_types(cls):
@@ -111,6 +123,12 @@ class BuildLocalPythonDistributions(Task):
   def _get_dist_dir(cls, results_dir):
     return os.path.join(cls._get_output_dir(results_dir), cls._DIST_OUTPUT_DIR)
 
+  def execute_codegen(self, target, target_workdir):
+    interpreter = self.context.products.get_data(PythonInterpreter)
+    shared_libs_product = self.context.products.get(SharedLibrary)
+
+    self._prepare_and_create_dist(interpreter, shared_libs_product, target, target_workdir)
+
   def execute(self):
     dist_targets = self.context.targets(is_local_python_dist)
 
@@ -122,7 +140,6 @@ class BuildLocalPythonDistributions(Task):
         for vt in invalidation_check.invalid_vts:
           self._prepare_and_create_dist(interpreter, shared_libs_product, vt)
 
-        local_wheel_products = self.context.products.get('local_wheels')
         for vt in invalidation_check.all_vts:
           dist = self._get_whl_from_dir(vt.results_dir)
           req_lib_addr = Address.parse('{}__req_lib'.format(vt.target.address.spec))
@@ -130,9 +147,10 @@ class BuildLocalPythonDistributions(Task):
           # Make any target that depends on the dist depend on the synthetic req_lib,
           # for downstream consumption.
           for dependent in self.context.build_graph.dependents_of(vt.target.address):
+            # TODO: we need to know how to make use of the `exports` from SimpleCodegenTask to do
+            # this logic here!
             self.context.build_graph.inject_dependency(dependent, req_lib_addr)
           dist_dir, dist_base = split_basename_and_dirname(dist)
-          local_wheel_products.add(vt.target, dist_dir).append(dist_base)
 
   def _get_native_artifact_deps(self, target):
     native_artifact_targets = []
@@ -179,12 +197,8 @@ class BuildLocalPythonDistributions(Task):
 
     return all_shared_libs
 
-  def _prepare_and_create_dist(self, interpreter, shared_libs_product, versioned_target):
-    dist_target = versioned_target.target
-
+  def _prepare_and_create_dist(self, interpreter, shared_libs_product, dist_target, results_dir):
     native_artifact_deps = self._get_native_artifact_deps(dist_target)
-
-    results_dir = versioned_target.results_dir
 
     dist_output_dir = self._get_output_dir(results_dir)
 
@@ -200,7 +214,7 @@ class BuildLocalPythonDistributions(Task):
         # NB: This doesn't reach into transitive dependencies, but that doesn't matter currently.
         [dist_target] + dist_target.dependencies))
 
-    versioned_target_fingerprint = versioned_target.cache_key.hash
+    target_fingerprint = dist_target.transitive_invalidation_hash()
 
     setup_requires_dir = os.path.join(results_dir, self._SETUP_REQUIRES_SITE_SUBDIR)
     setup_reqs_to_resolve = self._get_setup_requires_to_resolve(dist_target)
@@ -211,7 +225,7 @@ class BuildLocalPythonDistributions(Task):
 
     setup_reqs_pex_path = os.path.join(
       setup_requires_dir,
-      'setup-requires-{}.pex'.format(versioned_target_fingerprint))
+      'setup-requires-{}.pex'.format(target_fingerprint))
     setup_requires_pex = self._build_setup_requires_pex_settings.bootstrap(
       interpreter, setup_reqs_pex_path, extra_reqs=setup_reqs_to_resolve)
     self.context.log.debug('Using pex file as setup.py interpreter: {}'
@@ -221,7 +235,7 @@ class BuildLocalPythonDistributions(Task):
       dist_target,
       dist_output_dir,
       setup_requires_pex,
-      versioned_target_fingerprint,
+      target_fingerprint,
       is_platform_specific)
 
   # NB: "snapshot" refers to a "snapshot release", not a Snapshot.
@@ -292,6 +306,7 @@ class BuildLocalPythonDistributions(Task):
     whl_metadata = base.split('-')
     req_name = '=='.join([whl_metadata[0], whl_metadata[1]])
     req = PythonRequirement(req_name, repository=whl_dir)
+    # TODO: we need SimpleCodegenTask to allow injecting things like `requirements` here!
     self.context.build_graph.inject_synthetic_target(req_lib_addr, PythonRequirementLibrary,
                                                      requirements=[req])
 

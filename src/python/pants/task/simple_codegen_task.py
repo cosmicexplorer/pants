@@ -270,6 +270,8 @@ class SimpleCodegenTask(Task):
 
     By default, propagates the provides, scope, and tags attributes.
     """
+    # TODO: this should not be propagating the 'provides' attribute -- that is not shared among all
+    # targets!
     return ['provides', 'tags', 'scope']
 
   def synthetic_target_dir(self, target, target_workdir):
