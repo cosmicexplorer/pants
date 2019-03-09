@@ -43,6 +43,7 @@ from pants.engine.legacy.structs import (
     BundlesField,
     HydrateableField,
     SourcesField,
+    TagsField,
     TargetAdaptor,
 )
 from pants.engine.objects import Collection
@@ -731,6 +732,11 @@ def _eager_fileset_with_spec(
 
 
 @rule
+def hydrate_tags(tags_field: TagsField) -> HydratedField:
+    return HydratedField(name="tags", value=tags_field.tags)
+
+
+@rule
 async def hydrate_sources(
     sources_field: SourcesField, glob_match_error_behavior: GlobMatchErrorBehavior,
 ) -> HydratedField:
@@ -893,24 +899,25 @@ async def addresses_with_origins_from_filesystem_specs(
 def create_legacy_graph_tasks():
     """Create tasks to recursively parse the legacy graph."""
     return [
-        transitive_hydrated_target,
-        transitive_hydrated_targets,
+        RootRule(FilesystemSpecs),
+        RootRule(OwnersRequest),
+        addresses_with_origins_from_filesystem_specs,
+        find_owners,
+        hydrate_bundles,
+        hydrate_sources,
+        hydrate_sources_snapshot,
+        hydrate_tags,
+        hydrate_target,
+        hydrate_target_with_origin,
+        hydrated_targets,
+        hydrated_targets_with_origins,
         legacy_transitive_hydrated_targets,
         resolve_target,
         resolve_target_with_origin,
         resolve_targets,
         resolve_targets_with_origins,
-        hydrate_target,
-        hydrate_target_with_origin,
-        hydrated_targets,
-        hydrated_targets_with_origins,
-        find_owners,
-        hydrate_sources,
-        hydrate_bundles,
-        hydrate_sources_snapshot,
-        addresses_with_origins_from_filesystem_specs,
         sources_snapshots_from_address_specs,
         sources_snapshots_from_filesystem_specs,
-        RootRule(FilesystemSpecs),
-        RootRule(OwnersRequest),
+        transitive_hydrated_target,
+        transitive_hydrated_targets,
     ]

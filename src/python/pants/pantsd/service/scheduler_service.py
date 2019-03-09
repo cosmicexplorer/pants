@@ -18,6 +18,8 @@ from pants.option.options_bootstrapper import OptionsBootstrapper
 from pants.pantsd.service.fs_event_service import FSEventService
 from pants.pantsd.service.pants_service import PantsService
 
+logger = logging.getLogger(__name__)
+
 
 class SchedulerService(PantsService):
     """The pantsd scheduler service.

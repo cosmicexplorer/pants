@@ -99,7 +99,8 @@ class TargetAdaptor(StructWithDeps):
                 conjunction=conjunction_globs.conjunction,
                 validate_fn=self.validate_sources,
             )
-            return (sources_field,)
+            tags_field = TagsField(tuple(getattr(self, "tags", ()) or ()))
+            return (sources_field, tags_field)
 
     @classproperty
     def default_sources_globs(cls):
@@ -136,6 +137,13 @@ class TargetAdaptor(StructWithDeps):
 @union
 class HydrateableField:
     """A marker for Target(Adaptor) fields for which the engine might perform extra construction."""
+
+
+@dataclass(frozen=True)
+class TagsField:
+    """???"""
+
+    tags: Tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -508,6 +516,7 @@ class GlobsWithConjunction:
 
 def rules():
     return [
+        UnionRule(HydrateableField, TagsField),
         UnionRule(HydrateableField, SourcesField),
         UnionRule(HydrateableField, BundlesField),
     ]

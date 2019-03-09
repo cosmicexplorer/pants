@@ -32,6 +32,7 @@ from pants.engine.legacy.graph import LegacyBuildGraph, create_legacy_graph_task
 from pants.engine.legacy.options_parsing import create_options_parsing_rules
 from pants.engine.legacy.parser import LegacyPythonCallbacksParser
 from pants.engine.legacy.structs import (
+    AppAdaptor,
     FilesAdaptor,
     JvmAppAdaptor,
     JvmBinaryAdaptor,
