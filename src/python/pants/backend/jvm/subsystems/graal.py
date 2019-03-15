@@ -43,7 +43,7 @@ class GraalCEUrlGenerator(BinaryToolUrlGenerator):
 class GraalCE(NativeTool, JvmToolMixin):
 
   options_scope = 'graal'
-  default_version = '1.0.0-rc12'
+  default_version = '1.0.0-rc13'
   archive_type = 'tgz'
 
   def get_external_url_generator(self):

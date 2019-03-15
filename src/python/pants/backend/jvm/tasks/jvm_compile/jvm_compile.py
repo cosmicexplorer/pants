@@ -886,6 +886,8 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
     local_distribution = self._local_jvm_distribution()
     return self.execution_strategy_enum.resolve_for_enum_variant({
       self.SUBPROCESS: lambda: local_distribution,
+      # TODO: DON'T COMMIT THIS! WE WANT TO USE THE GRAAL DISTRIBUTION SPECIFICALLY!!
+      self.GRAAL: lambda: local_distribution,
       self.NAILGUN: lambda: local_distribution,
       self.HERMETIC: lambda: self._HermeticDistribution('.jdk', local_distribution),
     })()
