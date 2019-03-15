@@ -1,10 +1,12 @@
 # Copyright 2017 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+_zinc_version = '1.1.7'
+
 jar_library(
   name='zinc',
   jars=[
-    scala_jar(org='org.scala-sbt', name='zinc', rev='1.1.7',
+    scala_jar(org='org.scala-sbt', name='zinc', rev=_zinc_version,
               excludes=[
                 scala_exclude(org='org.scala-sbt', name='io'),
                 scala_exclude(org='org.scala-sbt', name='util-logging'),
@@ -13,6 +15,14 @@ jar_library(
   dependencies=[
     ':io',
     ':util-logging',
+  ],
+)
+
+
+jar_library(
+  name='sbt-compiler-bridge',
+  jars=[
+    scala_jar(org='org.scala-sbt', name='compiler-bridge', rev=_zinc_version),
   ],
 )
 

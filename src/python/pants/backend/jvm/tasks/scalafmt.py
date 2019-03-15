@@ -119,7 +119,7 @@ class ScalaFmt(RewriteBase):
                         args=args,
                         workunit_name='scalafmt',
                         jvm_options=self.get_options().jvm_options,
-                        async=True)
+                        do_async=True)
 
   def invoke_tool(self, absolute_root, target_sources):
     # If no config file is specified use default scalafmt config.
@@ -136,7 +136,7 @@ class ScalaFmt(RewriteBase):
                         args=args,
                         workunit_name='scalafmt',
                         jvm_options=self.get_options().jvm_options,
-                        async=False)
+                        do_async=False)
 
   @abstractproperty
   def additional_args(self):
