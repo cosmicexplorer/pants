@@ -2,16 +2,23 @@
 
 set -euxo pipefail
 
-export SCALA_HOME='/usr/share/scala'
-export SCALA_LIB_HOME="${SCALA_HOME}"
-export GRAALVM_HOME="${HOME}/.cache/pants/bin/graal/linux/x86_64/1.0.0-rc13/graal/graalvm-ce-1.0.0-rc13"
-export JAVA_HOME="${HOME}/Downloads/openjdk1.8.0_202-jvmci-0.56"
+export JAVA_HOME=/Users/dmcclanahan/Downloads/openjdk1.8.0_202-jvmci-0.56/Contents/home
+# export JAVA_HOME="${HOME}/Downloads/openjdk1.8.0_202-jvmci-0.56"
 
 ./pants binary src/scala/org/pantsbuild/zinc/compiler:bin
 
+function fetch_scala_compiler_jars {
+  local -r version="$1"
+  coursier fetch org.scala-lang:scala-{compiler,library,reflect}:"$version" \
+    | tr '\n' ':' \
+    | sed -re 's#:$##g'
+}
+
+SCALA_COMPILER_JARS="$(fetch_scala_compiler_jars 2.12.8)"
+
 ~/tools/mx/mx \
   -p ~/tools/graal/substratevm native-image \
-  -cp dist/bin.jar:$SCALA_LIB_HOME/lib/scala-compiler.jar:$SCALA_LIB_HOME/lib/scala-library.jar:$SCALA_LIB_HOME/lib/scala-reflect.jar:${HOME}/tools/graalvm-demos/scala-days-2018/scalac-native/scalac-substitutions/target/scala-2.12/scalac-substitutions_2.12-0.1.0-SNAPSHOT.jar \
+  -cp "dist/bin.jar:${SCALA_COMPILER_JARS}:${HOME}/tools/graalvm-demos/scala-days-2018/scalac-native/scalac-substitutions/target/scala-2.12/scalac-substitutions_2.12-0.1.0-SNAPSHOT.jar" \
   -H:SubstitutionResources=substitutions.json,substitutions-2.12.json \
   -H:ReflectionConfigurationFiles=${HOME}/tools/graalvm-demos/scala-days-2018/scalac-native/scalac-substitutions/reflection-config.json \
   -H:ConfigurationFileDirectories="$(pwd)/native-image-configure/" \
