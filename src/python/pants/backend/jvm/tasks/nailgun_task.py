@@ -107,7 +107,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
   }
 
   def runjava(self, classpath, main, jvm_options=None, args=None, workunit_name=None,
-              workunit_labels=None, workunit_log_config=None, dist=None, async=False):
+              workunit_labels=None, workunit_log_config=None, dist=None, do_async=False):
     """Runs the java main using the given classpath and args.
 
     If --execution-strategy=subprocess is specified then the java main is run in a freshly spawned
@@ -141,7 +141,7 @@ class NailgunTaskBase(JvmToolTaskMixin, TaskBase):
                           create_synthetic_jar=create_synthetic_jar,
                           synthetic_jar_dir=self._executor_workdir)
     try:
-      if async:
+      if do_async:
         return util.execute_java_async(**execute_kwargs)
       else:
         return util.execute_java(**execute_kwargs)
