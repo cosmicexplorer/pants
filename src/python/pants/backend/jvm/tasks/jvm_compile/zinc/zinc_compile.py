@@ -407,7 +407,8 @@ class BaseZincCompile(JvmCompile):
   def _compile_nonhermetic(self, jvm_options, zinc_args):
     exit_code = self.runjava(classpath=self.get_zinc_compiler_classpath(),
                              main=Zinc.ZINC_COMPILE_MAIN,
-                             jvm_options=jvm_options,
+                             # jvm_options=jvm_options,
+                             jvm_options=[],
                              args=zinc_args,
                              workunit_name=self.name(),
                              workunit_labels=[WorkUnitLabel.COMPILER],
