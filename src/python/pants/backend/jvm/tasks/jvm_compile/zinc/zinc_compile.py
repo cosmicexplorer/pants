@@ -319,7 +319,8 @@ class BaseZincCompile(JvmCompile):
     zinc_args = [
       '-Dscala.boot.class.path={}:{}'
       .format(':'.join(scala_path),
-              '/home/cosmicexplorer/.cache/pants/bin/graal/linux/x86_64/1.0.0-rc12/graal/graalvm-ce-1.0.0-rc12/jre/lib/rt.jar'),
+              # '/home/cosmicexplorer/.cache/pants/bin/graal/linux/x86_64/1.0.0-rc12/graal/graalvm-ce-1.0.0-rc12/jre/lib/rt.jar'),
+              '/Users/dmcclanahan/.cache/pants/bin/graal/mac/10.13/1.0.0-rc13/graal/graalvm-ce-1.0.0-rc13/Contents/Home/jre/lib/rt.jar'),
       '-Dscala.usejavacp=true',
     ]
     zinc_args.extend([
