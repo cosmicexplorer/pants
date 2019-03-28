@@ -214,8 +214,8 @@ class SubprocessExecutor(Executor):
     cwd = cwd or os.getcwd()
     command = self._create_command(classpath, main, jvm_options, args, cwd=cwd)
     if not jvm_options:
-      command = ['/home/cosmicexplorer/tools/pants/org.pantsbuild.zinc.compiler.main'] + args
-      # command = ['/Users/dmcclanahan/tools/pants/org.pantsbuild.zinc.compiler.main'] + args
+      # command = ['/home/cosmicexplorer/tools/pants/org.pantsbuild.zinc.compiler.main'] + args
+      command = ['/Users/dmcclanahan/tools/pants/org.pantsbuild.zinc.compiler.main'] + args
 
     class Runner(self.Runner):
       @property

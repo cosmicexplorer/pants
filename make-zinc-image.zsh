@@ -2,8 +2,8 @@
 
 set -euxo pipefail
 
-# export JAVA_HOME=/Users/dmcclanahan/Downloads/openjdk1.8.0_202-jvmci-0.57/Contents/home
-export JAVA_HOME="${HOME}/Downloads/openjdk1.8.0_202-jvmci-0.57"
+export JAVA_HOME=/Users/dmcclanahan/Downloads/openjdk1.8.0_202-jvmci-0.57/Contents/home
+# export JAVA_HOME="${HOME}/Downloads/openjdk1.8.0_202-jvmci-0.57"
 
 ./pants binary zinc:compiler
 
