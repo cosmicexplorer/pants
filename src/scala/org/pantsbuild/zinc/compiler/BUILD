@@ -26,10 +26,3 @@ scala_library(
   strict_deps=True,
   platform='java8',
 )
-
-jvm_binary(
-  name='bin',
-  dependencies=[
-    ':compiler',
-  ],
-)
