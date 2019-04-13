@@ -17,7 +17,7 @@ class ToolchainVariant(Enum):
   llvm = "llvm"
 
 
-class NativeBuildStep(CompilerOptionSetsMixin, MirroredTargetOptionMixin, Subsystem):
+class NativeBuildStep(Subsystem, CompilerOptionSetsMixin, MirroredTargetOptionMixin):
   """Settings which are specific to a target and do not need to be the same for compile and link."""
 
   options_scope = 'native-build-step'
@@ -30,6 +30,7 @@ class NativeBuildStep(CompilerOptionSetsMixin, MirroredTargetOptionMixin, Subsys
   @classmethod
   def register_options(cls, register):
     super().register_options(register)
+    cls.register_compiler_option_sets_options(register)
 
     register('--compiler-option-sets', advanced=True, default=(), type=list,
              fingerprint=True,

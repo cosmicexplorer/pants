@@ -25,6 +25,7 @@ from pants.engine.fs import (
   DirectoryToMaterialize,
   PathGlobs,
   PathGlobsAndRoot,
+  digest_file_paths,
 )
 from pants.engine.isolated_process import ExecuteProcessRequest, FallibleExecuteProcessResult
 from pants.java.jar.jar_dependency import JarDependency
@@ -32,7 +33,7 @@ from pants.reporting.reporting_utils import items_to_report_element
 from pants.task.scm_publish_mixin import Semver
 from pants.util.collections import Enum, assert_single_element
 from pants.util.contextutil import Timer
-from pants.util.dirutil import fast_relpath, fast_relpath_optional, safe_mkdir
+from pants.util.dirutil import fast_relpath, fast_relpath_collection, safe_mkdir
 from pants.util.memo import memoized_method, memoized_property
 from pants.util.strutil import safe_shlex_join
 
@@ -45,11 +46,6 @@ from pants.util.strutil import safe_shlex_join
 #
 #
 logger = logging.getLogger(__name__)
-
-
-def fast_relpath_collection(collection):
-  buildroot = get_buildroot()
-  return [fast_relpath_optional(c, buildroot) or c for c in collection]
 
 
 def stdout_contents(wu):
@@ -216,11 +212,11 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
         ),
       ],
       custom_rules=[
-        Shader.exclude_package('scala', recursive=True), 
-        Shader.exclude_package('xsbt', recursive=True), 
-        Shader.exclude_package('xsbti', recursive=True), 
-        # Unfortunately, is loaded reflectively by the compiler. 
-        Shader.exclude_package('org.apache.logging.log4j', recursive=True), 
+        Shader.exclude_package('scala', recursive=True),
+        Shader.exclude_package('xsbt', recursive=True),
+        Shader.exclude_package('xsbti', recursive=True),
+        # Unfortunately, is loaded reflectively by the compiler.
+        Shader.exclude_package('org.apache.logging.log4j', recursive=True),
       ]
     )
 
@@ -269,6 +265,9 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
 
   def register_extra_products_from_contexts(self, targets, compile_contexts):
     super().register_extra_products_from_contexts(targets, compile_contexts)
+
+    def to_classpath_entries(paths, scheduler):
+      return [ClasspathEntry(p, d) for (p, d) in digest_file_paths(paths, scheduler)]
 
     def confify(entries):
       return [(conf, e) for e in entries for conf in self._confs]
@@ -474,7 +473,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
             ]
 
           target_sources = ctx.sources
-          
+
           # TODO: m.jar digests aren't found, so hermetic will fail.
           if use_youtline and not hermetic and self.get_options().zinc_outline:
             self._zinc_outline(ctx, classpath_paths, target_sources, youtline_args)
@@ -731,7 +730,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
 
   def _runtool_hermetic(self, main, tool_name, distribution, input_digest, ctx):
     use_youtline = tool_name == 'scalac-outliner'
-    
+
     tool_classpath_abs = self._scalac_classpath if use_youtline else self._rsc_classpath
     tool_classpath = fast_relpath_collection(tool_classpath_abs)
 

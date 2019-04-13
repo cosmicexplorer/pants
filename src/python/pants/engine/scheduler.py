@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from textwrap import dedent
 from typing import Any
 
+from twitter.common.collections import OrderedSet
+
 from pants.base.exception_sink import ExceptionSink
 from pants.base.exiter import PANTS_FAILED_EXIT_CODE
 from pants.engine.fs import Digest, DirectoryToMaterialize, PathGlobsAndRoot
@@ -282,6 +284,68 @@ class Scheduler:
                            '`self._native._peek_cffi_extern_method_runtime_exceptions()`.')
     return roots
 
+  def capture_snapshots(self, path_globs_and_roots):
+    """Synchronously captures Snapshots for each matching PathGlobs rooted at a its root directory.
+
+    This is a blocking operation, and should be avoided where possible.
+
+    :param path_globs_and_roots tuple<PathGlobsAndRoot>: The PathGlobs to capture, and the root
+           directory relative to which each should be captured.
+    :returns: A tuple of Snapshots.
+    """
+    result = self._native.lib.capture_snapshots(
+      self._scheduler,
+      self._to_value(_PathGlobsAndRootCollection(path_globs_and_roots)),
+    )
+    return self._raise_or_return(result)
+
+  def merge_directories(self, directory_digests):
+    """Merges any number of directories.
+
+    :param directory_digests: Tuple of DirectoryDigests.
+    :return: A Digest.
+    """
+    result = self._native.lib.merge_directories(
+      self._scheduler,
+      self._to_value(_DirectoryDigests(directory_digests)),
+    )
+    return self._raise_or_return(result)
+
+  def capture_merged_snapshot(self, path_globs_and_roots):
+    """???"""
+    # TODO: ...can we just use lists here?
+    digests = OrderedSet()
+    files = OrderedSet()
+    dirs = OrderedSet()
+    for snapshot in self.capture_snapshots(path_globs_and_roots):
+      digests.add(snapshot.directory_digest)
+      files.update(snapshot.files)
+      dirs.update(snapshot.dirs)
+
+    merged_digest = self.merge_directories(tuple(digests))
+    return Snapshot(
+      directory_digest=merged_digest,
+      files=tuple(files),
+      dirs=tuple(dirs),
+    )
+
+  def materialize_directories(self, directories_paths_and_digests):
+    """Creates the specified directories on the file system.
+
+    :param directories_paths_and_digests tuple<DirectoryToMaterialize>: Tuple of the path and
+           digest of the directories to materialize.
+    :returns: Nothing or an error.
+    """
+    # Ensure there isn't more than one of the same directory paths and paths do not have the same prefix.
+    dir_list = [dpad.path for dpad in directories_paths_and_digests]
+    check_no_overlapping_paths(dir_list)
+
+    result = self._native.lib.materialize_directories(
+      self._scheduler,
+      self._to_value(_DirectoriesToMaterialize(directories_paths_and_digests)),
+    )
+    return self._raise_or_return(result)
+
   def lease_files_in_graph(self):
     self._native.lib.lease_files_in_graph(self._scheduler)
 
@@ -551,6 +615,9 @@ class SchedulerSession:
       self._scheduler._to_value(request)
     )
     return self._scheduler._raise_or_return(result)
+
+  def capture_merged_snapshot(self, path_globs_and_roots):
+    return self._scheduler.capture_merged_snapshot(path_globs_and_roots)
 
   def materialize_directories(self, directories_paths_and_digests):
     """Creates the specified directories on the file system.

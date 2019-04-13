@@ -74,6 +74,11 @@ def fast_relpath_optional(path: str, start: str) -> Optional[str]:
   return None
 
 
+def fast_relpath_collection(collection, root):
+  """Apply a prefix-based relpath to an iterable of file paths."""
+  return [fast_relpath(c, root) or c for c in collection]
+
+
 def safe_mkdir(directory: str, clean: bool = False) -> None:
   """Ensure a directory is present.
 
