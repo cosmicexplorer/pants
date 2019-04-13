@@ -34,7 +34,7 @@ from pants.base.exceptions import TaskError
 from pants.base.worker_pool import WorkerPool
 from pants.base.workunit import WorkUnitLabel
 from pants.engine.fs import EMPTY_DIRECTORY_DIGEST, PathGlobs, PathGlobsAndRoot
-from pants.java.distribution.distribution import DistributionLocator
+from pants.java.distribution.distribution import DistributionLocator, HermeticDistribution
 from pants.option.compiler_option_sets_mixin import CompilerOptionSetsMixin
 from pants.option.ranked_value import RankedValue
 from pants.reporting.reporting_utils import items_to_report_element
