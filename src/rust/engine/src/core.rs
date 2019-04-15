@@ -7,6 +7,8 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::{fmt, hash};
 
+use fs;
+
 use crate::externs;
 use crate::handles::Handle;
 
@@ -282,6 +284,19 @@ impl fmt::Display for Failure {
   }
 }
 
+impl fs::FilesystemError for Failure {
+  fn make_no_matched_paths_error(msg: &str) -> Self {
+    externs::mk_error(msg)
+  }
+}
+
+impl From<fs::VFSError> for Failure {
+  fn from(e: fs::VFSError) -> Self {
+    externs::mk_error(&format!("{}", e))
+  }
+}
+
+// TODO: use externs::mk_error() to impl this!
 pub fn throw(msg: &str) -> Failure {
   Failure::Throw(
     externs::create_exception(msg),

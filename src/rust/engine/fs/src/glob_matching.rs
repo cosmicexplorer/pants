@@ -14,11 +14,13 @@ use log::warn;
 use parking_lot::Mutex;
 
 use crate::{
-  Dir, GitignoreStyleExcludes, GlobExpansionConjunction, Link, PathGlob, PathGlobs, PathStat, Stat,
-  VFS,
+  Dir, FilesystemError, GitignoreStyleExcludes, GlobExpansionConjunction, Link, PathGlob,
+  PathGlobs, PathStat, Stat, VFSError, VFS,
 };
 
-pub trait GlobMatching<E: Display + Send + Sync + 'static>: VFS<E> {
+pub trait GlobMatching<E: FilesystemError + From<VFSError> + Display + Send + Sync + 'static>:
+  VFS<E>
+{
   ///
   /// Canonicalize the Link for the given Path to an underlying File or Dir. May result
   /// in None if the PathStat represents a broken Link.
@@ -39,13 +41,19 @@ pub trait GlobMatching<E: Display + Send + Sync + 'static>: VFS<E> {
   }
 }
 
-impl<E: Display + Send + Sync + 'static, T: VFS<E>> GlobMatching<E> for T {}
+impl<E: FilesystemError + From<VFSError> + Display + Send + Sync + 'static, T: VFS<E>>
+  GlobMatching<E> for T
+{
+}
 
 // NB: This trait exists because `expand_single()` (and its return type) should be private, but
 // traits don't allow specifying private methods (and we don't want to use a top-level `fn` because
 // it's much more awkward than just specifying `&self`).
 // The methods of `GlobMatching` are forwarded to methods here.
-trait GlobMatchingImplementation<E: Display + Send + Sync + 'static>: VFS<E> {
+trait GlobMatchingImplementation<
+  E: FilesystemError + From<VFSError> + Display + Send + Sync + 'static,
+>: VFS<E>
+{
   fn directory_listing(
     &self,
     canonical_dir: Dir,
@@ -180,7 +188,7 @@ trait GlobMatchingImplementation<E: Display + Send + Sync + 'static>: VFS<E> {
               non_matching_inputs,
             );
             if strict_match_behavior.should_throw_on_error() {
-              return future::err(Self::mk_error(&msg));
+              return future::err(E::make_no_matched_paths_error(&msg));
             } else {
               // TODO(#5683): this doesn't have any useful context (the stack trace) without
               // being thrown -- this needs to be provided, otherwise this is far less useful.
@@ -272,12 +280,11 @@ trait GlobMatchingImplementation<E: Display + Send + Sync + 'static>: VFS<E> {
         path_stats
           .into_iter()
           .filter_map(|ps| match ps {
-            PathStat::Dir { path, stat } => Some(
-              PathGlob::parse_globs(stat, path, &remainder).map_err(|e| Self::mk_error(e.as_str())),
-            ),
+            PathStat::Dir { path, stat } => Some(PathGlob::parse_globs(stat, path, &remainder)),
             PathStat::File { .. } => None,
           })
-          .collect::<Result<Vec<_>, E>>()
+          .collect::<Result<Vec<_>, VFSError>>()
+          .map_err(E::from)
       })
       .and_then(move |path_globs| {
         let child_globs = path_globs
@@ -307,13 +314,10 @@ trait GlobMatchingImplementation<E: Display + Send + Sync + 'static>: VFS<E> {
           })
           .unwrap_or_else(|| vec![])
       })
-      .or_else(|_e| future::ok(vec![]))
       .and_then(move |link_globs| {
-        future::result(PathGlobs::from_globs(link_globs))
-          .map_err(|e| Self::mk_error(e.as_str()))
+        future::result(PathGlobs::from_globs(link_globs).map_err(E::from))
           .and_then(move |path_globs| context.expand(path_globs))
       })
-      .map_err(move |e| Self::mk_error(&format!("While expanding link {:?}: {}", link.0, e)))
       .map(|mut path_stats| {
         // Since we've escaped any globs in the parsed path, expect either 0 or 1 destination.
         path_stats.pop().map(|ps| match ps {
@@ -325,4 +329,7 @@ trait GlobMatchingImplementation<E: Display + Send + Sync + 'static>: VFS<E> {
   }
 }
 
-impl<E: Display + Send + Sync + 'static, T: VFS<E>> GlobMatchingImplementation<E> for T {}
+impl<E: FilesystemError + From<VFSError> + Display + Send + Sync + 'static, T: VFS<E>>
+  GlobMatchingImplementation<E> for T
+{
+}

@@ -687,7 +687,11 @@ pub extern "C" fn match_path_globs(path_globs: Handle, paths_buf: BufferBuffer) 
     .into_iter()
     .map(PathBuf::from)
     .collect::<Vec<_>>();
-  path_globs.matches(&paths).map(externs::store_bool).into()
+  path_globs
+    .matches(&paths)
+    .map(externs::store_bool)
+    .map_err(|e| externs::mk_error(&format!("{}", e)))
+    .into()
 }
 
 #[no_mangle]
@@ -744,6 +748,7 @@ pub extern "C" fn capture_snapshots(
   })
   .map(|values| externs::store_tuple(&values))
   .wait()
+  .map_err(|e| externs::mk_error(&format!("{}", e)))
   .into()
 }
 
@@ -769,6 +774,7 @@ pub extern "C" fn merge_directories(
     fs::Snapshot::merge_directories(scheduler.core.store(), digests)
       .wait()
       .map(|dir| nodes::Snapshot::store_directory(&scheduler.core, &dir))
+      .map_err(|e| format!("{}", e))
       .into()
   })
 }

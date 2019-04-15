@@ -15,6 +15,13 @@ use crate::interning::Interns;
 use lazy_static::lazy_static;
 use parking_lot::RwLock;
 
+pub fn mk_error(msg: &str) -> Failure {
+  Failure::Throw(
+    create_exception(msg),
+    "<pants native internals>".to_string(),
+  )
+}
+
 pub fn eval(python: &str) -> Result<Value, Failure> {
   with_externs(|e| (e.eval)(e.context, python.as_ptr(), python.len() as u64)).into()
 }

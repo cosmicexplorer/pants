@@ -55,18 +55,14 @@ impl VFS<Failure> for Context {
   fn is_ignored(&self, stat: &fs::Stat) -> bool {
     self.core.vfs.is_ignored(stat)
   }
-
-  fn mk_error(msg: &str) -> Failure {
-    Failure::Throw(
-      externs::create_exception(msg),
-      "<pants native internals>".to_string(),
-    )
-  }
 }
 
-impl StoreFileByDigest<Failure> for Context {
-  fn store_by_digest(&self, file: File) -> BoxFuture<hashing::Digest, Failure> {
-    self.get(DigestFile(file.clone()))
+impl StoreFileByDigest for Context {
+  fn store_by_digest(&self, file: File) -> BoxFuture<hashing::Digest, fs::VFSError> {
+    self
+      .get(DigestFile(file.clone()))
+      .map_err(|e| fs::VFSError::ExternalWrappedError(format!("{}", e)))
+      .to_boxed()
   }
 }
 
@@ -197,7 +193,7 @@ impl WrappedNode for Select {
                   .map(|val| lift_digest(&val).map_err(|str| throw(&str)))
                   .collect();
               fs::Snapshot::merge_directories(core.store(), try_future!(digests))
-                .map_err(|err| throw(&err))
+                .map_err(|err| throw(&format!("{}", err)))
                 .map(move |digest| Snapshot::store_directory(&core, &digest))
                 .to_boxed()
             })
@@ -485,6 +481,7 @@ impl Snapshot {
     // and fs::Snapshot::from_path_stats tracking dependencies for file digests.
     context
       .expand(path_globs)
+      .map_err(|e| externs::mk_error(&format!("{}", e)))
       .map_err(|e| format!("PathGlobs expansion failed: {}", e))
       .and_then(move |path_stats| {
         fs::Snapshot::from_path_stats(context.core.store(), &context, path_stats)
@@ -633,8 +630,8 @@ impl DownloadedFile {
       digest: hashing::Digest,
     }
 
-    impl StoreFileByDigest<String> for Digester {
-      fn store_by_digest(&self, _: File) -> BoxFuture<hashing::Digest, String> {
+    impl StoreFileByDigest for Digester {
+      fn store_by_digest(&self, _: File) -> BoxFuture<hashing::Digest, fs::VFSError> {
         future::ok(self.digest).to_boxed()
       }
     }
@@ -650,6 +647,8 @@ impl DownloadedFile {
         },
       }],
     )
+    .map_err(|e| format!("{}", e))
+    .to_boxed()
   }
 
   fn download(

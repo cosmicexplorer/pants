@@ -69,7 +69,8 @@ impl CommandRunner {
       &[],
       StrictGlobMatching::Ignore,
       GlobExpansionConjunction::AllMatch,
-    ));
+    )
+    .map_err(|e| format!("{}", e)));
 
     posix_fs
       .expand(output_globs)
@@ -80,6 +81,7 @@ impl CommandRunner {
           &fs::OneOffStoreFileByDigest::new(store, posix_fs),
           path_stats,
         )
+        .map_err(|e| format!("{}", e))
       })
       .to_boxed()
   }

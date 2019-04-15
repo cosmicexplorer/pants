@@ -3,7 +3,7 @@
 
 use crate::glob_matching::GlobMatching;
 use crate::pool::ResettablePool;
-use crate::{Dir, File, PathGlobs, PathStat, PosixFS, Store};
+use crate::{Dir, File, PathGlobs, PathStat, PosixFS, Store, VFSError};
 use bazel_protos;
 use boxfuture::{try_future, BoxFuture, Boxable};
 use futures::future::{self, join_all};
@@ -38,14 +38,11 @@ impl Snapshot {
     }
   }
 
-  pub fn from_path_stats<
-    S: StoreFileByDigest<Error> + Sized + Clone,
-    Error: fmt::Debug + 'static + Send,
-  >(
+  pub fn from_path_stats<S: StoreFileByDigest + Sized + Clone>(
     store: Store,
     file_digester: &S,
     mut path_stats: Vec<PathStat>,
-  ) -> BoxFuture<Snapshot, String> {
+  ) -> BoxFuture<Snapshot, VFSError> {
     path_stats.sort_by(|a, b| a.path().cmp(b.path()));
 
     // The helper assumes that if a Path has multiple children, it must be a directory.
@@ -54,10 +51,10 @@ impl Snapshot {
     let pre_dedupe_len = path_stats.len();
     path_stats.dedup_by(|a, b| a.path() == b.path());
     if path_stats.len() != pre_dedupe_len {
-      return future::err(format!(
+      return future::err(VFSError::DuplicatePaths(format!(
         "Snapshots must be constructed from unique path stats; got duplicates in {:?}",
         path_stats
-      ))
+      )))
       .to_boxed();
     }
     Snapshot::ingest_directory_from_sorted_path_stats(store, file_digester, &path_stats)
@@ -65,7 +62,7 @@ impl Snapshot {
       .to_boxed()
   }
 
-  pub fn from_digest(store: Store, digest: Digest) -> BoxFuture<Snapshot, String> {
+  pub fn from_digest(store: Store, digest: Digest) -> BoxFuture<Snapshot, VFSError> {
     store
       .walk(digest, |_, path_so_far, _, directory| {
         let mut path_stats = Vec::new();
@@ -92,33 +89,28 @@ impl Snapshot {
         path_stats.sort_by(|l, r| l.path().cmp(&r.path()));
         Snapshot { digest, path_stats }
       })
+      .map_err(|e| VFSError::StoreError(e.to_string()))
       .to_boxed()
   }
 
-  pub fn digest_from_path_stats<
-    S: StoreFileByDigest<Error> + Sized + Clone,
-    Error: fmt::Debug + 'static + Send,
-  >(
+  pub fn digest_from_path_stats<S: StoreFileByDigest + Sized + Clone>(
     store: Store,
     file_digester: &S,
     path_stats: &[PathStat],
-  ) -> BoxFuture<Digest, String> {
+  ) -> BoxFuture<Digest, VFSError> {
     let mut sorted_path_stats = path_stats.to_owned();
     sorted_path_stats.sort_by(|a, b| a.path().cmp(b.path()));
     Snapshot::ingest_directory_from_sorted_path_stats(store, file_digester, &sorted_path_stats)
   }
 
-  fn ingest_directory_from_sorted_path_stats<
-    S: StoreFileByDigest<Error> + Sized + Clone,
-    Error: fmt::Debug + 'static + Send,
-  >(
+  fn ingest_directory_from_sorted_path_stats<S: StoreFileByDigest + Sized + Clone>(
     store: Store,
     file_digester: &S,
     path_stats: &[PathStat],
-  ) -> BoxFuture<Digest, String> {
-    let mut file_futures: Vec<BoxFuture<bazel_protos::remote_execution::FileNode, String>> =
+  ) -> BoxFuture<Digest, VFSError> {
+    let mut file_futures: Vec<BoxFuture<bazel_protos::remote_execution::FileNode, VFSError>> =
       Vec::new();
-    let mut dir_futures: Vec<BoxFuture<bazel_protos::remote_execution::DirectoryNode, String>> =
+    let mut dir_futures: Vec<BoxFuture<bazel_protos::remote_execution::DirectoryNode, VFSError>> =
       Vec::new();
 
     for (first_component, group) in &path_stats
@@ -141,7 +133,6 @@ impl Snapshot {
               file_digester
                 .clone()
                 .store_by_digest(stat.clone())
-                .map_err(|e| format!("{:?}", e))
                 .and_then(move |digest| {
                   let mut file_node = bazel_protos::remote_execution::FileNode::new();
                   file_node.set_name(osstring_as_utf8(first_component)?);
@@ -157,6 +148,7 @@ impl Snapshot {
             dir_futures.push(
               store
                 .record_directory(&bazel_protos::remote_execution::Directory::new(), true)
+                .map_err(|e| VFSError::StoreError(format!("{:?}", e)))
                 .map(move |digest| {
                   let mut directory_node = bazel_protos::remote_execution::DirectoryNode::new();
                   directory_node.set_name(osstring_as_utf8(first_component).unwrap());
@@ -191,7 +183,9 @@ impl Snapshot {
         let mut directory = bazel_protos::remote_execution::Directory::new();
         directory.set_directories(protobuf::RepeatedField::from_vec(dirs));
         directory.set_files(protobuf::RepeatedField::from_vec(files));
-        store.record_directory(&directory, true)
+        store
+          .record_directory(&directory, true)
+          .map_err(|e| VFSError::StoreError(format!("{:?}", e)))
       })
       .to_boxed()
   }
@@ -204,7 +198,7 @@ impl Snapshot {
   /// error, and in cases where overwriting a file is desirable, explicitly removing a duplicated
   /// copy should be straightforward.
   ///
-  pub fn merge(store: Store, snapshots: &[Snapshot]) -> BoxFuture<Snapshot, String> {
+  pub fn merge(store: Store, snapshots: &[Snapshot]) -> BoxFuture<Snapshot, VFSError> {
     // We dedupe PathStats by their symbolic names, as those will be their names within the
     // `Directory` structure. Only `Dir+Dir` collisions are legal.
     let path_stats = {
@@ -214,10 +208,10 @@ impl Snapshot {
           indexmap::map::Entry::Occupied(e) => match (&path_stat, e.get()) {
             (&PathStat::Dir { .. }, &PathStat::Dir { .. }) => (),
             (x, y) => {
-              return future::err(format!(
+              return future::err(VFSError::DuplicatePaths(format!(
                 "Snapshots contained duplicate path: {:?} vs {:?}",
                 x, y
-              ))
+              )))
               .to_boxed();
             }
           },
@@ -244,7 +238,7 @@ impl Snapshot {
   /// If a file is present with the same name and contents multiple times, it will appear once.
   /// If a file is present with the same name, but different contents, an error will be returned.
   ///
-  pub fn merge_directories(store: Store, dir_digests: Vec<Digest>) -> BoxFuture<Digest, String> {
+  pub fn merge_directories(store: Store, dir_digests: Vec<Digest>) -> BoxFuture<Digest, VFSError> {
     if dir_digests.is_empty() {
       return future::ok(EMPTY_DIGEST).to_boxed();
     } else if dir_digests.len() == 1 {
@@ -257,9 +251,11 @@ impl Snapshot {
       .map(|digest| {
         store
           .load_directory(digest)
+          .map_err(|e| VFSError::StoreError(e.to_string()))
           .and_then(move |maybe_directory| {
-            maybe_directory
-              .ok_or_else(|| format!("Digest {:?} did not exist in the Store.", digest))
+            maybe_directory.ok_or_else(|| {
+              VFSError::StoreError(format!("Digest {:?} did not exist in the Store.", digest))
+            })
           })
       })
       .collect::<Vec<_>>();
@@ -273,12 +269,10 @@ impl Snapshot {
             .iter_mut()
             .map(|directory| directory.take_files().into_iter()),
         )
-        .sorted_by(|a, b| a.name.cmp(&b.name))
-        .into_iter()
-        .unique_by(|v| v.name.clone());
+        .sorted_by(|a, b| a.name.cmp(&b.name));
 
         out_dir.set_files(protobuf::RepeatedField::from_vec(
-          file_nodes.dedup().collect(),
+          file_nodes.into_iter().dedup().collect(),
         ));
         let unique_count = out_dir
           .get_files()
@@ -293,10 +287,10 @@ impl Snapshot {
             .group_by(|f| f.get_name().to_owned());
           for (file_name, group) in &groups {
             if group.count() > 1 {
-              return future::err(format!(
+              return future::err(VFSError::DuplicatePaths(format!(
                 "Can only merge Directories with no duplicates, but found duplicate files: {}",
                 file_name
-              ))
+              )))
               .to_boxed();
             }
           }
@@ -325,6 +319,7 @@ impl Snapshot {
                 .map(|d| d.get_digest().into())
                 .collect::<Result<Vec<_>, String>>();
               future::done(digests_result)
+                .map_err(|e| VFSError::StoreError(e.to_string()))
                 .and_then(move |digests| Self::merge_directories(store2.clone(), digests))
                 .map(move |merged_digest| {
                   let mut child_dir = bazel_protos::remote_execution::DirectoryNode::new();
@@ -337,7 +332,9 @@ impl Snapshot {
         )
         .and_then(move |child_directories| {
           out_dir.set_directories(protobuf::RepeatedField::from_vec(child_directories));
-          store.record_directory(&out_dir, true)
+          store
+            .record_directory(&out_dir, true)
+            .map_err(|e| VFSError::StoreError(e.to_string()))
         })
         .to_boxed()
       })
@@ -362,28 +359,29 @@ impl Snapshot {
     root_path: P,
     path_globs: PathGlobs,
     digest_hint: Option<Digest>,
-  ) -> BoxFuture<Snapshot, String> {
+  ) -> BoxFuture<Snapshot, VFSError> {
     // Attempt to use the digest hint to load a Snapshot without expanding the globs; otherwise,
     // expand the globs to capture a Snapshot.
     let store2 = store.clone();
-    future::result(digest_hint.ok_or_else(|| "No digest hint provided.".to_string()))
-      .and_then(move |digest| Snapshot::from_digest(store, digest))
-      .or_else(|_| {
-        let posix_fs = Arc::new(try_future!(PosixFS::new(root_path, fs_pool, &[])));
+    future::result(
+      digest_hint.ok_or_else(|| VFSError::StoreError("No digest hint provided.".to_string())),
+    )
+    .and_then(move |digest| Snapshot::from_digest(store, digest))
+    .or_else(|_| {
+      let posix_fs = Arc::new(try_future!(PosixFS::new(root_path, fs_pool, &[])));
 
-        posix_fs
-          .expand(path_globs)
-          .map_err(|err| format!("Error expanding globs: {:?}", err))
-          .and_then(|path_stats| {
-            Snapshot::from_path_stats(
-              store2.clone(),
-              &OneOffStoreFileByDigest::new(store2, posix_fs),
-              path_stats,
-            )
-          })
-          .to_boxed()
-      })
-      .to_boxed()
+      posix_fs
+        .expand(path_globs)
+        .and_then(|path_stats| {
+          Snapshot::from_path_stats(
+            store2.clone(),
+            &OneOffStoreFileByDigest::new(store2, posix_fs),
+            path_stats,
+          )
+        })
+        .to_boxed()
+    })
+    .to_boxed()
   }
 }
 
@@ -419,18 +417,18 @@ fn paths_of_child_dir(paths: Vec<PathStat>) -> Vec<PathStat> {
     .collect()
 }
 
-fn osstring_as_utf8(path: OsString) -> Result<String, String> {
-  path
-    .into_string()
-    .map_err(|p| format!("{:?}'s file_name is not representable in UTF8", p))
+fn osstring_as_utf8(path: OsString) -> Result<String, VFSError> {
+  path.into_string().map_err(|p| {
+    VFSError::PathParseError(format!("{:?}'s file_name is not representable in UTF8", p))
+  })
 }
 
 // StoreFileByDigest allows a File to be saved to an underlying Store, in such a way that it can be
 // looked up by the Digest produced by the store_by_digest method.
 // It is a separate trait so that caching implementations can be written which wrap the Store (used
 // to store the bytes) and VFS (used to read the files off disk if needed).
-pub trait StoreFileByDigest<Error> {
-  fn store_by_digest(&self, file: File) -> BoxFuture<Digest, Error>;
+pub trait StoreFileByDigest {
+  fn store_by_digest(&self, file: File) -> BoxFuture<Digest, VFSError>;
 }
 
 ///
@@ -448,15 +446,20 @@ impl OneOffStoreFileByDigest {
   }
 }
 
-impl StoreFileByDigest<String> for OneOffStoreFileByDigest {
-  fn store_by_digest(&self, file: File) -> BoxFuture<Digest, String> {
+impl StoreFileByDigest for OneOffStoreFileByDigest {
+  fn store_by_digest(&self, file: File) -> BoxFuture<Digest, VFSError> {
     let store = self.store.clone();
     self
       .posix_fs
       .read_file(&file)
-      .map_err(move |err| format!("Error reading file {:?}: {:?}", file, err))
-      .and_then(move |content| store.store_file_bytes(content.content, true))
-      .or_else(|_e| Ok(EMPTY_DIGEST))
+      .map_err(move |err| {
+        VFSError::UnreadableFile(format!("Error reading file {:?}: {:?}", file, err))
+      })
+      .and_then(move |content| {
+        store
+          .store_file_bytes(content.content, true)
+          .map_err(|e| VFSError::StoreError(e.to_string()))
+      })
       .to_boxed()
   }
 }

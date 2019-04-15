@@ -54,6 +54,45 @@ use futures::future::{self, Future};
 use glob::{MatchOptions, Pattern};
 use lazy_static::lazy_static;
 
+pub trait FilesystemError {
+  fn make_no_matched_paths_error(msg: &str) -> Self;
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum VFSError {
+  Io(String),
+  StoreError(String),
+  PathOutsideBuildroot(String),
+  PathParseError(String),
+  IgnoreParseError(String),
+  NoMatchedPaths(String),
+  DuplicatePaths(String),
+  UnreadableFile(String),
+  ExternalWrappedError(String),
+}
+
+impl FilesystemError for VFSError {
+  fn make_no_matched_paths_error(msg: &str) -> Self {
+    VFSError::NoMatchedPaths(msg.to_string())
+  }
+}
+
+impl fmt::Display for VFSError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), std::fmt::Error> {
+    match self {
+      &VFSError::Io(ref s) => write!(f, "Io({})", s),
+      &VFSError::StoreError(ref s) => write!(f, "StoreError({})", s),
+      &VFSError::PathOutsideBuildroot(ref s) => write!(f, "PathOutsideBuildroot({})", s),
+      &VFSError::PathParseError(ref s) => write!(f, "PathParseError({})", s),
+      &VFSError::IgnoreParseError(ref s) => write!(f, "IgnoreParseError({})", s),
+      &VFSError::NoMatchedPaths(ref s) => write!(f, "NoMatchedPaths({})", s),
+      &VFSError::DuplicatePaths(ref s) => write!(f, "DuplicatePaths({})", s),
+      &VFSError::UnreadableFile(ref s) => write!(f, "UnreadableFile({})", s),
+      &VFSError::ExternalWrappedError(ref s) => write!(f, "ExternalWrappedError({})", s),
+    }
+  }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum Stat {
   Link(Link),
@@ -248,7 +287,7 @@ impl PathGlob {
     }
   }
 
-  pub fn create(filespecs: &[String]) -> Result<Vec<PathGlob>, String> {
+  pub fn create(filespecs: &[String]) -> Result<Vec<PathGlob>, VFSError> {
     // Getting a Vec<PathGlob> per filespec is needed to create a `PathGlobs`, but we don't need
     // that here.
     let filespecs_globs = Self::spread_filespecs(filespecs)?;
@@ -260,7 +299,7 @@ impl PathGlob {
     entries.into_iter().flat_map(|entry| entry.globs).collect()
   }
 
-  fn spread_filespecs(filespecs: &[String]) -> Result<Vec<PathGlobIncludeEntry>, String> {
+  fn spread_filespecs(filespecs: &[String]) -> Result<Vec<PathGlobIncludeEntry>, VFSError> {
     let mut spec_globs_map = Vec::new();
     for filespec in filespecs {
       let canonical_dir = Dir(PathBuf::new());
@@ -277,13 +316,16 @@ impl PathGlob {
   /// Normalize the given glob pattern string by splitting it into path components, and dropping
   /// references to the current directory, and consecutive '**'s.
   ///
-  fn normalize_pattern(pattern: &str) -> Result<Vec<&OsStr>, String> {
+  fn normalize_pattern(pattern: &str) -> Result<Vec<&OsStr>, VFSError> {
     let mut parts = Vec::new();
     let mut prev_was_doublestar = false;
     for component in Path::new(pattern).components() {
       let part = match component {
         Component::Prefix(..) | Component::RootDir => {
-          return Err(format!("Absolute paths not supported: {:?}", pattern));
+          return Err(VFSError::PathOutsideBuildroot(format!(
+            "Absolute paths not supported: {:?}",
+            pattern
+          )));
         }
         Component::CurDir => continue,
         c => c.as_os_str(),
@@ -309,14 +351,15 @@ impl PathGlob {
     canonical_dir: Dir,
     symbolic_path: PathBuf,
     filespec: &str,
-  ) -> Result<Vec<PathGlob>, String> {
+  ) -> Result<Vec<PathGlob>, VFSError> {
     // NB: Because the filespec is a String input, calls to `to_str_lossy` are not lossy; the
     // use of `Path` is strictly for os-independent Path parsing.
     let parts = Self::normalize_pattern(filespec)?
       .into_iter()
       .map(|part| {
-        Pattern::new(&part.to_string_lossy())
-          .map_err(|e| format!("Could not parse {:?} as a glob: {:?}", filespec, e))
+        Pattern::new(&part.to_string_lossy()).map_err(|e| {
+          VFSError::PathParseError(format!("Could not parse {:?} as a glob: {:?}", filespec, e))
+        })
       })
       .collect::<Result<Vec<_>, _>>()?;
 
@@ -330,7 +373,7 @@ impl PathGlob {
     canonical_dir: Dir,
     symbolic_path: PathBuf,
     parts: &[Pattern],
-  ) -> Result<Vec<PathGlob>, String> {
+  ) -> Result<Vec<PathGlob>, VFSError> {
     if parts.is_empty() {
       Ok(vec![])
     } else if *DOUBLE_STAR == parts[0].as_str() {
@@ -380,7 +423,12 @@ impl PathGlob {
         symbolic_path_parent.push(Path::new(*PARENT_DIR));
         PathGlob::parse_globs(canonical_dir_parent, symbolic_path_parent, &parts[1..])
       } else {
-        Ok(vec![])
+        let mut symbolic_path = symbolic_path_parent;
+        symbolic_path.extend(parts.iter().map(|p| p.as_str()));
+        Err(VFSError::PathOutsideBuildroot(format!(
+          "Globs may not traverse outside of the buildroot: {:?}",
+          symbolic_path,
+        )))
       }
     } else if parts.len() == 1 {
       // This is the path basename.
@@ -468,7 +516,7 @@ impl PathGlobs {
     exclude: &[String],
     strict_match_behavior: StrictGlobMatching,
     conjunction: GlobExpansionConjunction,
-  ) -> Result<PathGlobs, String> {
+  ) -> Result<PathGlobs, VFSError> {
     let include = PathGlob::spread_filespecs(include)?;
     Self::create_with_globs_and_match_behavior(include, exclude, strict_match_behavior, conjunction)
   }
@@ -478,8 +526,9 @@ impl PathGlobs {
     exclude: &[String],
     strict_match_behavior: StrictGlobMatching,
     conjunction: GlobExpansionConjunction,
-  ) -> Result<PathGlobs, String> {
-    let gitignore_excludes = GitignoreStyleExcludes::create(exclude)?;
+  ) -> Result<PathGlobs, VFSError> {
+    let gitignore_excludes =
+      GitignoreStyleExcludes::create(exclude).map_err(VFSError::IgnoreParseError)?;
     Ok(PathGlobs {
       include,
       exclude: gitignore_excludes,
@@ -488,7 +537,7 @@ impl PathGlobs {
     })
   }
 
-  pub fn from_globs(include: Vec<PathGlob>) -> Result<PathGlobs, String> {
+  pub fn from_globs(include: Vec<PathGlob>) -> Result<PathGlobs, VFSError> {
     let include = include
       .into_iter()
       .map(|glob| PathGlobIncludeEntry {
@@ -514,18 +563,22 @@ impl PathGlobs {
   /// traversal in expand is (currently) too expensive to use for that in-memory matching (such as
   /// via MemFS).
   ///
-  pub fn matches(&self, paths: &[PathBuf]) -> Result<bool, String> {
+  pub fn matches(&self, paths: &[PathBuf]) -> Result<bool, VFSError> {
     let patterns = self
       .include
       .iter()
       .map(|pattern| {
         PathGlob::normalize_pattern(&pattern.input.0).and_then(|components| {
           let normalized_pattern: PathBuf = components.into_iter().collect();
-          Pattern::new(normalized_pattern.to_str().unwrap())
-            .map_err(|e| format!("Could not parse {:?} as a glob: {:?}", pattern.input.0, e))
+          Pattern::new(normalized_pattern.to_str().unwrap()).map_err(|e| {
+            VFSError::PathParseError(format!(
+              "Could not parse {:?} as a glob: {:?}",
+              pattern.input.0, e
+            ))
+          })
         })
       })
-      .collect::<Result<Vec<_>, String>>()?;
+      .collect::<Result<Vec<_>, VFSError>>()?;
     Ok(patterns.iter().any(|pattern| {
       paths.iter().any(|path| {
         pattern.matches_path_with(path, &PATTERN_MATCH_OPTIONS)
@@ -562,7 +615,7 @@ impl PosixFS {
     root: P,
     pool: Arc<ResettablePool>,
     ignore_patterns: &[String],
-  ) -> Result<PosixFS, String> {
+  ) -> Result<PosixFS, VFSError> {
     let root: &Path = root.as_ref();
     let canonical_root = root
       .canonicalize()
@@ -578,13 +631,13 @@ impl PosixFS {
           }
         })
       })
-      .map_err(|e| format!("Could not canonicalize root {:?}: {:?}", root, e))?;
+      .map_err(|e| VFSError::Io(format!("Could not canonicalize root {:?}: {:?}", root, e)))?;
 
     let ignore = GitignoreStyleExcludes::create(&ignore_patterns).map_err(|e| {
-      format!(
+      VFSError::IgnoreParseError(format!(
         "Could not parse build ignore inputs {:?}: {:?}",
         ignore_patterns, e
-      )
+      ))
     })?;
     Ok(PosixFS {
       root: canonical_root,
@@ -643,29 +696,27 @@ impl PosixFS {
       .to_boxed()
   }
 
-  pub fn read_link(&self, link: &Link) -> BoxFuture<PathBuf, io::Error> {
+  pub fn read_link(&self, link: &Link) -> BoxFuture<PathBuf, VFSError> {
     let link_parent = link.0.parent().map(|p| p.to_owned());
     let link_abs = self.root.0.join(link.0.as_path()).to_owned();
+    let link_abs2 = link_abs.clone();
     self
       .pool
-      .spawn_fn(move || {
-        link_abs.read_link().and_then(|path_buf| {
-          if path_buf.is_absolute() {
-            Err(io::Error::new(
-              io::ErrorKind::InvalidData,
-              format!("Absolute symlink: {:?}", link_abs),
-            ))
-          } else {
+      .spawn_fn(move || link_abs.read_link())
+      .map_err(|e| VFSError::Io(format!("Error reading link: {}", e)))
+      .and_then(move |path_buf| {
+        if path_buf.is_absolute() {
+          future::err(VFSError::PathOutsideBuildroot(format!(
+            "Absolute symlink: {:?}",
+            link_abs2
+          )))
+        } else {
+          future::result(
             link_parent
               .map(|parent| parent.join(path_buf))
-              .ok_or_else(|| {
-                io::Error::new(
-                  io::ErrorKind::InvalidData,
-                  format!("Symlink without a parent?: {:?}", link_abs),
-                )
-              })
-          }
-        })
+              .ok_or_else(|| VFSError::Io(format!("Symlink without a parent?: {:?}", link_abs2))),
+          )
+        }
       })
       .to_boxed()
   }
@@ -731,32 +782,29 @@ impl PosixFS {
     PosixFS::stat_internal(relative_path, metadata.file_type(), &root, || Ok(metadata))
   }
 
-  pub fn scandir(&self, dir: &Dir) -> BoxFuture<DirectoryListing, io::Error> {
+  pub fn scandir(&self, dir: &Dir) -> BoxFuture<DirectoryListing, VFSError> {
     let dir = dir.to_owned();
     let fs: PosixFS = self.clone();
     self
       .pool
       .spawn_fn(move || fs.scandir_sync(&dir))
       .map(DirectoryListing)
+      .map_err(|e| VFSError::Io(format!("{}", e)))
       .to_boxed()
   }
 }
 
-impl VFS<io::Error> for Arc<PosixFS> {
-  fn read_link(&self, link: &Link) -> BoxFuture<PathBuf, io::Error> {
+impl VFS<VFSError> for Arc<PosixFS> {
+  fn read_link(&self, link: &Link) -> BoxFuture<PathBuf, VFSError> {
     PosixFS::read_link(self, link)
   }
 
-  fn scandir(&self, dir: Dir) -> BoxFuture<Arc<DirectoryListing>, io::Error> {
+  fn scandir(&self, dir: Dir) -> BoxFuture<Arc<DirectoryListing>, VFSError> {
     PosixFS::scandir(self, &dir).map(Arc::new).to_boxed()
   }
 
   fn is_ignored(&self, stat: &Stat) -> bool {
     PosixFS::is_ignored(self, stat)
-  }
-
-  fn mk_error(msg: &str) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, msg)
   }
 }
 
@@ -764,8 +812,8 @@ pub trait PathStatGetter<E> {
   fn path_stats(&self, paths: Vec<PathBuf>) -> BoxFuture<Vec<Option<PathStat>>, E>;
 }
 
-impl PathStatGetter<io::Error> for Arc<PosixFS> {
-  fn path_stats(&self, paths: Vec<PathBuf>) -> BoxFuture<Vec<Option<PathStat>>, io::Error> {
+impl PathStatGetter<VFSError> for Arc<PosixFS> {
+  fn path_stats(&self, paths: Vec<PathBuf>) -> BoxFuture<Vec<Option<PathStat>>, VFSError> {
     future::join_all(
       paths
         .into_iter()
@@ -782,6 +830,7 @@ impl PathStatGetter<io::Error> for Arc<PosixFS> {
                 _ => Err(err),
               },
             })
+            .map_err(|e| VFSError::Io(format!("Path stat failed: {}", e)))
             .and_then(move |maybe_stat| {
               match maybe_stat {
                 // Note: This will drop PathStats for symlinks which don't point anywhere.
@@ -809,7 +858,6 @@ pub trait VFS<E: Send + Sync + 'static>: Clone + Send + Sync + 'static {
   fn read_link(&self, link: &Link) -> BoxFuture<PathBuf, E>;
   fn scandir(&self, dir: Dir) -> BoxFuture<Arc<DirectoryListing>, E>;
   fn is_ignored(&self, stat: &Stat) -> bool;
-  fn mk_error(msg: &str) -> E;
 }
 
 pub struct FileContent {
