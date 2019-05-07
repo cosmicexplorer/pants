@@ -114,6 +114,7 @@ python_library(
   sources = ['hash_utils.py'],
   dependencies = [
     '3rdparty/python:future',
+    '3rdparty/python/twitter/commons:twitter.common.collections',
     ':deprecated',
     'src/python/pants/util:collections_abc_backport',
   ]

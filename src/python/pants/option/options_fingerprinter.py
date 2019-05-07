@@ -21,8 +21,16 @@ class CoercingOptionEncoder(CoercingEncoder):
     return super(CoercingOptionEncoder, self).default(o)
 
 
+_option_fingerprint_hash_cache = {}
+
+
 def stable_option_fingerprint(obj):
-  return json_hash(obj, encoder=CoercingOptionEncoder)
+  previous_fingerprint = _option_fingerprint_hash_cache.get(id(obj), None)
+  if previous_fingerprint is not None:
+    return previous_fingerprint
+  calculated_fingerprint = json_hash(obj, encoder=CoercingOptionEncoder)
+  _option_fingerprint_hash_cache[id(obj)] = calculated_fingerprint
+  return calculated_fingerprint
 
 
 class OptionsFingerprinter(object):

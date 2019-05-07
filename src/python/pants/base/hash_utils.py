@@ -112,10 +112,11 @@ class CoercingEncoder(json.JSONEncoder):
       return self.default(repr(o))
     if isinstance(o, Iterable) and not isinstance(o, (bytes, list, str)):
       return list(self.default(i) for i in o)
-    logger.debug("Our custom json encoder {} is trying to hash a primitive type, but has gone through"
-                 "checking every other registered type class before. These checks are expensive,"
-                 "so you should consider registering the type {} within"
-                 "this function ({}.default)".format(type(self).__name__, type(o), type(self).__name__))
+    logger.debug("Our custom json encoder {this_class} is trying to hash a primitive type, but has "
+                 "iterated over every registered type to check before returning the default value. "
+                 "These checks are expensive, so you should consider registering the type "
+                 "{argument_class} within the function {this_class}.default()."
+                 .format(this_class=type(self).__name__, argument_class=type(o).__name__))
     return o
 
   def encode(self, o):
