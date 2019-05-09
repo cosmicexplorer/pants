@@ -77,11 +77,16 @@ class ResolveRequirementsTaskBase(Task):
 
       # We need to ensure that we are resolving for only the current platform if we are
       # including local python dist targets that have native extensions.
-      targets_by_platform = pex_build_util.targets_by_platform(self.context.targets(), self._python_setup)
-      if self._python_native_code_settings.check_build_for_current_platform_only(targets_by_platform):
+      # TODO: We need to check all of the targets in the build graph to determine if any of them
+      # contain native code. Making the generated python_requirement_library() from
+      # BuildLocalPythonDistributions depend on the C/C++ sources that it builds might make this
+      # cleaner.
+      all_targets = self.get_targets()
+      if self._python_native_code_settings.check_build_for_current_platform_only(all_targets):
         platforms = ['current']
       else:
-        platforms = list(sorted(targets_by_platform.keys()))
+        python_targets_by_platform = pex_build_util.targets_by_platform(all_targets, self._python_setup)
+        platforms = list(sorted(python_targets_by_platform.keys()))
 
       path = os.path.realpath(os.path.join(self.workdir, str(interpreter.identity), target_set_id))
       # Note that we check for the existence of the directory, instead of for invalid_vts,
