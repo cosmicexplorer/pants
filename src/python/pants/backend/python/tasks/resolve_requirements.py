@@ -11,7 +11,12 @@ from pants.backend.python.tasks.resolve_requirements_task_base import ResolveReq
 
 
 class ResolveRequirements(ResolveRequirementsTaskBase):
-  """Resolve external Python requirements."""
+  """Resolve external Python requirements.
+
+  ???/something about how these pexes will only resolve for the ['current'] platform!!!
+
+  ???/the prepend requirements pex is None if there are no prepend requirements!
+  """
   REQUIREMENTS_PEX = 'python_requirements_pex'
   PREPEND_REQUIREMENTS_PEX = 'prepended_requirements_pex'
 
@@ -44,6 +49,9 @@ class ResolveRequirements(ResolveRequirementsTaskBase):
     post_pex = self.resolve_requirements(interpreter, post_requirement_targets)
     self.context.products.register_data(self.REQUIREMENTS_PEX, post_pex)
 
+    # We only register the self.PREPEND_REQUIREMENTS_PEX product if needed, as it is only
+    # necessary when targets with prepend_to_pythonpath=True are used, which should hopefully be
+    # rare. This allows us to avoid waiting on another pex invocation when unnecessary.
     if pre_requirement_targets:
       self.context.log.debug('pre_requirement_targets: {}'.format(pre_requirement_targets))
       pre_pex = self.resolve_requirements(interpreter, pre_requirement_targets)

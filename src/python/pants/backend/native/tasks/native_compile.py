@@ -16,6 +16,7 @@ from pants.util.memo import memoized_method, memoized_property
 from pants.util.meta import AbstractClass, classproperty
 from pants.util.objects import datatype
 from pants.util.process_handler import subprocess
+from pants.util.strutil import safe_shlex_join
 
 
 class NativeCompileRequest(datatype([
@@ -214,8 +215,12 @@ class NativeCompile(NativeTask, AbstractClass):
       ] +
       [os.path.join(buildroot, src) for src in sources_minus_headers])
 
+    # TODO: Unfortunately, this output is used in a test. However, it is also useful for users, as
+    # the 'gcc' vs 'llvm' compile/link toolchains are not quite yet at parity across environments,
+    # so the choice of toolchain can cause errors. Still, we shouldn't be testing against an info
+    # log.
     self.context.log.info("selected compiler exe name: '{}'".format(compiler.exe_filename))
-    self.context.log.debug("compile argv: {}".format(argv))
+    self.context.log.debug("compile argv:\n{}".format(safe_shlex_join(argv)))
 
     return argv
 

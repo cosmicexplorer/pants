@@ -13,7 +13,7 @@ from pants.backend.python.tasks.select_interpreter import SelectInterpreterClien
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
 from pants.util.osutil import safe_kill
-from pants.util.strutil import safe_shlex_split
+from pants.util.strutil import safe_shlex_join, safe_shlex_split
 
 
 class PythonRun(PythonExecutionTaskBase, SelectInterpreterClientMixin):
@@ -42,7 +42,7 @@ class PythonRun(PythonExecutionTaskBase, SelectInterpreterClientMixin):
       args += self.get_passthru_args()
 
       self.context.release_lock()
-      cmdline = ' '.join(pex.cmdline(args))
+      cmdline = safe_shlex_join(pex.cmdline(args))
       with self.context.new_workunit(name='run',
                                      cmd=cmdline,
                                      labels=[WorkUnitLabel.TOOL, WorkUnitLabel.RUN]):

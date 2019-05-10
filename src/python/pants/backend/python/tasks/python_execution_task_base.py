@@ -108,6 +108,10 @@ class PythonExecutionTaskBase(ResolveRequirementsTaskBase):
         PythonDistribution, PythonRequirementLibrary, PythonTarget, Files)))
     with self.invalidated(relevant_targets) as invalidation_check:
 
+      # TODO: don't do this! Return None instead! Resolving this takes CPU, filesystem, and network,
+      # and makes pants require internet access to run when a python interpreter isn't needed!
+      # TODO: OR!!!!! just make it really easy to specify an override interpreter instead of doing
+      # the selection!!! (THIS IS A GOOD IDEA!!!)
       # If there are no relevant targets, we still go through the motions of resolving
       # an empty set of requirements, to prevent downstream tasks from having to check
       # for this special case.
@@ -137,6 +141,10 @@ class PythonExecutionTaskBase(ResolveRequirementsTaskBase):
 
         prepend_requirements_pex = self.context.products.get_data(
           ResolveRequirements.PREPEND_REQUIREMENTS_PEX)
+        # We only register the self.PREPEND_REQUIREMENTS_PEX product if needed, as it is only
+        # necessary when targets with prepend_to_pythonpath=True are used, which should hopefully be
+        # rare. This reduces the number of entries on the PEX_PATH pex has to traverse to find most
+        # requirements.
         if prepend_requirements_pex:
           pexes = [prepend_requirements_pex] + pexes
 

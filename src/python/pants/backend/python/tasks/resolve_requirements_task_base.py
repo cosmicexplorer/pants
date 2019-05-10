@@ -13,7 +13,6 @@ from pex.pex import PEX
 from pex.pex_builder import PEXBuilder
 
 from pants.backend.python.python_requirement import PythonRequirement
-from pants.backend.python.subsystems import pex_build_util
 from pants.backend.python.subsystems.pex_build_util import PexBuilderWrapper
 from pants.backend.python.subsystems.python_native_code import PythonNativeCode
 from pants.backend.python.subsystems.python_setup import PythonSetup
@@ -75,19 +74,6 @@ class ResolveRequirementsTaskBase(Task):
       else:
         target_set_id = 'no_targets'
 
-      # We need to ensure that we are resolving for only the current platform if we are
-      # including local python dist targets that have native extensions.
-      # TODO: We need to check all of the targets in the build graph to determine if any of them
-      # contain native code. Making the generated python_requirement_library() from
-      # BuildLocalPythonDistributions depend on the C/C++ sources that it builds might make this
-      # cleaner.
-      all_targets = self.get_targets()
-      if self._python_native_code_settings.check_build_for_current_platform_only(all_targets):
-        platforms = ['current']
-      else:
-        python_targets_by_platform = pex_build_util.targets_by_platform(all_targets, self._python_setup)
-        platforms = list(sorted(python_targets_by_platform.keys()))
-
       path = os.path.realpath(os.path.join(self.workdir, str(interpreter.identity), target_set_id))
       # Note that we check for the existence of the directory, instead of for invalid_vts,
       # to cover the empty case.
@@ -96,7 +82,11 @@ class ResolveRequirementsTaskBase(Task):
           pex_builder = PexBuilderWrapper.Factory.create(
             builder=PEXBuilder(path=safe_path, interpreter=interpreter, copy=True),
             log=self.context.log)
-          pex_builder.add_requirement_libs_from(req_libs, platforms=platforms)
+          pex_builder.add_requirement_libs_from(
+            req_libs,
+            # We need to ensure that we are resolving for only the current platform if e.g. we are
+            # including local python_dist() targets that have C/C++ source dependencies.
+            platforms=['current'])
           pex_builder.freeze()
     return PEX(path, interpreter=interpreter)
 
