@@ -192,7 +192,8 @@ class SubprocessExecutor(Executor):
       # specified on the command line.  In addition cli options can affect outputs; ie: class debug
       # info, target classfile version, etc - all breaking hermeticity.
       '_JAVA_OPTIONS': None,
-      'JAVA_TOOL_OPTIONS': None
+      # TODO: can we already do this with pants options?
+      # 'JAVA_TOOL_OPTIONS': None
   }
 
   @classmethod

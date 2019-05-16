@@ -6,6 +6,7 @@ jvm_binary(
   main='org.pantsbuild.zinc.compiler.Main',
   dependencies=[
     'src/scala/org/pantsbuild/zinc/compiler',
+    '3rdparty/jvm/org/scala-sbt:sbt-compiler-bridge',
   ],
   description='zinc compiler -- the scala compiler in nailgun',
 )
