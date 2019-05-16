@@ -194,6 +194,7 @@ class SubprocessExecutor(Executor):
       '_JAVA_OPTIONS': None,
       # TODO: can we already do this with pants options?
       # 'JAVA_TOOL_OPTIONS': None
+      'LD_LIBRARY_PATH': os.getenv('LD_LIBRARY_PATH'),
   }
 
   @classmethod
