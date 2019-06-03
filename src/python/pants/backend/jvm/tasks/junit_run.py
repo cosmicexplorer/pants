@@ -291,12 +291,6 @@ class JUnitRun(PartitionedTestRunnerTaskMixin, JvmToolTaskMixin, JvmTask):
       # Batches of test classes will likely exist within the same targets: dedupe them.
       relevant_targets = {test_registry.get_owning_target(t) for t in batch}
 
-      complete_classpath = OrderedSet()
-      complete_classpath.update(run_modifications.classpath_prepend)
-      complete_classpath.update(JUnit.global_instance().runner_classpath(self.context))
-      complete_classpath.update(self.classpath(relevant_targets,
-                                               classpath_product=classpath_product))
-
       distribution = JvmPlatform.preferred_jvm_distribution([platform], self._strict_jvm_version)
 
       # Override cmdline args with values from junit_test() target that specify concurrency:
@@ -323,6 +317,14 @@ class JUnitRun(PartitionedTestRunnerTaskMixin, JvmToolTaskMixin, JvmTask):
           self.context.log.debug('CWD = {}'.format(chroot))
           self.context.log.debug('platform = {}'.format(platform))
           with environment_as(**dict(target_env_vars)):
+            # TODO: materialize these into the chroot!
+            complete_classpath = OrderedSet()
+            complete_classpath.update(run_modifications.classpath_prepend)
+            complete_classpath.update(JUnit.global_instance().runner_classpath(self.context))
+            complete_classpath.update(self.classpath(relevant_targets,
+                                                     classpath_product=classpath_product))
+            # NB: regardless of whether a chroot is used, paths to files in the buildroot are
+            # consumed for the test classpath!
             subprocess_result = self.spawn_and_wait(
               executor=SubprocessExecutor(distribution),
               distribution=distribution,

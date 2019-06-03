@@ -14,11 +14,12 @@ from pants.backend.jvm.targets.exportable_jvm_library import ExportableJvmLibrar
 from pants.backend.jvm.targets.jvm_target import JvmTarget
 from pants.backend.jvm.tasks.classpath_entry import ArtifactClasspathEntry, ClasspathEntry
 from pants.backend.jvm.tasks.classpath_util import ClasspathUtil
+from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.build_graph.build_graph import BuildGraph
 from pants.goal.products import UnionProducts
 from pants.java.jar.exclude import Exclude
-from pants.util.dirutil import safe_delete, safe_open
+from pants.util.dirutil import fast_relpath, safe_delete, safe_open
 
 
 # Re-export for backwards compatibility
@@ -204,7 +205,11 @@ class ClasspathProducts(object):
     for jar in resolved_jars:
       if not jar.pants_path:
         raise TaskError('Jar: {!s} has no specified path.'.format(jar.coordinate))
-      cp_entry = ArtifactClasspathEntry(jar.pants_path, jar.coordinate, jar.cache_path, jar.directory_digest)
+      cp_entry = ArtifactClasspathEntry(
+        fast_relpath(jar.pants_path, get_buildroot()),
+        jar.coordinate,
+        jar.cache_path,
+        jar.directory_digest)
       classpath_entries.append((conf, cp_entry))
 
     for target in targets:
@@ -249,6 +254,11 @@ class ClasspathProducts(object):
     """
     cp_entries = self.get_classpath_entries_for_targets(targets)
     return [(conf, cp_entry.path) for conf, cp_entry in cp_entries]
+
+  def get_confified_classpath_entries_for_targets(self, targets):
+    """???/the same as .get_for_targets(), but doesn't return only the classpath .path!!!"""
+    cp_entries = self.get_classpath_entries_for_targets(targets)
+    return [(conf, cp_entry) for conf, cp_entry in cp_entries]
 
   def get_classpath_entries_for_targets(self, targets, respect_excludes=True):
     """Gets the classpath products for the given targets.

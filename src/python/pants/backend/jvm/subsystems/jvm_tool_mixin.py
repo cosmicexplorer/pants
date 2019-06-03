@@ -4,13 +4,16 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import os
 from builtins import object
 from collections import namedtuple
 from textwrap import dedent
 
+from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.java.distribution.distribution import DistributionLocator
 from pants.option.custom_types import target_option
+from pants.util.dirutil import fast_relpath
 
 
 class JvmToolMixin(object):
@@ -195,7 +198,12 @@ class JvmToolMixin(object):
       params = dict(tool=key, scope=scope, count=len(classpath), classpath='\n\t'.join(classpath))
       raise cls.InvalidToolClasspath('Expected tool {tool} in scope {scope} to resolve to one '
                                      'jar, instead found {count}:\n\t{classpath}'.format(**params))
-    return classpath[0]
+
+    jar = classpath[0]
+    if os.path.isabs(jar):
+      return fast_relpath(classpath[0], get_buildroot())
+    else:
+      return jar
 
   @staticmethod
   def tool_classpath_from_products(products, key, scope):

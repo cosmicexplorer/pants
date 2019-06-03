@@ -239,30 +239,6 @@ class BaseZincCompile(JvmCompile):
   def select_source(self, source_file_path):
     raise NotImplementedError()
 
-  def register_extra_products_from_contexts(self, targets, compile_contexts):
-    compile_contexts = [self.select_runtime_context(compile_contexts[t]) for t in targets]
-    zinc_analysis = self.context.products.get_data('zinc_analysis')
-    zinc_args = self.context.products.get_data('zinc_args')
-
-    if zinc_analysis is not None:
-      for compile_context in compile_contexts:
-        zinc_analysis[compile_context.target] = (compile_context.classes_dir.path,
-        compile_context.jar_file.path,
-        compile_context.analysis_file)
-
-    if zinc_args is not None:
-      for compile_context in compile_contexts:
-        with open(compile_context.zinc_args_file, 'r') as fp:
-          args = fp.read().split()
-        zinc_args[compile_context.target] = args
-
-  def create_empty_extra_products(self):
-    if self.context.products.is_required_data('zinc_analysis'):
-      self.context.products.safe_create_data('zinc_analysis', dict)
-
-    if self.context.products.is_required_data('zinc_args'):
-      self.context.products.safe_create_data('zinc_args', lambda: defaultdict(list))
-
   def javac_classpath(self):
     # Note that if this classpath is empty then Zinc will automatically use the javac from
     # the JDK it was invoked with.
@@ -292,12 +268,12 @@ class BaseZincCompile(JvmCompile):
   def compile(self, ctx, args, dependency_classpath, upstream_analysis,
               settings, compiler_option_sets, zinc_file_manager,
               javac_plugin_map, scalac_plugin_map):
-    absolute_classpath = (ctx.classes_dir.path,) + tuple(ce.path for ce in dependency_classpath)
+    relative_classpath = (ctx.classes_dir.path,) + tuple(ce.path for ce in dependency_classpath)
 
     if self.get_options().capture_classpath:
-      self._record_compile_classpath(absolute_classpath, ctx.target, ctx.classes_dir.path)
+      self._record_compile_classpath(relative_classpath, ctx.target, ctx.classes_dir.path)
 
-    self._verify_zinc_classpath(absolute_classpath, allow_dist=(self.execution_strategy != self.HERMETIC))
+    self._verify_zinc_classpath(relative_classpath, allow_dist=(self.execution_strategy != self.HERMETIC))
     # TODO: Investigate upstream_analysis for hermetic compiles
     self._verify_zinc_classpath(upstream_analysis.keys())
 
@@ -307,11 +283,6 @@ class BaseZincCompile(JvmCompile):
 
     classes_dir = ctx.classes_dir.path
     analysis_cache = ctx.analysis_file
-
-    analysis_cache = relative_to_exec_root(analysis_cache)
-    classes_dir = relative_to_exec_root(classes_dir)
-    # TODO: Have these produced correctly, rather than having to relativize them here
-    relative_classpath = tuple(relative_to_exec_root(c) for c in absolute_classpath)
 
     # list of classpath entries
     scalac_classpath_entries = self.scalac_classpath_entries()
@@ -342,16 +313,13 @@ class BaseZincCompile(JvmCompile):
     #   memoized (which in practice will only happen if this plugin uses some other plugin, thus
     #   triggering the plugin search mechanism, which does the memoizing).
     scalac_plugin_search_classpath = (
-      (set(absolute_classpath) | set(self.scalac_plugin_classpath_elements())) -
+      (set(relative_classpath) | set(self.scalac_plugin_classpath_elements())) -
       {ctx.classes_dir.path, ctx.jar_file.path}
     )
     zinc_args.extend(self._scalac_plugin_args(scalac_plugin_map, scalac_plugin_search_classpath))
     if upstream_analysis:
       zinc_args.extend(['-analysis-map',
-                        ','.join('{}:{}'.format(
-                          relative_to_exec_root(k),
-                          relative_to_exec_root(v)
-                        ) for k, v in upstream_analysis.items())])
+                        ','.join('{}:{}'.format(k, v) for k, v in upstream_analysis.items())])
 
     zinc_args.extend(args)
     zinc_args.extend(self._get_zinc_arguments(settings))
@@ -418,7 +386,7 @@ class BaseZincCompile(JvmCompile):
   def _compile_hermetic(self, jvm_options, ctx, classes_dir, zinc_args,
                         compiler_bridge_classpath_entry, dependency_classpath,
                         scalac_classpath_entries):
-    zinc_relpath = fast_relpath(self._zinc.zinc, get_buildroot())
+    zinc_relpath = self._zinc.zinc
 
     snapshots = [
       self._zinc.snapshot(self.context._scheduler),
@@ -496,12 +464,6 @@ class BaseZincCompile(JvmCompile):
     res = self.context.execute_process_synchronously_or_raise(
       req, self.name(), [WorkUnitLabel.COMPILER])
 
-    # TODO: Materialize as a batch in do_compile or somewhere
-    self.context._scheduler.materialize_directories((
-      DirectoryToMaterialize(get_buildroot(), res.output_directory_digest),
-    ))
-
-    # TODO: This should probably return a ClasspathEntry rather than a Digest
     return res.output_directory_digest
 
   def get_zinc_compiler_classpath(self):
@@ -520,16 +482,16 @@ class BaseZincCompile(JvmCompile):
 
     dist = self._zinc.dist
     for path in classpath:
-      if not os.path.isabs(path):
-        raise TaskError('Classpath entries provided to zinc should be absolute. '
-                        '{} is not.'.format(path))
+      if os.path.isabs(path):
+        raise TaskError('Classpath entries provided to zinc should NOT be absolute. '
+                        '{} is absolute!'.format(path))
 
-      if is_outside(path, self.get_options().pants_workdir) and (not allow_dist or is_outside(path, dist.home)):
-        raise TaskError('Classpath entries provided to zinc should be in working directory or '
-                        'part of the JDK. {} is not.'.format(path))
-      if path != os.path.normpath(path):
-        raise TaskError('Classpath entries provided to zinc should be normalized '
-                        '(i.e. without ".." and "."). {} is not.'.format(path))
+      # if is_outside(path, self.get_options().pants_workdir) and (not allow_dist or is_outside(path, dist.home)):
+      #   raise TaskError('Classpath entries provided to zinc should be in working directory or '
+      #                   'part of the JDK. {} is not.'.format(path))
+      # if path != os.path.normpath(path):
+      #   raise TaskError('Classpath entries provided to zinc should be normalized '
+      #                   '(i.e. without ".." and "."). {} is not.'.format(path))
 
   def log_zinc_file(self, analysis_file):
     self.context.log.debug('Calling zinc on: {} ({})'
