@@ -914,15 +914,16 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
       zinc_file_manager = dep_context.defaulted_property(tgt, 'zinc_file_manager')
       with Timer() as timer:
         directory_digest = self._compile_vts(vts,
-                          ctx,
-                          upstream_analysis,
-                          dependency_cp_entries,
-                          progress_message,
-                          tgt.platform,
-                          compiler_option_sets,
-                          zinc_file_manager,
-                          counter)
+                                             ctx,
+                                             upstream_analysis,
+                                             dependency_cp_entries,
+                                             progress_message,
+                                             tgt.platform,
+                                             compiler_option_sets,
+                                             zinc_file_manager,
+                                             counter)
 
+      # FIXME: we don't need to be mutating this!
       ctx.classes_dir = ClasspathEntry(ctx.classes_dir.path, directory_digest)
 
       self._record_target_stats(tgt,
@@ -932,15 +933,7 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
                                 is_incremental,
                                 'compile')
 
-      # Write any additional resources for this target to the target workdir.
-      self.write_extra_resources(ctx)
-
-      # Jar the compiled output.
-      self._create_context_jar(ctx)
-
     # Update the products with the latest classes.
     output_classpath_product.add_for_target(
       ctx.target,
-      [(conf, self._classpath_for_context(ctx)) for conf in self._confs],
-    )
-    self.register_extra_products_from_contexts([ctx.target], all_compile_contexts)
+      [(conf, self._classpath_for_context(ctx)) for conf in self._confs])

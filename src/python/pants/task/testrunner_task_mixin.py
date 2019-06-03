@@ -439,6 +439,7 @@ class PartitionedTestRunnerTaskMixin(TestRunnerTaskMixin, Task):
 
   @staticmethod
   def _copy_files(dest_dir, target):
+    # NB: we only copy over Files sources (i.e. resources()) into a chroot!
     if isinstance(target, Files):
       for source in target.sources_relative_to_buildroot():
         src = os.path.join(get_buildroot(), source)

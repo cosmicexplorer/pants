@@ -78,10 +78,6 @@ def _create_desandboxify_fn(possible_path_patterns):
   return desandboxify
 
 
-def _paths_from_classpath(classpath_tuples, collection_type=list):
-  return collection_type(y[1] for y in classpath_tuples)
-
-
 class CompositeProductAdder(object):
   def __init__(self, *products):
     self.products = products
@@ -106,9 +102,6 @@ class RscCompileContext(CompileContext):
                                                log_dir, zinc_args_file, sources)
     self.workflow = workflow
     self.rsc_jar_file = rsc_jar_file
-
-  def ensure_output_dirs_exist(self):
-    safe_mkdir(os.path.dirname(self.rsc_jar_file))
 
 
 class RscCompile(ZincCompile, MirroredTargetOptionMixin):
@@ -193,10 +186,6 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
   def _rsc(self):
     return Rsc.global_instance()
 
-  @memoized_property
-  def _rsc_classpath(self):
-    return self.tool_classpath('rsc')
-
   # TODO: allow @memoized_method to convert lists into tuples so they can be hashed!
   @memoized_property
   def _nailgunnable_combined_classpath(self):
@@ -218,51 +207,6 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
       self.SUBPROCESS: lambda: super(RscCompile, self).get_zinc_compiler_classpath(),
       self.NAILGUN: lambda: self._nailgunnable_combined_classpath,
     })()
-
-  # NB: Override of ZincCompile/JvmCompile method!
-  def register_extra_products_from_contexts(self, targets, compile_contexts):
-    super(RscCompile, self).register_extra_products_from_contexts(targets, compile_contexts)
-    def pathglob_for(filename):
-      return PathGlobsAndRoot(
-        PathGlobs(
-          (fast_relpath_optional(filename, get_buildroot()),)),
-        text_type(get_buildroot()))
-
-    def to_classpath_entries(paths, scheduler):
-      # list of path ->
-      # list of (path, optional<digest>) ->
-      path_and_digests = [(p, Digest.load(os.path.dirname(p))) for p in paths]
-      # partition: list of path, list of tuples
-      paths_without_digests = [p for (p, d) in path_and_digests if not d]
-      if paths_without_digests:
-        self.context.log.debug('Expected to find digests for {}, capturing them.'
-          .format(paths_without_digests))
-      paths_with_digests = [(p, d) for (p, d) in path_and_digests if d]
-      # list of path -> list path, captured snapshot -> list of path with digest
-      snapshots = scheduler.capture_snapshots(tuple(pathglob_for(p) for p in paths_without_digests))
-      captured_paths_and_digests = [(p, s.directory_digest)
-        for (p, s) in zip(paths_without_digests, snapshots)]
-      # merge and classpath ify
-      return [ClasspathEntry(p, d) for (p, d) in paths_with_digests + captured_paths_and_digests]
-
-    def confify(entries):
-      return [(conf, e) for e in entries for conf in self._confs]
-
-    # Ensure that the jar/rsc jar is on the rsc_mixed_compile_classpath.
-    for target in targets:
-      merged_cc = compile_contexts[target]
-      rsc_cc = merged_cc.rsc_cc
-      zinc_cc = merged_cc.zinc_cc
-      if rsc_cc.workflow is not None:
-        cp_entries = rsc_cc.workflow.resolve_for_enum_variant({
-          'zinc-only': lambda: confify([zinc_cc.jar_file]),
-          'zinc-java': lambda: confify([zinc_cc.jar_file]),
-          'rsc-and-zinc': lambda: confify(
-            to_classpath_entries([rsc_cc.rsc_jar_file], self.context._scheduler)),
-        })()
-        self.context.products.get_data('rsc_mixed_compile_classpath').add_for_target(
-          target,
-          cp_entries)
 
   def create_empty_extra_products(self):
     super(RscCompile, self).create_empty_extra_products()
@@ -360,13 +304,14 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
         dependencies_for_target = list(
           DependencyContext.global_instance().dependencies_respecting_strict_deps(target))
 
-        rsc_deps_classpath_unprocessed = _paths_from_classpath(
-          self.context.products.get_data('rsc_mixed_compile_classpath').get_for_targets(dependencies_for_target),
-          collection_type=OrderedSet)
+        rsc_deps_classpath = list(
+          cp_entry for _conf, cp_entry in
+          self.context.products.get_data('rsc_mixed_compile_classpath')
+          .get_confified_classpath_entries_for_targets(dependencies_for_target))
 
-        compile_classpath_rel = fast_relpath_collection(list(rsc_deps_classpath_unprocessed))
-
-        ctx.ensure_output_dirs_exist()
+        self.context.log.debug(
+          'target: {}, rsc_deps_classpath: {}'.format(target, rsc_deps_classpath))
+        compile_classpath_rel = [entry.path for entry in rsc_deps_classpath]
 
         with Timer() as timer:
           # Outline Scala sources into SemanticDB / scalac compatible header jars.
@@ -379,8 +324,9 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
 
           def hermetic_digest_classpath():
             jdk_libs_rel, jdk_libs_digest = self._jdk_libs_paths_and_digest(distribution)
+            deps_cp_digests = tuple(entry.directory_digest for entry in rsc_deps_classpath)
             merged_sources_and_jdk_digest = self.context._scheduler.merge_directories(
-              (jdk_libs_digest, sources_snapshot.directory_digest))
+              (jdk_libs_digest, sources_snapshot.directory_digest,) + deps_cp_digests)
             classpath_rel_jdk = compile_classpath_rel + jdk_libs_rel
             return (merged_sources_and_jdk_digest, classpath_rel_jdk)
           def nonhermetic_digest_classpath():
@@ -399,13 +345,15 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
                    '-d', rsc_jar_file,
                  ] + target_sources
 
-          self._runtool(
+          directory_digest = self._runtool(
             args,
             distribution,
             tgt=tgt,
-            input_files=tuple(compile_classpath_rel),
             input_digest=input_digest,
-            output_dir=os.path.dirname(rsc_jar_file))
+            expected_hermetic_output_file=rsc_jar_file,
+          )
+
+        ctx.classes_dir = ClasspathEntry(rsc_jar_file, directory_digest)
 
         self._record_target_stats(tgt,
           len(compile_classpath_rel),
@@ -418,7 +366,10 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
         self.write_extra_resources(ctx)
 
       # Update the products with the latest classes.
-      self.register_extra_products_from_contexts([ctx.target], compile_contexts)
+      cp_for_ctx = ctx.rsc_jar_file if self.get_options().use_classpath_jars else ctx.classes_dir
+      self.context.products.get_data('rsc_mixed_compile_classpath').add_for_target(
+        ctx.target,
+        [(conf, cp_for_ctx) for conf in self._confs])
 
     ### Create Jobs for ExecutionGraph
     rsc_jobs = []
@@ -576,14 +527,11 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
         sources=sources,
       ))
 
-  def _runtool_hermetic(self, main, tool_name, args, distribution, tgt=None, input_files=tuple(), input_digest=None, output_dir=None):
-    tool_classpath_abs = self._rsc_classpath
-    tool_classpath = fast_relpath_collection(tool_classpath_abs)
-
+  def _runtool_hermetic(self, main, tool_name, args, distribution, tgt=None, input_digest=None,
+                        expected_hermetic_output_file=None):
     jvm_options = self._jvm_options
 
     if self._rsc.use_native_image:
-      #jvm_options = []
       if jvm_options:
         raise ValueError(
           "`{}` got non-empty jvm_options when running with a graal native-image, but this is "
@@ -593,39 +541,20 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
       additional_snapshots = [native_image_snapshot]
       initial_args = [native_image_path]
     else:
-      # TODO(#6071): Our ExecuteProcessRequest expects a specific string type for arguments,
-      # which py2 doesn't default to. This can be removed when we drop python 2.
-      str_jvm_options = [text_type(opt) for opt in self.get_options().jvm_options]
-      additional_snapshots = []
-      initial_args = [
-        distribution.java,
-      ] + str_jvm_options + [
-        '-cp', os.pathsep.join(tool_classpath),
-        main,
-      ]
+      raise NotImplementedError('no support for non-native-image hermetic right now!')
 
     cmd = initial_args + args
 
-    pathglobs = list(tool_classpath)
-    pathglobs.extend(f if os.path.isfile(f) else '{}/**'.format(f) for f in input_files)
-
-    if pathglobs:
-      root = PathGlobsAndRoot(
-        PathGlobs(tuple(pathglobs)),
-        text_type(get_buildroot()))
-      # dont capture snapshot, if pathglobs is empty
-      path_globs_input_digest = self.context._scheduler.capture_snapshots((root,))[0].directory_digest
-
     epr_input_files = self.context._scheduler.merge_directories(
-      ((path_globs_input_digest,) if path_globs_input_digest else ())
-      + ((input_digest,) if input_digest else ())
+      ((input_digest,) if input_digest else ())
       + tuple(s.directory_digest for s in additional_snapshots))
+
+    assert expected_hermetic_output_file is not None
 
     epr = ExecuteProcessRequest(
       argv=tuple(cmd),
       input_files=epr_input_files,
-      output_files=tuple(),
-      output_directories=(output_dir,),
+      output_files=(expected_hermetic_output_file,),
       timeout_seconds=15*60,
       description='run {} for {}'.format(tool_name, tgt),
       # TODO: These should always be unicodes
@@ -638,19 +567,11 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
       self.name(),
       [WorkUnitLabel.TOOL])
 
+    # TODO: convert this into .execute_process_synchronously_without_raising()?
     if res.exit_code != 0:
       raise TaskError(res.stderr, exit_code=res.exit_code)
 
-    if output_dir:
-      res.output_directory_digest.dump(output_dir)
-      self.context._scheduler.materialize_directories((
-        DirectoryToMaterialize(
-          # NB the first element here is the root to materialize into, not the dir to snapshot
-          text_type(get_buildroot()),
-          res.output_directory_digest),
-      ))
-      # TODO drop a file containing the digest, named maybe output_dir.digest
-    return res
+    return res.output_directory_digest
 
   # The classpath is parameterized so that we can have a single nailgun instance serving all of our
   # execution requests.
@@ -676,15 +597,15 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
       raise Exception('couldnt find work unit for underlying execution')
     return runjava_workunit
 
-  def _runtool(self, args, distribution,
-               tgt=None, input_files=tuple(), input_digest=None, output_dir=None):
+  def _runtool(self, args, distribution, tgt=None, input_digest=None,
+               expected_hermetic_output_file=None):
     main = 'rsc.cli.Main'
     tool_name = 'rsc'
     with self.context.new_workunit(tool_name) as wu:
       return self.execution_strategy_enum.resolve_for_enum_variant({
         self.HERMETIC: lambda: self._runtool_hermetic(
-          main, tool_name, args, distribution,
-          tgt=tgt, input_files=input_files, input_digest=input_digest, output_dir=output_dir),
+          main, tool_name, args, distribution, tgt=tgt,
+          input_digest=input_digest, expected_hermetic_output_file=expected_hermetic_output_file),
         self.SUBPROCESS: lambda: self._runtool_nonhermetic(
           wu, self._rsc_classpath, main, tool_name, args, distribution),
         self.NAILGUN: lambda: self._runtool_nonhermetic(
@@ -695,6 +616,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
 
   @memoized_method
   def _jdk_libs_paths_and_digest(self, hermetic_dist):
+    """???/rsc needs jdk libs explicitly"""
     jdk_libs_rel, jdk_libs_globs = hermetic_dist.find_libs_path_globs(self._JDK_LIB_NAMES)
     jdk_libs_digest = self.context._scheduler.capture_snapshots(
       (jdk_libs_globs,))[0].directory_digest
