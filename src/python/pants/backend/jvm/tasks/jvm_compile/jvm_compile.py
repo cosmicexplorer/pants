@@ -6,6 +6,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import functools
 import os
+import sys
 from builtins import object, open, str
 from multiprocessing import cpu_count
 
@@ -792,6 +793,9 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
     # that, though (as well as the source files?).
     def record(k, v):
       self.context.run_tracker.report_target_info(self.options_scope, target, [stats_key, k], v)
+    print('[Timing({})] {}: {} sec; {} sources; {} classpathlen'.format(
+        stats_key, target.address.spec, compiletime, sources_len, classpath_len
+      ), file=sys.stderr)
     record('time', compiletime)
     record('classpath_len', classpath_len)
     record('sources_len', sources_len)
