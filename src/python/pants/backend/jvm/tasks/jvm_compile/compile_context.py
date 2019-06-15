@@ -27,6 +27,7 @@ class CompileContext(object):
     self.log_dir = log_dir
     self.zinc_args_file = zinc_args_file
     self.sources = sources
+    self.dependency_classpath = None
 
   @contextmanager
   def open_jar(self, mode):
