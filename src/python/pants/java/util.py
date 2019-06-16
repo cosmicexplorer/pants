@@ -17,7 +17,7 @@ from pants.java.jar.manifest import Manifest
 from pants.java.nailgun_executor import NailgunExecutor
 from pants.util.contextutil import open_zip, temporary_file
 from pants.util.dirutil import safe_concurrent_rename, safe_mkdir, safe_mkdtemp
-from pants.util.process_handler import ProcessHandler, SubprocessProcessHandler
+from pants.util.process_handler import SubprocessProcessHandler
 
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,8 @@ def execute_java(classpath, main, jvm_options=None, args=None, executor=None,
 def execute_java_async(classpath, main, jvm_options=None, args=None, executor=None,
                        workunit_factory=None, workunit_name=None, workunit_labels=None,
                        cwd=None, workunit_log_config=None, distribution=None,
-                       create_synthetic_jar=True, synthetic_jar_dir=None):
+                       create_synthetic_jar=True, synthetic_jar_dir=None,
+                       stdin=None, stdout=None, stderr=None):
   """This is just like execute_java except that it returns a ProcessHandler rather than a return code.
 
 
@@ -117,7 +118,22 @@ def execute_java_async(classpath, main, jvm_options=None, args=None, executor=No
                               workunit_factory=workunit_factory,
                               workunit_name=workunit_name,
                               workunit_labels=workunit_labels,
-                              workunit_log_config=workunit_log_config)
+                              workunit_log_config=workunit_log_config,
+                              cwd=cwd,
+                              stdin=stdin,
+                              stdout=stdout,
+                              stderr=stderr)
+
+
+def _create_workunit_generator(runner, workunit_factory, workunit_name, workunit_labels=None,
+                               workunit_log_config=None):
+
+  is_nailgun = isinstance(runner.executor, NailgunExecutor)
+  execution_mode_label = WorkUnitLabel.NAILGUN if is_nailgun else WorkUnitLabel.JVM
+  workunit_labels = [WorkUnitLabel.TOOL, execution_mode_label] + (workunit_labels or [])
+
+  return workunit_factory(name=workunit_name, labels=workunit_labels, cmd=runner.cmd,
+                          log_config=workunit_log_config)
 
 
 def execute_runner(runner, workunit_factory=None, workunit_name=None, workunit_labels=None,
@@ -159,7 +175,7 @@ def execute_runner(runner, workunit_factory=None, workunit_name=None, workunit_l
 
 
 def execute_runner_async(runner, workunit_factory=None, workunit_name=None, workunit_labels=None,
-                         workunit_log_config=None):
+                         workunit_log_config=None, cwd=None, stdin=None, stdout=None, stderr=None):
   """Executes the given java runner asynchronously.
 
   We can't use 'with' here because the workunit_generator's __exit__ function
@@ -197,12 +213,15 @@ def execute_runner_async(runner, workunit_factory=None, workunit_name=None, work
     workunit_generator = workunit_factory(name=workunit_name, labels=workunit_labels,
                                 cmd=runner.cmd, log_config=workunit_log_config)
     workunit = workunit_generator.__enter__()
-    process = runner.spawn(stdout=workunit.output('stdout'), stderr=workunit.output('stderr'))
+    process = runner.spawn(stdout=(stdout or workunit.output('stdout')),
+                           stderr=(stderr or workunit.output('stderr')),
+                           stdin=stdin,
+                           cwd=cwd)
 
-    class WorkUnitProcessHandler(ProcessHandler):
-      def wait(_, timeout=None):
+    class WorkUnitProcessHandler(SubprocessProcessHandler):
+      def wait(self, timeout=None):
         try:
-          ret = process.wait(timeout=timeout)
+          ret = self._process.wait(timeout=timeout)
           workunit.set_outcome(WorkUnit.FAILURE if ret else WorkUnit.SUCCESS)
           workunit_generator.__exit__(None, None, None)
           return ret
@@ -210,16 +229,7 @@ def execute_runner_async(runner, workunit_factory=None, workunit_name=None, work
           if not workunit_generator.__exit__(*sys.exc_info()):
             raise
 
-      def kill(_):
-        return process.kill()
-
-      def terminate(_):
-        return process.terminate()
-
-      def poll(_):
-        return process.poll()
-
-    return WorkUnitProcessHandler()
+    return WorkUnitProcessHandler(process)
 
 
 def relativize_classpath(classpath, root_dir, followlinks=True):

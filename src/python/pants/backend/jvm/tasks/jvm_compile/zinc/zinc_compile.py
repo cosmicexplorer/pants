@@ -174,6 +174,12 @@ class BaseZincCompile(JvmCompile):
                   'This is unset by default, because it is generally a good precaution to cache '
                   'only clean/cold builds.')
 
+    register('--empty-compilation', type=bool, default=False,
+             fingerprint=True,
+             help='When set, no compiles will be performed, but all task products such as class '
+                  'directories will still be populated. This allows downstream tasks such as '
+                  'export to run without requiring a full compile.')
+
   @classmethod
   def subsystem_dependencies(cls):
     return super(BaseZincCompile, cls).subsystem_dependencies() + (Zinc.Factory, JvmPlatform,)
@@ -413,13 +419,15 @@ class BaseZincCompile(JvmCompile):
         fp.write(arg)
         fp.write('\n')
 
-    return self.execution_strategy_enum.resolve_for_enum_variant({
-      self.HERMETIC: lambda: self._compile_hermetic(
-        jvm_options, ctx, classes_dir, zinc_args, compiler_bridge_classpath_entry,
-        dependency_classpath, scalac_classpath_entries),
-      self.SUBPROCESS: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
-      self.NAILGUN: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
-    })()
+    ctx.ensure_output_dirs_exist()
+    if not self.get_options().empty_compilation:
+      return self.execution_strategy_enum.resolve_for_enum_variant({
+        self.HERMETIC: lambda: self._compile_hermetic(
+          jvm_options, ctx, classes_dir, zinc_args, compiler_bridge_classpath_entry,
+          dependency_classpath, scalac_classpath_entries),
+        self.SUBPROCESS: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
+        self.NAILGUN: lambda: self._compile_nonhermetic(jvm_options, zinc_args),
+      })()
 
   class ZincCompileError(TaskError):
     """An exception type specifically to signal a failed zinc execution."""
@@ -651,20 +659,21 @@ class BaseZincCompile(JvmCompile):
             _SCALAC_PLUGIN_INFO_FILE, cp_elem))
       return plugin_info.find('name').text
 
-    if os.path.isdir(classpath_element):
-      try:
-        with open(os.path.join(classpath_element, _SCALAC_PLUGIN_INFO_FILE), 'r') as plugin_info_file:
+    try:
+      if os.path.isdir(classpath_element):
+        plugin_info_path = os.path.join(classpath_element, _SCALAC_PLUGIN_INFO_FILE)
+        with open(plugin_info_path, 'r') as plugin_info_file:
           return process_info_file(classpath_element, plugin_info_file)
-      except IOError as e:
-        if e.errno != errno.ENOENT:
-          raise
-    else:
-      with open_zip(classpath_element, 'r') as jarfile:
-        try:
-          with closing(jarfile.open(_SCALAC_PLUGIN_INFO_FILE, 'r')) as plugin_info_file:
-            return process_info_file(classpath_element, plugin_info_file)
-        except KeyError:
-          pass
+      else:
+        with open_zip(classpath_element, 'r') as jarfile:
+          try:
+            with closing(jarfile.open(_SCALAC_PLUGIN_INFO_FILE, 'r')) as plugin_info_file:
+              return process_info_file(classpath_element, plugin_info_file)
+          except KeyError:
+            pass
+    except IOError as e:
+      if e.errno != errno.ENOENT:
+        raise
     return None
 
 
