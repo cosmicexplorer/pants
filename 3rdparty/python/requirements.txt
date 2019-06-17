@@ -37,5 +37,6 @@ setproctitle==1.1.10
 setuptools==40.6.3
 six>=1.9.0,<2
 subprocess32==3.2.7 ; python_version<'3'
+protobuf==3.8.0
 wheel==0.31.1
 www-authenticate==0.9.2
