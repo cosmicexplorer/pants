@@ -103,6 +103,11 @@ class PythonToolPrepBase(Task):
   tool_instance_cls = None
 
   @classmethod
+  def register_options(cls, register):
+    super(PythonToolPrepBase, cls).register_options(register)
+    register('--do-skip', type=bool, default=False)
+
+  @classmethod
   def subsystem_dependencies(cls):
     return super().subsystem_dependencies() + (
       cls.tool_subsystem_cls.scoped(cls),
@@ -144,6 +149,8 @@ class PythonToolPrepBase(Task):
     return True
 
   def execute(self):
+    if self.get_options().do_skip:
+      return
     if not self.will_be_invoked():
       return
 
