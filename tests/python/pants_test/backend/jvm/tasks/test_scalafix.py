@@ -52,3 +52,6 @@ class ScalaFixIntegrationTest(PantsRunIntegrationTest):
       f = open(test_file_name, 'w')
       f.write(contents)
       f.close()
+
+  def test_scalafix_semantic(self):
+    
