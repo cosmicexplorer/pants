@@ -419,7 +419,7 @@ class BaseZincCompile(JvmCompile):
         fp.write(arg)
         fp.write('\n')
 
-    ctx.ensure_output_dirs_exist()
+    # ctx.ensure_output_dirs_exist()
     if not self.get_options().empty_compilation:
       return self.execution_strategy_enum.resolve_for_enum_variant({
         self.HERMETIC: lambda: self._compile_hermetic(
