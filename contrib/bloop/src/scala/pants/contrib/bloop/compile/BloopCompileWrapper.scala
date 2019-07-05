@@ -146,7 +146,7 @@ object PantsCompileMain {
             diagnostics.foreach { d =>
               d.severity match {
                 case Some(bsp.DiagnosticSeverity.Error) => logger.error(printDiagnostic(d))
-                case Some(bsp.DiagnosticSeverity.Warning) => () // logger.warn(printDiagnostic(d))
+                case Some(bsp.DiagnosticSeverity.Warning) => logger.warn(printDiagnostic(d))
                 case Some(bsp.DiagnosticSeverity.Information) => logger.info(printDiagnostic(d))
                 case Some(bsp.DiagnosticSeverity.Hint) => logger.debug(printDiagnostic(d))
                 case None => logger.info(printDiagnostic(d))
@@ -224,27 +224,28 @@ object PantsCompileMain {
             val outputDir = pwd / ".pants.d" / ".tmp"
             rm(outputDir)
             mkdir(outputDir)
-            val nonTempDirMapping = err(mapping.as[Map[String, String]]).map {
+            val nonTempDirMapping: Map[String, Path] = err(mapping.as[Map[String, String]]).map {
               case (targetId, tempClassesDir) =>
                 val curTargetOutputDir = outputDir / RelPath(targetId)
                 logger.info(s"copying temp dir $tempClassesDir to $curTargetOutputDir!!")
                 // TODO: for some reason ammonite-ops `cp` just hangs here???
                 %%("cp", "-r", Path(tempClassesDir).toString, curTargetOutputDir.toString)(pwd)
-                (targetId -> curTargetOutputDir.toString)
+                (targetId -> curTargetOutputDir)
             }.toMap
 
-            System.out.println(nonTempDirMapping.asJson)
+            val msg = BloopCompileSuccess(nonTempDirMapping)
+            System.out.println(msg.intoMessage.asSprayJson)
             System.out.close()
             sys.exit(0)
-            ()
-          }
-          case bsp.CompileResult(_, bsp.StatusCode.Ok, _, _) => {
-            logger.info("(weirdly empty!!!!) compile succeeded!")
-            sys.exit(0)
-            ()
           }
           case x => throw new Exception(s"compile failed: $x")
-        }.map { Unit => sys.exit(0) }
+        }
+        .onErrorHandle {
+          case e => {
+            System.err.println(s"omg!!! $e")
+            sys.exit(1)
+          }
+        }
     }.runAsync(scheduler)
 
     val launcherTask = Task.eval(new LauncherMain(

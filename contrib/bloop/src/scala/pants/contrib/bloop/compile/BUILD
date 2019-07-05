@@ -10,6 +10,7 @@ scala_library(
     'contrib/bloop/3rdparty/jvm:ammonite-ops',
     'contrib/bloop/3rdparty/jvm:bloop-frontend',
     'contrib/bloop/3rdparty/jvm:bloop-launcher',
+    'contrib/bloop/3rdparty/jvm:spray-json',
   ],
 )
 
