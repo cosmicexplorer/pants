@@ -8,7 +8,15 @@ jar_library(
   ],
 )
 
-BLOOP_REV = '1.3.2'
+BLOOP_REV = '1.3.2+44-d3fba218+20190704-1622'
+# BLOOP_REV = '1.3.2'
+
+jar_library(
+  name='bloop-frontend',
+  jars=[
+    scala_jar(org='ch.epfl.scala', name='bloop-frontend', rev=BLOOP_REV),
+  ],
+)
 
 jar_library(
   name='bloop-json-config',

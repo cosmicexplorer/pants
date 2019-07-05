@@ -38,7 +38,7 @@ object BloopConfigGen extends App {
     // we may need to figure out the right way to pipe this into bloop.
     .map { case (depName, target) => (depName, target.id) }
     .toMap
-  System.err.println(s"sourceTargetIdMap: $sourceTargetIdMap")
+  // System.err.println(s"sourceTargetIdMap: $sourceTargetIdMap")
 
   val projects: Seq[BloopConfig.Project] = sourceTargets
     .flatMap { case (_, target) =>
@@ -49,7 +49,7 @@ object BloopConfigGen extends App {
         // TODO: some targets like //:scala-library won't show up -- these should be converted into
         // e.g. `addCompilerToClasspath` perhaps??
         .flatMap(sourceTargetIdMap.get(_))
-      System.err.println(s"target: ${target.id}, deps: ${target.dependencies}, depT: $dependentTargetIds")
+      // System.err.println(s"target: ${target.id}, deps: ${target.dependencies}, depT: $dependentTargetIds")
 
       val dependencyClasspath = target.dependencyClasspath.getOrElse(Seq()).map(Path(_))
 
@@ -59,6 +59,8 @@ object BloopConfigGen extends App {
 
       val sources = target.sources.getOrElse(Seq())
         .map(srcRelPath => buildRootPath / RelPath(srcRelPath))
+
+      val resources = target.resources.getOrElse(List()).map(Path(_))
 
       val curPlatformString = target.platform
         .getOrElse(pantsExportParsed.jvmPlatforms.defaultPlatform)
@@ -116,12 +118,11 @@ object BloopConfigGen extends App {
         classpath = (sourceTargetClassDirs ++ dependencyClasspath).map(_.toNIO).toList,
         out = distDirPath.toNIO,
         classesDir = classesDir.toNIO,
-        // TODO: parse resources targets from the export json!
-        resources = None,
+        resources = Some(resources.map(_.toNIO).toList),
         `scala` = Some(scalaConfig),
         java = Some(javaConfig),
         sbt = None,
-        // TODO: add test configs for junit_tests() targets!!
+        // NB: Pants does the testing itself!!
         test = None,
         platform = Some(bloopPlatform),
         // NB: Pants does the resolution itself!!
@@ -133,6 +134,7 @@ object BloopConfigGen extends App {
   projects.foreach { proj =>
     val bloopConfigFile = BloopConfig.File(BloopConfig.File.LatestVersion, proj)
     val outputFile = bloopConfigDirPath / RelPath(s"${proj.name}.json")
+    // System.err.println(s"writing project ${proj.name} to file $outputFile!")
     BloopConfigWrite(bloopConfigFile, outputFile.toNIO)
   }
 }

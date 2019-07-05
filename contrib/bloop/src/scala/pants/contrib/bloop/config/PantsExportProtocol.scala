@@ -19,6 +19,7 @@ case class Target(
   transitive: Boolean,
   isCodeGen: Boolean,
   platform: Option[String],
+  resources: Option[List[String]],
   isSynthetic: Boolean,
   classesDir: Option[String],
   zincAnalysis: Option[String],

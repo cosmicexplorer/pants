@@ -27,6 +27,9 @@ class BloopWriteExport(NailgunTask):
 
     register('--output-dir', type=str, default='.bloop', advanced=True,
              help='Relative path to the buildroot to write the ensime config to.')
+    register('--export-json-output-file', type=str, default='export-wow.json',
+             help='Tee the pants export output (which is interpreted by a subprocess) also into '
+                  'this file.')
 
     cls.register_jvm_tool(
       register,
@@ -85,3 +88,11 @@ class BloopWriteExport(NailgunTask):
       raise TaskError('???', exit_code=rc)
 
     self.context.products.register_data('bloop_output_dir', output_dir)
+
+    export_output_file = self.get_options().export_json_output_file
+    # raise Exception(f'export_output_file: {export_output_file}')
+    if export_output_file:
+      safe_file_dump(
+        os.path.join(get_buildroot(), export_output_file),
+        payload=export_result,
+        mode='w')
