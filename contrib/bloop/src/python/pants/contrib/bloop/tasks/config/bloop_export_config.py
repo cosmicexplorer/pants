@@ -4,6 +4,8 @@
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 
+import os
+
 from future.utils import text_type
 from pants.backend.jvm.subsystems.scala_platform import ScalaPlatform
 from pants.base.build_environment import get_buildroot
@@ -74,8 +76,15 @@ class BloopExportConfig(ModifiedExportTaskBase):
     if not reported_scala_version:
       reported_scala_version = self._scala_platform.version
 
+    # TODO: why aren't these all absolute paths, or all relative paths?
+    def coerce_relative_classpath_entry(path):
+      if os.path.isabs(path):
+        return fast_relpath(path, get_buildroot())
+      else:
+        return path
+
     scala_compiler_jars = [
-      text_type(fast_relpath(cpe.path, get_buildroot())) for cpe in
+      text_type(coerce_relative_classpath_entry(cpe.path)) for cpe in
       self._scala_platform.compiler_classpath_entries(self.context.products, self.context._scheduler)
     ]
 

@@ -173,6 +173,9 @@ class ModifiedExportTaskBase(ExportTask):
       if zinc_args is not None:
         info['zinc_args'] = zinc_args
 
+      if 'resources' not in info:
+        info['resources'] = []
+
       dep_ctx = DependencyContext.global_instance()
       for dep in current_target.strict_dependencies(dep_ctx):
         info['targets'].append(dep.address.spec)
@@ -183,6 +186,9 @@ class ModifiedExportTaskBase(ExportTask):
           # Add all the jars pulled in by this jar_library
           target_libraries.update(iter_transitive_jars(dep))
         if isinstance(dep, Resources):
+          info['resources'].extend(
+            source_root
+            for source_root, _ in self._source_roots_for_target(dep))
           resource_target_map[dep] = current_target
 
       if isinstance(current_target, ScalaLibrary):

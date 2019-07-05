@@ -8,7 +8,7 @@ jar_library(
   ],
 )
 
-BLOOP_REV = '1.3.2+8-6a9cf1e9+20190626-1944'
+BLOOP_REV = '1.3.2+44-d3fba218+20190704-1622'
 
 jar_library(
   name='bloop-frontend',
