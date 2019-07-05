@@ -10,6 +10,7 @@ from collections import namedtuple
 import six
 from colors import cyan, green, red, yellow
 
+from pants.base.exception_sink import ExceptionSink
 from pants.base.workunit import WorkUnit, WorkUnitLabel
 from pants.reporting.plaintext_reporter_base import PlainTextReporterBase
 from pants.reporting.report import Report
@@ -196,8 +197,12 @@ class PlainTextReporter(PlainTextReporterBase):
       raise Exception('Invalid {}: {}'.format(ReporterDestination, dest))
 
   def flush(self):
-    self.settings.outfile.flush()
-    self.settings.errfile.flush()
+    try:
+      self.settings.outfile.flush()
+      self.settings.errfile.flush()
+    except Exception as e:
+      ExceptionSink.log_exception(
+        f'Error while writing to report: {e}')
 
   def _get_label_format(self, workunit):
     for label, label_format in self.LABEL_FORMATTING.items():
