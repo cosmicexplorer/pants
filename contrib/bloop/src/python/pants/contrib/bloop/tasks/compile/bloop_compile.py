@@ -16,18 +16,9 @@ from pants.base.workunit import WorkUnitLabel
 from pants.engine.rules import RootRule, UnionRule, rule, union
 from pants.engine.selectors import Get
 from pants.java.jar.jar_dependency import JarDependency
-from pants.util.memo import memoized_classmethod
 from pants.util.meta import AbstractClass
-from pants.util.objects import Exactly, SubclassesOf, datatype, enum, string_list
+from pants.util.objects import SubclassesOf, datatype, enum_struct, string_list
 from pants.util.process_handler import ProcessHandler, subprocess
-
-
-# TODO: make the enum keyed off of `type`s directly?
-class BloopLauncherMessageType(enum([
-    'bloop-compile-success',
-    'bloop-compile-error',
-    'pants-compile-request',
-])): pass
 
 
 class BloopHackyProtocol(AbstractClass):
@@ -65,19 +56,11 @@ class PantsCompileRequest(datatype([
     return cls(json_obj)
 
 
-class BloopLauncherMessage(datatype([
-    ('message_type', BloopLauncherMessageType),
-    ('contents', Exactly(BloopCompileSuccess, BloopCompileError, PantsCompileRequest)),
-])):
-
-  @memoized_classmethod
-  def _message_class(cls, msg_type):
-    """???"""
-    return msg_type.resolve_for_enum_variant({
-      'bloop-compile-success': BloopCompileSuccess,
-      'bloop-compile-error': BloopCompileError,
-      'pants-compile-request': PantsCompileRequest,
-    })
+class BloopLauncherMessage(enum_struct({
+    'bloop-compile-success': BloopCompileSuccess,
+    'bloop-compile-error': BloopCompileError,
+    'pants-compile-request': PantsCompileRequest,
+})):
 
   @classmethod
   def parse_json_string(cls, json_line):
@@ -87,11 +70,11 @@ class BloopLauncherMessage(datatype([
     'contents'
     """
     msg = json.loads(json_line)
-    msg_type = BloopLauncherMessageType(msg['message_type'])
-    msg_cls = cls._message_class(msg_type)
+    tag = msg['message_type']
+    msg_cls = cls.type_mapping[tag]
     msg_contents = msg['contents']
     msg_obj = msg_cls.parse_from_json(msg_contents)
-    return cls(message_type=msg_type, contents=msg_obj)
+    return cls(tag=tag, value=msg_obj)
 
 
 class BloopInvocationRequest(datatype([
@@ -99,19 +82,10 @@ class BloopInvocationRequest(datatype([
 ])): pass
 
 
-class BloopInvocationResult(datatype([
-    # FIXME: flesh out the enum pattern more here! this is an Either[Error, Success], basically
-    ('project_name_classes_dir_mapping', Exactly(tuple, type(None))),
-    ('failed_project_names', Exactly(list, type(None))),
-])):
-
-  def __new__(cls, *, project_name_classes_dir_mapping=None, failed_project_names=None):
-    # TODO: make an xor function?
-    assert (project_name_classes_dir_mapping is not None) or (failed_project_names is not None)
-    assert (project_name_classes_dir_mapping is None) or (failed_project_names is None)
-    return super().__new__(cls,
-                           project_name_classes_dir_mapping=project_name_classes_dir_mapping,
-                           failed_project_names=failed_project_names)
+class BloopInvocationResult(enum_struct({
+    'success': BloopCompileSuccess,
+    'failure': BloopCompileError,
+})): pass
 
 
 # TODO: merge this with `BloopLauncherMessage`?!
@@ -119,37 +93,40 @@ class BloopInvocationResult(datatype([
 class BloopLauncherMessageTag(object): pass
 
 
-class BloopIntermediateResult(datatype([
-    # FIXME: flesh out the enum pattern more here! None => no final result, keep going!
-    ('actual_result', Exactly(BloopInvocationResult, type(None))),
-])): pass
+class BloopIntermediateResult(enum_struct({
+    'keep-going': type(None),
+    'done': BloopInvocationResult,
+})): pass
 
 
 @rule(BloopIntermediateResult, [BloopCompileSuccess])
 def process_bloop_success(bloop_compile_success):
-  return BloopIntermediateResult(BloopInvocationResult(
-    project_name_classes_dir_mapping=bloop_compile_success.project_name_classes_dir_mapping))
+  return BloopIntermediateResult(BloopInvocationResult(bloop_compile_success))
 
 
 @rule(BloopIntermediateResult, [BloopCompileError])
 def process_bloop_error(bloop_compile_error):
-  return BloopIntermediateResult(BloopInvocationResult(
-    failed_project_names=bloop_compile_error.failed_project_names))
+  return BloopIntermediateResult(BloopInvocationResult(bloop_compile_error))
 
 
 @rule(BloopIntermediateResult, [PantsCompileRequest])
 def process_pants_compile_request(pants_compile_request):
   raise NotImplementedError(f'oops! {pants_compile_request}')
-  return BloopIntermediateResult(actual_result=None)
+  return BloopIntermediateResult(None)
 
 
 @rule(BloopInvocationResult, [BloopInvocationRequest])
 def invoke_bloop(bloop_invocation_request):
   for line in bloop_invocation_request.bsp_launcher_process.stdout:
     msg = BloopLauncherMessage.parse_json_string(line.decode('utf-8'))
-    maybe_result = yield Get(BloopIntermediateResult, BloopLauncherMessageTag, msg.contents)
-    if maybe_result.actual_result is not None:
-      yield maybe_result.actual_result
+    maybe_result = yield Get(BloopIntermediateResult, BloopLauncherMessageTag, msg.value)
+    # TODO: figure out how to do functional pattern matching with `yield` expressions!
+    do_quit = maybe_result.match({
+      'keep-going': lambda _: False,
+      'done': lambda _: True,
+    })
+    if do_quit:
+      yield maybe_result.value
 
   raise Exception("shouldn't get here!!")
 
@@ -214,8 +191,7 @@ class BloopCompile(NailgunTask):
     if rc != 0:
       raise TaskError('???', exit_code=rc)
 
-    assert bloop_invocation_result.failed_project_names is None
-    target_name_to_classes_dir = dict(bloop_invocation_result.project_name_classes_dir_mapping)
+    target_name_to_classes_dir = dict(bloop_invocation_result.value.project_name_classes_dir_mapping)
 
     self.context.log.info('target_name_to_classes_dir: {}'.format(target_name_to_classes_dir))
 
