@@ -396,6 +396,35 @@ def enum(all_values):
   return ChoiceDatatype
 
 
+def enum_struct(enum_type_mapping):
+  """???/mapping from enum string -> a type"""
+  assert all(isinstance(v, type) for v in enum_type_mapping.values())
+  assert len(enum_type_mapping.values()) == len(set(enum_type_mapping.values()))
+  anonymous_enum_for_keys = enum(enum_type_mapping.keys())
+
+  class TaggedUnion(datatype([
+      ('tag', anonymous_enum_for_keys),
+      ('value', Exactly(*enum_type_mapping.values()))
+  ])):
+
+    type_mapping = enum_type_mapping
+    reversed_type_mapping = {v:k for k, v in type_mapping.items()}
+
+    def match(self, mapping):
+      """???/mapping from enum string -> 1-arg function accepting the datatype"""
+      fn = self.tag.resolve_for_enum_variant(mapping)
+      return fn(self.value)
+
+    def __new__(cls, value, *, tag=None):
+      """???"""
+      if tag is None:
+        tag = cls.reversed_type_mapping.get(type(value), None)
+      tag = anonymous_enum_for_keys(tag)
+      return super().__new__(cls, tag=tag, value=value)
+
+  return TaggedUnion
+
+
 # TODO: make this error into an attribute on the `TypeConstraint` class object!
 class TypeConstraintError(TypeError):
   """Indicates a :class:`TypeConstraint` violation."""
