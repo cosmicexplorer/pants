@@ -933,7 +933,9 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
                                 'compile')
 
       # Write any additional resources for this target to the target workdir.
-      self.write_extra_resources(ctx)
+      # FIXME: This breaks bloop builds to create! Figure out how to make annotation processors /
+      # scalac plugins work?!
+      # self.write_extra_resources(ctx)
 
       # Jar the compiled output.
       self._create_context_jar(ctx)

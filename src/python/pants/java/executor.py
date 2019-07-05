@@ -166,7 +166,7 @@ class CommandLineGrabber(Executor):
       def run(_, stdout=None, stderr=None, stdin=None):
         return 0
 
-      def spawn(_, stdout=None, stderr=None, stdin=None):
+      def spawn(_, stdout=None, stderr=None, stdin=None, cwd=None):
         return None
 
     return Runner()
@@ -211,8 +211,8 @@ class SubprocessExecutor(Executor):
     self._process = None
 
   def _runner(self, classpath, main, jvm_options, args, cwd=None):
-    cwd = cwd or os.getcwd()
-    command = self._create_command(classpath, main, jvm_options, args, cwd=cwd)
+    provided_cwd = cwd or os.getcwd()
+    command = self._create_command(classpath, main, jvm_options, args, cwd=provided_cwd)
 
     class Runner(self.Runner):
       @property
@@ -223,8 +223,8 @@ class SubprocessExecutor(Executor):
       def command(_):
         return list(command)
 
-      def spawn(_, stdout=None, stderr=None, stdin=None):
-        return self._spawn(command, cwd, stdout=stdout, stderr=stderr, stdin=stdin)
+      def spawn(_, stdout=None, stderr=None, stdin=None, cwd=None):
+        return self._spawn(command, (cwd or provided_cwd), stdout=stdout, stderr=stderr, stdin=stdin)
 
       def run(_, stdout=None, stderr=None, stdin=None):
         return self._spawn(command, cwd, stdout=stdout, stderr=stderr, stdin=stdin).wait()

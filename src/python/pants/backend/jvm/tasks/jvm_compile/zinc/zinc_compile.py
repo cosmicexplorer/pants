@@ -420,7 +420,12 @@ class BaseZincCompile(JvmCompile):
         fp.write('\n')
 
     # ctx.ensure_output_dirs_exist()
-    if not self.get_options().empty_compilation:
+    if self.get_options().empty_compilation:
+      # FIXME: This breaks bloop builds to create! Figure out how to make annotation processors /
+      # scalac plugins work?!
+      # self.write_extra_resources(ctx)
+      pass
+    else:
       return self.execution_strategy_enum.resolve_for_enum_variant({
         self.HERMETIC: lambda: self._compile_hermetic(
           jvm_options, ctx, classes_dir, zinc_args, compiler_bridge_classpath_entry,
