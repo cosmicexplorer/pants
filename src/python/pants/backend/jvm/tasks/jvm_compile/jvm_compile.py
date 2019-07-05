@@ -979,6 +979,9 @@ class JvmCompile(CompilerOptionSetsMixin, NailgunTaskBase):
                                 is_incremental,
                                 'compile')
 
+      # FIXME: Writing resources to the output directory can sometimes cause bloop builds to fail!
+      # Figure out how to make annotation processors / scalac plugins work?!
+
     # Update the products with the latest classes.
     output_classpath_product.add_for_target(
       ctx.target,

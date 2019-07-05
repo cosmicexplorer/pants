@@ -197,8 +197,14 @@ class SubprocessExecutor(Executor):
     with environment_as(**cls._SCRUBBED_ENV):
       yield
 
-  def _runner(self, classpath, main, jvm_options, args):
-    command = self._create_command(classpath, main, jvm_options, args)
+  def __init__(self, distribution):
+    super(SubprocessExecutor, self).__init__(distribution=distribution)
+    self._buildroot = get_buildroot()
+    self._process = None
+
+  def _runner(self, classpath, main, jvm_options, args, cwd=None):
+    provided_cwd = cwd or os.getcwd()
+    command = self._create_command(classpath, main, jvm_options, args, cwd=provided_cwd)
 
     class Runner(self.Runner):
       @property
@@ -210,7 +216,8 @@ class SubprocessExecutor(Executor):
         return list(command)
 
       def spawn(_, stdout=None, stderr=None, stdin=None, cwd=None):
-        return self._spawn(command, cwd=cwd, stdout=stdout, stderr=stderr, stdin=stdin)
+        return self._spawn(command, cwd=(cwd or provided_cwd),
+                           stdout=stdout, stderr=stderr, stdin=stdin)
 
       def run(_, stdout=None, stderr=None, stdin=None, cwd=None):
         return self._spawn(command, cwd=cwd, stdout=stdout, stderr=stderr, stdin=stdin).wait()
