@@ -339,7 +339,7 @@ class _FFISpecification(object):
     c = self._ffi.from_handle(context_handle)
     return c.utf8_buf(str(c.from_id(type_id.tup_0).__name__))
 
-  # If we try to pass a None to the CFFI layer, it will silently fail 
+  # If we try to pass a None to the CFFI layer, it will silently fail
   # in a weird way. So instead we use the empty string/bytestring as
   # a de-facto null value, in both `extern_val_to_str` and
   # `extern_val_to_bytes`.

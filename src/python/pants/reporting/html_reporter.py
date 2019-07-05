@@ -11,6 +11,7 @@ from itertools import zip_longest
 from textwrap import dedent
 
 from pants.base.build_environment import get_buildroot
+from pants.base.exception_sink import ExceptionSink
 from pants.base.mustache import MustacheRenderer
 from pants.base.workunit import WorkUnit, WorkUnitLabel
 from pants.reporting.linkify import linkify
@@ -426,9 +427,13 @@ class HtmlReporter(Reporter):
 
   def _emit(self, s):
     """Append content to the main report file."""
-    if os.path.exists(self._html_dir):  # Make sure we're not immediately after a clean-all.
-      self._report_file.write(s)
-      self._report_file.flush()  # We must flush in the same thread as the write.
+    try:
+      if os.path.exists(self._html_dir):  # Make sure we're not immediately after a clean-all.
+        self._report_file.write(s)
+        self._report_file.flush()  # We must flush in the same thread as the write.
+    except Exception as e:
+      ExceptionSink.log_exception(
+        f'Error while writing to report: {e}')
 
   def _overwrite(self, filename, func, force=False):
     """Overwrite a file with the specified contents.
