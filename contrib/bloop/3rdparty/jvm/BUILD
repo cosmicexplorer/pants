@@ -8,7 +8,7 @@ jar_library(
   ],
 )
 
-BLOOP_REV = '1.3.2+44-d3fba218+20190704-1622'
+BLOOP_REV = '1.3.2+44-d3fba218+20190705-2315'
 # BLOOP_REV = '1.3.2'
 
 jar_library(

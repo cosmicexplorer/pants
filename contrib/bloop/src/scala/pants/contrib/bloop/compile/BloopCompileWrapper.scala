@@ -97,7 +97,7 @@ object PantsCompileMain {
   )
 
   def main(args: Array[String]): Unit = {
-    val (Array(logLevelArg), compileTargets) = {
+    val (Array(logLevelArg, inFileArg, outFileArg), compileTargets) = {
       val index = args.indexOf("--")
       if (index == -1) (args, Array.empty[String])
       else args.splitAt(index)
@@ -109,6 +109,8 @@ object PantsCompileMain {
       case "error" => Level.Error
       case x => throw new Exception(s"unrecognized log level argument '$x'")
     }
+    val inFile = Path(inFileArg)
+    val outFile = Path(outFileArg)
 
     val launcherIn = new PipedInputStream()
     val clientOut = new PipedOutputStream(launcherIn)
@@ -192,7 +194,10 @@ object PantsCompileMain {
         bspVersion = bspVersion,
         rootUri = bsp.Uri(Environment.cwd.toUri),
         capabilities = bsp.BuildClientCapabilities(List("scala", "java")),
-        data = None
+        data = Some(Map(
+          "input_stream" -> inFile.toString,
+          "output_stream" -> outFile.toString
+        ).asJson)
       )).map(err(_))
         .flatMap { result =>
           // TODO: validate or something!
@@ -236,10 +241,11 @@ object PantsCompileMain {
             val msg = BloopCompileSuccess(nonTempDirMapping)
             System.out.println(msg.intoMessage.asSprayJson)
             System.out.close()
-            sys.exit(0)
+            ()
           }
           case x => throw new Exception(s"compile failed: $x")
         }
+        .map { Unit => sys.exit(0) }
         .onErrorHandle {
           case e => {
             System.err.println(s"omg!!! $e")
