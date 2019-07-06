@@ -18,7 +18,7 @@ from pants.engine.goal import Goal
 from pants.engine.selectors import Get
 from pants.util.collections import assert_single_element
 from pants.util.collections_abc_backport import Iterable, OrderedDict
-from pants.util.memo import memoized
+from pants.util.memo import memoized, memoized_classmethod
 from pants.util.meta import AbstractClass
 from pants.util.objects import SubclassesOf, TypedCollection, datatype
 
@@ -301,10 +301,14 @@ def union(cls):
   Unions allow @rule bodies to be written without knowledge of what types may eventually be provided
   as input -- rather, they let the engine check that there is a valid path to the desired result.
   """
-  # TODO: Check that the union base type is used as a tag and nothing else (e.g. no attributes)!
-  assert isinstance(cls, type)
   return type(cls.__name__, (cls,), {
     '_is_union': True,
+    'enum_union_rules': memoized_classmethod(lambda new_cls: [
+      UnionRule(new_cls, ty)
+      # NB: Mixers of TaggedUnionMixin (such as enum_struct()) will have a list of types they can
+      # contain within the 'all_tag_types' attribute.
+      for ty in getattr(new_cls, 'all_tag_types', [])
+    ]),
   })
 
 

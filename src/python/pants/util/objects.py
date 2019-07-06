@@ -396,6 +396,15 @@ def enum(all_values):
   return ChoiceDatatype
 
 
+class TaggedUnionMixin(AbstractClass):
+  """???"""
+
+  @classproperty
+  @abstractproperty
+  def all_tag_types(cls):
+    """???"""
+
+
 def enum_struct(enum_type_mapping):
   """???/mapping from enum string -> a type"""
   assert all(isinstance(v, type) for v in enum_type_mapping.values())
@@ -405,7 +414,9 @@ def enum_struct(enum_type_mapping):
   class TaggedUnion(datatype([
       ('tag', anonymous_enum_for_keys),
       ('value', Exactly(*enum_type_mapping.values()))
-  ])):
+  ]), TaggedUnionMixin):
+
+    all_tag_types = list(enum_type_mapping.values())
 
     type_mapping = enum_type_mapping
     reversed_type_mapping = {v:k for k, v in type_mapping.items()}
