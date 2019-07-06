@@ -9,6 +9,7 @@ import sys
 import sysconfig
 import traceback
 from contextlib import closing
+from textwrap import dedent
 
 import cffi
 import pkg_resources
@@ -20,12 +21,20 @@ from pants.util.dirutil import read_file, safe_mkdir, safe_mkdtemp
 from pants.util.memo import memoized_classproperty, memoized_property
 from pants.util.meta import Singleton
 from pants.util.objects import SubclassesOf, datatype
+from pants.util.strutil import pluralize
 
 
 logger = logging.getLogger(__name__)
 
 
 NATIVE_ENGINE_MODULE = 'native_engine'
+
+
+class ExecutionError(Exception):
+  def __init__(self, message, wrapped_exceptions=None):
+    super(ExecutionError, self).__init__(message)
+    self.wrapped_exceptions = wrapped_exceptions or ()
+
 
 # NB: This is a "patch" applied to CFFI's generated sources to remove the ifdefs that would
 # usually cause only one of the two module definition functions to be defined. Instead, we define
@@ -645,6 +654,40 @@ class Native(Singleton):
   def add_cffi_extern_method_runtime_exception(self, error_info):
     assert isinstance(error_info, self.CFFIExternMethodRuntimeErrorInfo)
     self._errors_during_execution.append(error_info)
+
+  def _raise_upon_any_cffi_errors(self, raised_exception):
+    internal_errors = self.cffi_extern_method_runtime_exceptions()
+    if internal_errors:
+      error_tracebacks = [
+        ''.join(
+          traceback.format_exception(etype=error_info.exc_type,
+                                     value=error_info.exc_value,
+                                     tb=error_info.traceback))
+        for error_info in internal_errors
+      ]
+
+      raised_exception_message = None
+      if raised_exception:
+        exc_type, exc_value, tb = raised_exception
+        raised_exception_message = dedent("""\
+          The engine execution request raised this error, which is probably due to the errors in the
+          CFFI extern methods listed above, as CFFI externs return None upon error:
+          {}
+        """).format(''.join(traceback.format_exception(etype=exc_type, value=exc_value, tb=tb)))
+
+      # Zero out the errors raised in CFFI callbacks in case this one is caught and pants doesn't
+      # exit.
+      self.reset_cffi_extern_method_runtime_exceptions()
+
+      raise ExecutionError(dedent("""\
+        {error_description} raised in CFFI extern methods:
+        {joined_tracebacks}{raised_exception_message}
+        """).format(
+          error_description=pluralize(len(internal_errors), 'Exception'),
+          joined_tracebacks='\n+++++++++\n'.join(formatted_tb for formatted_tb in error_tracebacks),
+          raised_exception_message=(
+            '\n\n{}'.format(raised_exception_message) if raised_exception_message else '')
+        ))
 
   class BinaryLocationError(Exception): pass
 
