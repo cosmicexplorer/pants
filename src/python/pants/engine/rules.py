@@ -16,7 +16,7 @@ from twitter.common.collections import OrderedSet
 from pants.engine.goal import Goal
 from pants.engine.selectors import Get
 from pants.util.collections import assert_single_element
-from pants.util.memo import memoized
+from pants.util.memo import memoized, memoized_classmethod
 from pants.util.objects import SubclassesOf, TypedCollection, datatype
 
 
@@ -310,6 +310,12 @@ def union(cls):
   return type(cls.__name__, (cls,), {
     '_is_union': True,
     'union_description': union_description,
+    'enum_union_rules': memoized_classmethod(lambda new_cls: [
+      UnionRule(new_cls, ty)
+      # NB: Mixers of TaggedUnionMixin (such as enum_struct()) will have a list of types they can
+      # contain within the 'all_tag_types' attribute.
+      for ty in getattr(new_cls, 'all_tag_types', [])
+    ]),
   })
 
 

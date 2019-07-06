@@ -13,7 +13,7 @@ from pants.backend.jvm.tasks.classpath_entry import ClasspathEntry
 from pants.backend.jvm.tasks.nailgun_task import NailgunTask
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
-from pants.engine.rules import RootRule, UnionRule, rule, union
+from pants.engine.rules import RootRule, rule, union
 from pants.engine.selectors import Get
 from pants.java.jar.jar_dependency import JarDependency
 from pants.util.meta import AbstractClass
@@ -56,6 +56,7 @@ class PantsCompileRequest(datatype([
     return cls(json_obj)
 
 
+@union
 class BloopLauncherMessage(enum_struct({
     'bloop-compile-success': BloopCompileSuccess,
     'bloop-compile-error': BloopCompileError,
@@ -88,11 +89,6 @@ class BloopInvocationResult(enum_struct({
 })): pass
 
 
-# TODO: merge this with `BloopLauncherMessage`?!
-@union
-class BloopLauncherMessageTag(object): pass
-
-
 class BloopIntermediateResult(enum_struct({
     'keep-going': type(None),
     'done': BloopInvocationResult,
@@ -119,7 +115,7 @@ def process_pants_compile_request(pants_compile_request):
 def invoke_bloop(bloop_invocation_request):
   for line in bloop_invocation_request.bsp_launcher_process.stdout:
     msg = BloopLauncherMessage.parse_json_string(line.decode('utf-8'))
-    maybe_result = yield Get(BloopIntermediateResult, BloopLauncherMessageTag, msg.value)
+    maybe_result = yield Get(BloopIntermediateResult, BloopLauncherMessage, msg.value)
     # TODO: figure out how to do functional pattern matching with `yield` expressions!
     do_quit = maybe_result.match({
       'keep-going': lambda _: False,
@@ -186,7 +182,6 @@ class BloopCompile(NailgunTask):
 
     # bsp_launcher_process.stdin.close()
     bsp_launcher_process.stdout.close()
-    bsp_launcher_process.wait()
     rc = bsp_launcher_process.wait()
     if rc != 0:
       raise TaskError('???', exit_code=rc)
@@ -211,11 +206,8 @@ class BloopCompile(NailgunTask):
 def rules():
   return [
     process_bloop_success,
-    UnionRule(BloopLauncherMessageTag, BloopCompileSuccess),
     process_bloop_error,
-    UnionRule(BloopLauncherMessageTag, BloopCompileError),
     process_pants_compile_request,
-    UnionRule(BloopLauncherMessageTag, PantsCompileRequest),
     invoke_bloop,
     RootRule(BloopInvocationRequest),
-  ]
+  ] + BloopLauncherMessage.enum_union_rules()
