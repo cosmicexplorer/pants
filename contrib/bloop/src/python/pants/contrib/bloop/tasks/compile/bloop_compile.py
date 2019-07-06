@@ -166,6 +166,8 @@ class BloopCompile(NailgunTask):
       args=[
         # FIXME: just pipe in the "level" option! This is a hack for easier debugging!
         'debug', # self.get_options().level,
+        '/Users/dmcclanahan/workspace/in-pipe',
+        '/Users/dmcclanahan/workspace/out-pipe',
         '--',
       ] + [t.id for t in jvm_targets],
       workunit_name='bloop-compile',
