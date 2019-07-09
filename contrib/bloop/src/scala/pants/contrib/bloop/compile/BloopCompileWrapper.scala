@@ -199,6 +199,8 @@ object PantsCompileMain {
             case bsp.StatusCode.Error => logger.error(s"Task finished with status [$status]: $message")
             case bsp.StatusCode.Cancelled => logger.warn(s"Task finished with status [$status]: $message")
           }
+          // NB: Currently not relevant -- this is how we can hack remote compiles via pants if we
+          // wanted to.
           case bsp.TaskFinishParams(_, _, _, _, Some("bloop-hacked-remote-compile-request"), Some(data)) =>
             val msg = PantsCompileRequest(data.asObject.get.apply("sources").get.as[Seq[String]].right.get)
             System.out.println(msg.intoMessage.asSprayJson)
@@ -208,6 +210,8 @@ object PantsCompileMain {
       val bspServer = new BloopLanguageServer(messages, bspClient, services, scheduler, bspLogger)
       val runningClientServer = exitOnError(bspServer.startTask).runAsync(scheduler)
 
+      // NB: Currently not relevant -- this is how we can hack remote compiles via pants if we
+      // wanted to.
       val forwardResults: Task[Unit] = parseJsonLines(bufferInput(System.in)).foreachL { reqJson =>
         val req = endpoints.BuildTarget.run.request(bsp.RunParams(
             target = bsp.BuildTargetIdentifier(uri = bsp.Uri(new java.net.URI("https://ok.io"))),

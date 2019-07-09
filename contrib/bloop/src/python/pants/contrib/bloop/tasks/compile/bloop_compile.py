@@ -12,6 +12,7 @@ from pants.backend.jvm.subsystems.zinc import Zinc
 from pants.backend.jvm.targets.jvm_target import JvmTarget
 from pants.backend.jvm.tasks.classpath_entry import ClasspathEntry
 from pants.backend.jvm.tasks.nailgun_task import NailgunTask
+from pants.backend.jvm.tasks.jvm_compile.rsc.rsc_compile import RscCompile
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
 from pants.engine.rules import RootRule, rule, union
@@ -138,7 +139,11 @@ def invoke_bloop(bloop_invocation_request):
   raise Exception(f"oops!! closed: {bloop_invocation_request.bsp_launcher_process.stdout.closed}")
 
 
-class BloopCompile(NailgunTask):
+class BloopCompile(RscCompile):
+
+  @classmethod
+  def product_types(cls):
+    return ['bloop_compile']
 
   @classmethod
   def register_options(cls, register):
