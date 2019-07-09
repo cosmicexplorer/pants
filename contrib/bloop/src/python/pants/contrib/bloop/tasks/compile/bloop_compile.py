@@ -5,6 +5,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import json
+import logging
 from abc import abstractmethod
 
 from pants.backend.jvm.subsystems.zinc import Zinc
@@ -19,6 +20,9 @@ from pants.java.jar.jar_dependency import JarDependency
 from pants.util.meta import AbstractClass
 from pants.util.objects import SubclassesOf, datatype, enum_struct, string_list
 from pants.util.process_handler import ProcessHandler, subprocess
+
+
+logger = logging.getLogger(__name__)
 
 
 class BloopHackyProtocol(AbstractClass):
@@ -53,7 +57,7 @@ class PantsCompileRequest(datatype([
 
   @classmethod
   def parse_from_json(cls, json_obj):
-    return cls(json_obj)
+    return cls(tuple(json_obj))
 
 
 @union
@@ -105,9 +109,17 @@ def process_bloop_error(bloop_compile_error):
   return BloopIntermediateResult(BloopInvocationResult(bloop_compile_error))
 
 
-@rule(BloopIntermediateResult, [PantsCompileRequest])
-def process_pants_compile_request(pants_compile_request):
-  raise NotImplementedError(f'oops! {pants_compile_request}')
+@rule(BloopIntermediateResult, [PantsCompileRequest, BloopInvocationRequest])
+def process_pants_compile_request(pants_compile_request, bloop_invocation_request):
+  logger.info(f'well!!! {pants_compile_request}')
+  json_output = json.dumps({
+    'sources': pants_compile_request.sources,
+    'classes_dir': '/tmp',
+  })
+  logger.debug(f'json output: {json_output}')
+  bloop_invocation_request.bsp_launcher_process.stdin.write(f'{json_output}\n'.encode())
+  bloop_invocation_request.bsp_launcher_process.stdin.flush()
+  logger.info('oh!')
   return BloopIntermediateResult(None)
 
 
@@ -123,8 +135,7 @@ def invoke_bloop(bloop_invocation_request):
     })
     if do_quit:
       yield maybe_result.value
-
-  raise Exception("shouldn't get here!!")
+  raise Exception(f"oops!! closed: {bloop_invocation_request.bsp_launcher_process.stdout.closed}")
 
 
 class BloopCompile(NailgunTask):
@@ -166,15 +177,12 @@ class BloopCompile(NailgunTask):
       args=[
         # FIXME: just pipe in the "level" option! This is a hack for easier debugging!
         'debug', # self.get_options().level,
-        '/Users/dmcclanahan/workspace/in-pipe',
-        '/Users/dmcclanahan/workspace/out-pipe',
         '--',
       ] + [t.id for t in jvm_targets],
       workunit_name='bloop-compile',
       workunit_labels=[WorkUnitLabel.COMPILER],
       do_async=True,
-      # stdin=subprocess.PIPE,
-      stdin=None,
+      stdin=subprocess.PIPE,
       stdout=subprocess.PIPE,
     )
 
@@ -182,7 +190,7 @@ class BloopCompile(NailgunTask):
       BloopInvocationRequest(bsp_launcher_process=bsp_launcher_process),
     ])
 
-    # bsp_launcher_process.stdin.close()
+    bsp_launcher_process.stdin.close()
     bsp_launcher_process.stdout.close()
     rc = bsp_launcher_process.wait()
     if rc != 0:

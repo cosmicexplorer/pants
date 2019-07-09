@@ -12,14 +12,15 @@ import bloop.logging.DebugFilter
 import bloop.logging.Logger
 import ch.epfl.scala.bsp
 import ch.epfl.scala.bsp.endpoints
-import io.circe.Encoder
-import io.circe.derivation.JsonCodec
-import io.circe.syntax._
 import io.circe._
+import io.circe.derivation.JsonCodec
+import io.circe.parser._
+import io.circe.syntax._
 import monix.eval.Task
 import monix.execution.Ack
 import monix.execution.ExecutionModel
 import monix.execution.Scheduler
+import monix.reactive.{Consumer, Observable}
 import sbt.internal.util.{BasicLogger, ConsoleLogger, ConsoleOut, StackTrace}
 import sbt.util.{ControlEvent, Level, LogEvent}
 
@@ -95,9 +96,36 @@ object PantsCompileMain {
     Executors.newFixedThreadPool(10),
     ExecutionModel.AlwaysAsyncExecution
   )
+  lazy val ioScheduler: Scheduler = Scheduler(
+    Executors.newFixedThreadPool(12),
+    ExecutionModel.AlwaysAsyncExecution
+  )
+
+  def bufferInput(is: java.io.InputStream): java.io.BufferedReader = new java.io.BufferedReader(
+    new java.io.InputStreamReader(is))
+  def bufferOutput(os: java.io.OutputStream): java.io.PrintWriter = new java.io.PrintWriter(os)
+
+  def err[S](r: Either[_, S]): S = r match {
+    case Left(s) => throw new Exception(s"error: $s")
+    case Right(result) => result
+  }
+
+  def exitOnError[T](t: Task[T])(implicit logger: Logger): Task[T] = t.onErrorHandle {
+    case e => {
+      logger.trace(e)
+      System.err.println(s"omg!!! $e")
+      sys.exit(1)
+    }
+  }
+
+  def parseJsonLines(is: java.io.BufferedReader): Observable[Json] = Observable.suspend(
+    Observable.fromIterable(
+      Stream.continually(is.readLine)
+        .takeWhile(_ != null)
+        .map(parse(_)).map(err(_))))
 
   def main(args: Array[String]): Unit = {
-    val (Array(logLevelArg, inFileArg, outFileArg), compileTargets) = {
+    val (Array(logLevelArg), compileTargets) = {
       val index = args.indexOf("--")
       if (index == -1) (args, Array.empty[String])
       else args.splitAt(index)
@@ -109,8 +137,6 @@ object PantsCompileMain {
       case "error" => Level.Error
       case x => throw new Exception(s"unrecognized log level argument '$x'")
     }
-    val inFile = Path(inFileArg)
-    val outFile = Path(outFileArg)
 
     val launcherIn = new PipedInputStream()
     val clientOut = new PipedOutputStream(launcherIn)
@@ -120,8 +146,9 @@ object PantsCompileMain {
 
     val startedServer = Promise[Unit]()
 
+    implicit val logger: Logger = new BareBonesLogger(logLevel)
+
     val task = Task.fromFuture(startedServer.future).flatMap { Unit =>
-      val logger = new BareBonesLogger(logLevel)
       val bspLogger = new BspClientLogger(logger)
 
       implicit val bspClient = new BloopLanguageClient(clientOut, bspLogger)
@@ -172,35 +199,46 @@ object PantsCompileMain {
             case bsp.StatusCode.Error => logger.error(s"Task finished with status [$status]: $message")
             case bsp.StatusCode.Cancelled => logger.warn(s"Task finished with status [$status]: $message")
           }
+          case bsp.TaskFinishParams(_, _, _, _, Some("bloop-hacked-remote-compile-request"), Some(data)) =>
+            val msg = PantsCompileRequest(data.asObject.get.apply("sources").get.as[Seq[String]].right.get)
+            System.out.println(msg.intoMessage.asSprayJson)
           case _ => ()
         }
 
       val bspServer = new BloopLanguageServer(messages, bspClient, services, scheduler, bspLogger)
-      val runningClientServer = bspServer.startTask.runAsync(scheduler)
+      val runningClientServer = exitOnError(bspServer.startTask).runAsync(scheduler)
+
+      val forwardResults: Task[Unit] = parseJsonLines(bufferInput(System.in)).foreachL { reqJson =>
+        val req = endpoints.BuildTarget.run.request(bsp.RunParams(
+            target = bsp.BuildTargetIdentifier(uri = bsp.Uri(new java.net.URI("https://ok.io"))),
+            originId = None,
+            arguments = None,
+            dataKind = Some("pants-hacked-remote-compile-result"),
+            data = Some(reqJson)
+          )).map(err(_))
+            .map {
+              case bsp.RunResult(None, bsp.StatusCode.Ok) =>
+                logger.debug("bloop server successfully received hacky compile result run request!")
+              case e => throw new Exception(s"failed hacky compile result run request: $e")
+            }
+        exitOnError(req).runAsync(scheduler)
+      }
+      Task.fork(exitOnError(forwardResults)).runAsync(scheduler)
 
       def ack(a: Ack): Unit = a match {
         case Ack.Continue => ()
         case Ack.Stop => throw new Exception("stopped???")
       }
 
-      def err[S](r: Either[_, S]): S = r match {
-        case Left(s) => throw new Exception(s"error: $s")
-        case Right(result) => result
-      }
-
-      endpoints.Build.initialize.request(bsp.InitializeBuildParams(
+      val bspCompileInteraction = endpoints.Build.initialize.request(bsp.InitializeBuildParams(
         displayName = "pants-bloop-client",
         version = bloopVersion,
         bspVersion = bspVersion,
         rootUri = bsp.Uri(Environment.cwd.toUri),
         capabilities = bsp.BuildClientCapabilities(List("scala", "java")),
-        data = Some(Map(
-          "input_stream" -> inFile.toString,
-          "output_stream" -> outFile.toString
-        ).asJson)
+        data = None,
       )).map(err(_))
         .flatMap { result =>
-          // TODO: validate or something!
           logger.info(s"initializeResult: $result")
           Task.fromFuture(endpoints.Build.initialized.notify(bsp.InitializedBuildParams()))
         }.map(ack(_))
@@ -241,20 +279,20 @@ object PantsCompileMain {
             val msg = BloopCompileSuccess(nonTempDirMapping)
             System.out.println(msg.intoMessage.asSprayJson)
             System.out.close()
+            sys.exit(0)
             ()
           }
           case x => throw new Exception(s"compile failed: $x")
         }
-        .map { Unit => sys.exit(0) }
-        .onErrorHandle {
-          case e => {
-            System.err.println(s"omg!!! $e")
-            sys.exit(1)
-          }
+        .map { Unit =>
+          System.out.close()
+          sys.exit(0)
         }
+
+      Task.fork(exitOnError(bspCompileInteraction))
     }.runAsync(scheduler)
 
-    val launcherTask = Task.eval(new LauncherMain(
+    val launcherTask = Task(new LauncherMain(
       clientIn = launcherIn,
       clientOut = launcherOut,
       out = System.err,
@@ -263,6 +301,8 @@ object PantsCompileMain {
       nailgunPort = None,
       startedServer = startedServer,
       generateBloopInstallerURL = Installer.defaultWebsiteURL(_)
-    ).main(Array(bloopVersion))).runAsync(scheduler)
+    ).main(Array(bloopVersion)))
+
+    exitOnError(launcherTask).runAsync(scheduler)
   }
 }
