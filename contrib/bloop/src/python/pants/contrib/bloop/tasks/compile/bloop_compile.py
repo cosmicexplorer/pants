@@ -6,6 +6,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import json
 import logging
+import os
 from abc import abstractmethod
 
 from pants.backend.jvm.subsystems.zinc import Zinc
@@ -13,11 +14,13 @@ from pants.backend.jvm.targets.jvm_target import JvmTarget
 from pants.backend.jvm.tasks.classpath_entry import ClasspathEntry
 from pants.backend.jvm.tasks.nailgun_task import NailgunTask
 from pants.backend.jvm.tasks.jvm_compile.rsc.rsc_compile import RscCompile
+from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.base.workunit import WorkUnitLabel
 from pants.engine.rules import RootRule, rule, union
 from pants.engine.selectors import Get
 from pants.java.jar.jar_dependency import JarDependency
+from pants.util.dirutil import safe_file_dump
 from pants.util.meta import AbstractClass
 from pants.util.objects import SubclassesOf, datatype, enum_struct, string_list
 from pants.util.process_handler import ProcessHandler, subprocess
@@ -143,7 +146,9 @@ class BloopCompile(RscCompile):
 
   @classmethod
   def product_types(cls):
-    return ['bloop_compile']
+    # We need to override this to avoid producing the rsc compile task products, which causes a
+    # product cycle.
+    return []
 
   @classmethod
   def register_options(cls, register):
@@ -171,7 +176,18 @@ class BloopCompile(RscCompile):
   _confs = Zinc.DEFAULT_CONFS
 
   def execute(self):
-    jvm_targets = self.get_targets(lambda t: isinstance(t, JvmTarget))
+    jvm_targets = self.get_targets(self.select)
+
+    rsc_compatible_target_mapping = {
+      t.id: self._classify_target_compile_workflow(t).value
+      for t in jvm_targets
+      if self._classify_target_compile_workflow(t) is not None
+    }
+
+    target_mapping_json_file = os.path.join(get_buildroot(), 'target-mapping.json')
+    safe_file_dump(target_mapping_json_file,
+                   payload=json.dumps(rsc_compatible_target_mapping),
+                   mode='w')
 
     bsp_launcher_process = self.runjava(
       classpath=self.tool_classpath('bloop-compile-wrapper'),
@@ -182,6 +198,7 @@ class BloopCompile(RscCompile):
       args=[
         # FIXME: just pipe in the "level" option! This is a hack for easier debugging!
         'debug', # self.get_options().level,
+        target_mapping_json_file,
         '--',
       ] + [t.id for t in jvm_targets],
       workunit_name='bloop-compile',

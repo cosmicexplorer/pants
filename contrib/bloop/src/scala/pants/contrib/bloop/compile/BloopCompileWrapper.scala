@@ -28,6 +28,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Promise
+import scala.io.Source
 import scala.meta.jsonrpc._
 
 import java.io.PipedInputStream
@@ -125,7 +126,7 @@ object PantsCompileMain {
         .map(parse(_)).map(err(_))))
 
   def main(args: Array[String]): Unit = {
-    val (Array(logLevelArg), compileTargets) = {
+    val (Array(logLevelArg, targetMappingFileArg), compileTargets) = {
       val index = args.indexOf("--")
       if (index == -1) (args, Array.empty[String])
       else args.splitAt(index)
@@ -137,6 +138,12 @@ object PantsCompileMain {
       case "error" => Level.Error
       case x => throw new Exception(s"unrecognized log level argument '$x'")
     }
+    val targetMappingFile = Path(targetMappingFileArg)
+    val targetMappingSource = Source.fromFile(targetMappingFile.toNIO.toFile)
+      .getLines
+      .mkString("\n")
+    val targetMappingJson: Json = err(parse(targetMappingSource))
+    val targetMapping: Map[String, String] = err(targetMappingJson.as[Map[String, String]])
 
     val launcherIn = new PipedInputStream()
     val clientOut = new PipedOutputStream(launcherIn)
@@ -240,9 +247,11 @@ object PantsCompileMain {
         bspVersion = bspVersion,
         rootUri = bsp.Uri(Environment.cwd.toUri),
         capabilities = bsp.BuildClientCapabilities(List("scala", "java")),
-        data = None,
+        data = Some(targetMapping.asJson),
       )).map(err(_))
         .flatMap { result =>
+          val resultData = result.data.get.as[Map[String, Boolean]].right.get
+          assert(resultData("received_target_mapping"))
           logger.info(s"initializeResult: $result")
           Task.fromFuture(endpoints.Build.initialized.notify(bsp.InitializedBuildParams()))
         }.map(ack(_))
