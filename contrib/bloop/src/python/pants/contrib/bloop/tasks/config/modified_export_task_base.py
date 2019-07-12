@@ -161,7 +161,11 @@ class ModifiedExportTaskBase(ExportTask):
 
       dep_classpath = self.context.products.get_data('bloop_dep_classpath').get(current_target, None)
       if dep_classpath is not None:
-        info['dependency_classpath'] = dep_classpath
+        # NB: Rsc requires the jdk to be explicitly provided on the classpath.
+        local_distribution = JvmPlatform.preferred_jvm_distribution([current_target.platform],
+                                                                    strict=False)
+        local_jdk_libs = local_distribution.find_libs(['rt.jar', 'dt.jar', 'jce.jar', 'tools.jar'])
+        info['dependency_classpath'] = dep_classpath + tuple(local_jdk_libs)
 
       zinc_analysis = self.context.products.get_data('zinc_analysis').get(current_target, None)
       if zinc_analysis is not None:
