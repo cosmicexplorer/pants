@@ -7,7 +7,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import json
 import logging
 import os
-from abc import abstractmethod
+import subprocess
+from abc import ABC, abstractmethod
 
 from pants.backend.jvm.subsystems.zinc import Zinc
 from pants.backend.jvm.targets.jvm_target import JvmTarget
@@ -21,15 +22,14 @@ from pants.engine.rules import RootRule, rule, union
 from pants.engine.selectors import Get
 from pants.java.jar.jar_dependency import JarDependency
 from pants.util.dirutil import safe_file_dump
-from pants.util.meta import AbstractClass
 from pants.util.objects import SubclassesOf, datatype, enum_struct, string_list
-from pants.util.process_handler import ProcessHandler, subprocess
+from pants.util.process_handler import ProcessHandler
 
 
 logger = logging.getLogger(__name__)
 
 
-class BloopHackyProtocol(AbstractClass):
+class BloopHackyProtocol(ABC):
 
   @classmethod
   @abstractmethod

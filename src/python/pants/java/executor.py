@@ -10,6 +10,7 @@ from contextlib import contextmanager
 
 from twitter.common.collections import maybe_list
 
+from pants.base.build_environment import get_buildroot
 from pants.util.contextutil import environment_as
 
 
@@ -204,7 +205,7 @@ class SubprocessExecutor(Executor):
 
   def _runner(self, classpath, main, jvm_options, args, cwd=None):
     provided_cwd = cwd or os.getcwd()
-    command = self._create_command(classpath, main, jvm_options, args, cwd=provided_cwd)
+    command = self._create_command(classpath, main, jvm_options, args)
 
     class Runner(self.Runner):
       @property

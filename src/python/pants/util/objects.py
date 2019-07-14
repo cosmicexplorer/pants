@@ -2,7 +2,7 @@
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 import re
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from collections import OrderedDict, namedtuple
 from collections.abc import Iterable
 
@@ -389,7 +389,7 @@ def enum(all_values):
   return ChoiceDatatype
 
 
-class TaggedUnionMixin(AbstractClass):
+class TaggedUnionMixin(ABC):
   """???"""
 
   @classproperty
