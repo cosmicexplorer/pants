@@ -143,7 +143,7 @@ object PantsCompileMain {
       .getLines
       .mkString("\n")
     val targetMappingJson: Json = err(parse(targetMappingSource))
-    val targetMapping: Map[String, String] = err(targetMappingJson.as[Map[String, String]])
+    val targetMapping = err(targetMappingJson.as[Map[String, (String, Seq[String])]])
 
     val launcherIn = new PipedInputStream()
     val clientOut = new PipedOutputStream(launcherIn)

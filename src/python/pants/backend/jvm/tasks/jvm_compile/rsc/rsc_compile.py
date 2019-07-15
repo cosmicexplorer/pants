@@ -5,6 +5,7 @@ import functools
 import logging
 import os
 import re
+from collections import defaultdict
 
 from pants.backend.jvm.subsystems.dependency_context import DependencyContext  # noqa
 from pants.backend.jvm.subsystems.rsc import Rsc
@@ -112,6 +113,16 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
   _name = 'mixed' # noqa
   compiler_name = 'rsc'
 
+  @classmethod
+  def subsystem_dependencies(cls):
+    return super().subsystem_dependencies() + (
+      Rsc,
+    )
+
+  @classmethod
+  def product_types(cls):
+    return super().product_types() + ['rsc_args']
+
   @memoized_property
   def mirrored_target_option_actions(self):
     return {
@@ -159,9 +170,9 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
     register('--force-compiler-tag-prefix', default='use-compiler', metavar='<tag>',
       help='Always compile targets marked with this tag with rsc, unless the workflow is '
            'specified on the cli.')
-    register('--workflow', type=cls.JvmCompileWorkflowType,
-      default=cls.JvmCompileWorkflowType.zinc_only, metavar='<workflow>',
-      help='The workflow to use to compile JVM targets.', fingerprint=True)
+    register('--workflow', type=cls.JvmCompileWorkflowType, fingerprint=True,
+      default=cls.JvmCompileWorkflowType.rsc_and_zinc, metavar='<workflow>',
+      help='The workflow to use to compile JVM targets.')
 
     register('--extra-rsc-args', type=list, default=[],
              help='Extra arguments to pass to the rsc invocation.')
@@ -222,6 +233,8 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
     def confify(entries):
       return [(conf, e) for e in entries for conf in self._confs]
 
+    rsc_args = self.context.products.get_data('rsc_args')
+
     # Ensure that the jar/rsc jar is on the rsc_mixed_compile_classpath.
     for target in targets:
       merged_cc = compile_contexts[target]
@@ -237,6 +250,15 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
           target,
           cp_entries)
 
+      if rsc_args is not None:
+        if os.path.isfile(rsc_cc.args_file):
+          with open(rsc_cc.args_file, 'r') as fp:
+            args = fp.read().split()
+            rsc_args[rsc_cc.target] = args
+        else:
+          self.context.log.warn(
+            f'rsc args file {rsc_cc.args_file} for target {rsc_cc.target} was not found!')
+
   def create_empty_extra_products(self):
     super().create_empty_extra_products()
 
@@ -249,6 +271,9 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
     else:
       classpath_product.update(compile_classpath)
     classpath_product.update(runtime_classpath)
+
+    if self.context.products.is_required_data('rsc_args'):
+      self.context.products.safe_create_data('rsc_args', lambda: defaultdict(list))
 
   def select(self, target):
     if not isinstance(target, JvmTarget):
@@ -383,7 +408,8 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
 
           self.write_argsfile(ctx, args)
 
-          self._runtool(distribution, input_digest, ctx)
+          if not self.get_options().empty_compilation:
+            self._runtool(distribution, input_digest, ctx)
 
         self._record_target_stats(tgt,
           len(classpath_entry_paths),

@@ -231,9 +231,14 @@ class BaseZincCompile(JvmCompile):
 
     if zinc_args is not None:
       for compile_context in compile_contexts:
-        with open(compile_context.args_file, 'r') as fp:
-          args = fp.read().split()
-        zinc_args[compile_context.target] = args
+        if os.path.isfile(compile_context.args_file):
+          with open(compile_context.args_file, 'r') as fp:
+            args = fp.read().split()
+          zinc_args[compile_context.target] = args
+        else:
+          self.context.log.warn(
+            f'zinc args file {compile_context.args_file} for target {compile_context.target} '
+             'was not found!')
 
   def create_empty_extra_products(self):
     if self.context.products.is_required_data('bloop_classes_dir'):

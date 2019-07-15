@@ -170,6 +170,7 @@ class BloopCompile(RscCompile):
   def prepare(cls, options, round_manager):
     super(BloopCompile, cls).prepare(options, round_manager)
     round_manager.require_data('bloop_classes_dir')
+    round_manager.require_data('rsc_args')
 
   _supported_languages = ['java', 'scala']
 
@@ -178,8 +179,13 @@ class BloopCompile(RscCompile):
   def execute(self):
     jvm_targets = self.get_targets(self.select)
 
+    rsc_args = self.context.products.get_data('rsc_args')
+
     rsc_compatible_target_mapping = {
-      t.id: self._classify_target_compile_workflow(t).value
+      t.id: (
+        self._classify_target_compile_workflow(t).value,
+        rsc_args[t],
+      )
       for t in jvm_targets
       if self._classify_target_compile_workflow(t) is not None
     }
