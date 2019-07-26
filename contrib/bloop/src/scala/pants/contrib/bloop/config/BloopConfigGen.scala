@@ -25,7 +25,8 @@ object BloopConfigGen extends App {
 
   val scalaCompilerJars = scalacClasspath
     .split(":")
-    .map(jar => buildRootPath / RelPath(jar))
+    .map(Path(_))
+    // .map(jar => buildRootPath / RelPath(jar))
 
   val sourceTargets = pantsExportParsed.targets
 

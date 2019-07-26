@@ -30,6 +30,8 @@ class BloopWriteExport(NailgunTask):
     register('--export-json-output-file', type=str, default='export-wow.json',
              help='Tee the pants export output (which is interpreted by a subprocess) also into '
                   'this file.')
+    register('--platform-compiler-jars', type=list, default=None, fingerprint=True,
+             help='Alternate paths for scala compiler jars to use in bloop compiles.')
 
     cls.register_jvm_tool(
       register,

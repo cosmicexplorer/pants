@@ -295,6 +295,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
   @memoized_method
   def _classify_target_compile_workflow(self, target):
     """Return the compile workflow to use for this target."""
+    # return self.get_scalar_mirrored_target_option('workflow', target)
     # scala_library() targets may have a `.java_sources` property.
     java_sources = getattr(target, 'java_sources', [])
     if java_sources or target.has_sources('.java'):

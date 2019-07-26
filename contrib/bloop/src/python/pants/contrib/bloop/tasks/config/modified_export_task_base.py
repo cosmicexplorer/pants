@@ -175,7 +175,21 @@ class ModifiedExportTaskBase(ExportTask):
         local_distribution = JvmPlatform.preferred_jvm_distribution([current_target.platform],
                                                                     strict=False)
         local_jdk_libs = local_distribution.find_libs(['rt.jar', 'dt.jar', 'jce.jar', 'tools.jar'])
-        info['dependency_classpath'] = dep_classpath + tuple(local_jdk_libs)
+        result_cp = dep_classpath + tuple(local_jdk_libs)
+
+        def hack_scala_compiler_cp(path):
+          import re
+          match = re.search(r'scala-([a-z]+)-2\.12\.8\.jar$', path)
+          if match:
+            jar_type = match.group(1)
+            fixed = f'/Users/dmcclanahan/tools/scala/build/pack/lib/scala-{jar_type}.jar'
+            return fixed
+          else:
+            return path
+
+        info['dependency_classpath'] = tuple(
+          hack_scala_compiler_cp(path) for path in result_cp
+        )
 
       zinc_analysis = self.context.products.get_data('zinc_analysis').get(current_target, None)
       if zinc_analysis is not None:
