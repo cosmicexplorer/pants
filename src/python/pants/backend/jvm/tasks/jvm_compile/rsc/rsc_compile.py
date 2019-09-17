@@ -87,7 +87,7 @@ class RscCompileContext(CompileContext):
                target,
                analysis_file,
                classes_dir,
-               rsc_jar_file,
+               rsc_output_dir_or_jar,
                jar_file,
                log_dir,
                args_file,
@@ -96,10 +96,10 @@ class RscCompileContext(CompileContext):
                workflow):
     super().__init__(target, analysis_file, classes_dir, jar_file, log_dir, args_file, post_compile_merge_dir, sources)
     self.workflow = workflow
-    self.rsc_jar_file = rsc_jar_file
+    self.rsc_output_dir_or_jar = rsc_output_dir_or_jar
 
   def ensure_output_dirs_exist(self):
-    safe_mkdir(os.path.dirname(self.rsc_jar_file.path))
+    safe_mkdir(os.path.dirname(self.rsc_output_dir_or_jar.path))
     # NB: The background cache insert workunit will nondeterministically fail after a successful rsc
     # compile, failing to find this directory. Since rsc doesn't output to the classes dir, this
     # shouldn't matter, but this line avoids that failure. Intended to fix
@@ -242,9 +242,9 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
       zinc_cc = merged_cc.zinc_cc
       if rsc_cc.workflow is not None:
         cp_entries = rsc_cc.workflow.resolve_for_enum_variant({
-          'zinc-only': lambda: confify([self._classpath_for_context(zinc_cc)]),
-          'zinc-java': lambda: confify([self._classpath_for_context(zinc_cc)]),
-          'rsc-and-zinc': lambda: confify([rsc_cc.rsc_jar_file]),
+          'zinc-only': lambda: confify([zinc_cc.jar_file]),
+          'zinc-java': lambda: confify([zinc_cc.jar_file]),
+          'rsc-and-zinc': lambda: confify([rsc_cc.rsc_output_dir_or_jar]),
         })()
         self.context.products.get_data('rsc_mixed_compile_classpath').add_for_target(
           target,
@@ -378,7 +378,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
         with Timer() as timer:
           # Outline Scala sources into SemanticDB / scalac compatible header jars.
           # ---------------------------------------------
-          rsc_jar_file_relative_path = fast_relpath(ctx.rsc_jar_file.path, get_buildroot())
+          rsc_output_dir_or_jar_relative_path = fast_relpath(ctx.rsc_output_dir_or_jar.path, get_buildroot())
 
           sources_snapshot = ctx.target.sources_snapshot(scheduler=self.context._scheduler)
 
@@ -404,7 +404,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
           target_sources = ctx.sources
           args = [
                    '-cp', os.pathsep.join(classpath_entry_paths),
-                   '-d', rsc_jar_file_relative_path,
+                   '-d', rsc_output_dir_or_jar_relative_path,
                  ] + self.get_options().extra_rsc_args + target_sources
 
           self.write_argsfile(ctx, args)
@@ -600,6 +600,8 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
     #   - zinc_args  -- file containing the used zinc args
     sources = self._compute_sources_for_target(target)
     rsc_dir = os.path.join(target_workdir, "rsc")
+    rsc_classes_dir = os.path.join(rsc_dir, 'classes')
+    safe_mkdir(rsc_classes_dir)
     zinc_dir = os.path.join(target_workdir, "zinc")
     return self.RscZincMergedCompileContexts(
       rsc_cc=RscCompileContext(
@@ -608,7 +610,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
         classes_dir=ClasspathEntry(os.path.join(zinc_dir, 'classes'), None),
         jar_file=None,
         args_file=os.path.join(rsc_dir, 'rsc_args'),
-        rsc_jar_file=ClasspathEntry(os.path.join(rsc_dir, 'm.jar')),
+        rsc_output_dir_or_jar=ClasspathEntry(rsc_classes_dir),
         log_dir=os.path.join(rsc_dir, 'logs'),
         post_compile_merge_dir=os.path.join(rsc_dir, 'post_compile_merge_dir'),
         sources=sources,
@@ -677,7 +679,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
     epr = ExecuteProcessRequest(
       argv=tuple(cmd),
       input_files=epr_input_files,
-      output_files=(fast_relpath(ctx.rsc_jar_file.path, get_buildroot()),),
+      output_files=(fast_relpath(ctx.rsc_output_dir_or_jar.path, get_buildroot()),),
       output_directories=tuple(),
       timeout_seconds=15*60,
       description='run {} for {}'.format(tool_name, ctx.target),
@@ -696,9 +698,9 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
 
     # TODO: parse the output of -Xprint:timings for rsc and write it to self._record_target_stats()!
 
-    res.output_directory_digest.dump(ctx.rsc_jar_file.path)
+    res.output_directory_digest.dump(ctx.rsc_output_dir_or_jar.path)
 
-    ctx.rsc_jar_file = ClasspathEntry(ctx.rsc_jar_file.path, res.output_directory_digest)
+    ctx.rsc_output_dir_or_jar = ClasspathEntry(ctx.rsc_output_dir_or_jar.path, res.output_directory_digest)
 
     self.context._scheduler.materialize_directories((
       DirectoryToMaterialize(
