@@ -1,7 +1,8 @@
 # Copyright 2019 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-from typing import Dict, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 from pants.backend.python.rules.create_requirements_pex import MakePexRequest, RequirementsPex
 from pants.backend.python.rules.inject_init import InjectedInitDigest
@@ -19,8 +20,15 @@ from pants.source.source_root import SourceRoot, SourceRootConfig
 from pants.util.strutil import create_path_env_var
 
 
-@rule(RunResult, [PythonBinaryAdaptor, PythonSetup, SourceRootConfig, SubprocessEncodingEnvironment])
-def run_python_binary(python_binary_target, python_setup, source_root_config, subprocess_encoding_environment):
+@dataclass(frozen=True)
+class RunnablePex:
+  filename: str
+  pex: RequirementsPex
+  exe_env: Dict[Any, Any]
+
+
+@rule(RunnablePex, [PythonBinaryAdaptor, PythonSetup, SourceRootConfig, SubprocessEncodingEnvironment])
+def create_python_binary(python_binary_target, python_setup, source_root_config, subprocess_encoding_environment):
   # TODO(7726): replace this with a proper API to get the `closure` for a
   # TransitiveHydratedTarget.
   transitive_hydrated_targets = yield Get(
@@ -107,16 +115,25 @@ def run_python_binary(python_binary_target, python_setup, source_root_config, su
     )
   )
 
+  yield RunnablePex(
+    filename=output_thirdparty_requirements_pex_filename,
+    pex=resolved_requirements_pex,
+    exe_env=pex_exe_env,
+  )
+
+
+@rule(RunResult, [RunnablePex])
+def run_python_binary(runnable_pex):
   # NB: we use the hardcoded and generic bin name `python`, rather than something dynamic like
   # `sys.executable`, to ensure that the interpreter may be discovered both locally and in remote
   # execution (so long as `env` is populated with a `PATH` env var and `python` is discoverable
   # somewhere on that PATH). This is only used to run the downloaded PEX tool; it is not
   # necessarily the interpreter that PEX will use to execute the generated .pex file.
   request = ExecuteProcessRequest(
-    argv=("python", f'./{output_thirdparty_requirements_pex_filename}'),
-    env=pex_exe_env,
-    input_files=resolved_requirements_pex.directory_digest,
-    description=f'Run {python_binary_target.entry_point} from {python_binary_target.address.reference()}',
+    argv=('python', f"./{runnable_pex.filename}"),
+    env=runnable_pex.exe_env,
+    input_files=runnable_pex.pex.directory_digest,
+    description='???'
   )
 
   result = yield Get(FallibleExecuteProcessResult, ExecuteProcessRequest, request)
@@ -130,6 +147,7 @@ def run_python_binary(python_binary_target, python_setup, source_root_config, su
 
 def rules():
   return [
+    create_python_binary,
     run_python_binary,
     UnionRule(RunTarget, PythonBinaryAdaptor),
   ]

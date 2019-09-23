@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import traceback
+from dataclasses import dataclass
 from textwrap import dedent
 from types import GeneratorType
 
