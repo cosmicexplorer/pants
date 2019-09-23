@@ -16,7 +16,8 @@ from pants.base.project_tree import Dir, File, Link
 from pants.build_graph.address import Address
 from pants.engine.fs import (Digest, DirectoriesToMerge, DirectoryToMaterialize,
                              DirectoryWithPrefixToStrip, FileContent, FilesContent,
-                             InputFilesContent, PathGlobs, PathGlobsAndRoot, Snapshot, UrlToFetch)
+                             InputFilesContent, MaterializedDirectory, PathGlobs, PathGlobsAndRoot,
+                             Snapshot, UrlToFetch)
 from pants.engine.isolated_process import (FallibleExecuteProcessResult,
                                            MultiPlatformExecuteProcessRequest)
 from pants.engine.native import Function, TypeId
@@ -100,6 +101,9 @@ class Scheduler:
       construct_file_content=FileContent,
       construct_files_content=FilesContent,
       construct_process_result=FallibleExecuteProcessResult,
+      construct_materialized_directory=MaterializedDirectory,
+      type_directory_to_materialize=DirectoryToMaterialize,
+      type_materialized_directory=MaterializedDirectory,
       type_address=Address,
       type_path_globs=PathGlobs,
       type_directory_digest=Digest,
@@ -124,6 +128,8 @@ class Scheduler:
 
     if validate:
       self._assert_ruleset_valid()
+
+    self._prev_session = None
 
   def _root_type_ids(self):
     return self._to_ids_buf(self._root_subject_types)
@@ -293,9 +299,11 @@ class Scheduler:
 
   def new_session(self, zipkin_trace_v2, v2_ui=False):
     """Creates a new SchedulerSession for this Scheduler."""
-    return SchedulerSession(self, self._native.new_session(
+    ret = SchedulerSession(self, self._native.new_session(
       self._scheduler, zipkin_trace_v2, v2_ui, multiprocessing.cpu_count())
     )
+    self._prev_session = ret
+    return ret
 
 
 _PathGlobsAndRootCollection = Collection.of(PathGlobsAndRoot)

@@ -2,6 +2,7 @@
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 import os
+from dataclasses import dataclass
 
 from pants.engine.objects import Collection
 from pants.engine.rules import RootRule
@@ -166,6 +167,11 @@ class DirectoryToMaterialize(datatype([('path', str), ('directory_digest', Diges
   pass
 
 
+@dataclass(frozen=True)
+class MaterializedDirectory:
+  path_bytes: bytes
+
+
 class UrlToFetch(datatype([('url', str), ('digest', Digest)])):
   pass
 
@@ -195,4 +201,5 @@ def create_fs_rules():
     RootRule(PathGlobs),
     RootRule(DirectoryWithPrefixToStrip),
     RootRule(UrlToFetch),
+    RootRule(DirectoryToMaterialize),
   ]

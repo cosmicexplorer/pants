@@ -33,7 +33,7 @@ use process_execution::{
 use rule_graph;
 
 use graph::{Entry, Node, NodeError, NodeTracer, NodeVisualizer};
-use store::{self, StoreFileByDigest};
+use store::{self, DirectoryMaterializeMetadata, StoreFileByDigest};
 use workunit_store::{generate_random_64bit_string, set_parent_id, WorkUnit, WorkUnitStore};
 
 pub type NodeFuture<T> = BoxFuture<T, Failure>;
@@ -204,6 +204,48 @@ impl WrappedNode for Select {
                   Snapshot::store_directory(&context.core, &digest)
                 })
             })
+            .to_boxed()
+        }
+        &Rule::Intrinsic(Intrinsic { product, input })
+          if product == types.materialized_directory && input == types.directory_to_materialize =>
+        {
+          let context = context.clone();
+          let core = context.core.clone();
+          let core2 = core.clone();
+          self
+            .select_product(&context, types.directory_to_materialize, "intrinsic")
+            .and_then(move |val| {
+              let dir = PathBuf::from(externs::project_str(&val, "path"));
+              let digest = lift_digest(&externs::project_ignoring_type(&val, "directory_digest"))
+                .map_err(|s| throw(&s))?;
+              Ok((dir, digest))
+            })
+            .and_then(move |(dir, digest)| {
+              core
+                .store()
+                .materialize_directory(dir, digest, context.session.workunit_store())
+                .map_err(|err| throw(&err))
+            })
+            .map(
+              move |DirectoryMaterializeMetadata {
+                      child_directories,
+                      child_files,
+                      ..
+                    }| {
+                assert!(child_directories.is_empty());
+                assert_eq!(child_files.len(), 1);
+                let child_file: String = child_files
+                  .into_iter()
+                  .collect::<Vec<_>>()
+                  .get(0)
+                  .unwrap()
+                  .0
+                  .clone();
+                let file_path_bytes: Vec<u8> = child_file.bytes().collect();
+                let ret_bytes = externs::store_bytes(&file_path_bytes[..]);
+                externs::unsafe_call(&core2.types.construct_materialized_directory, &[ret_bytes])
+              },
+            )
             .to_boxed()
         }
         &Rule::Intrinsic(Intrinsic { product, input })

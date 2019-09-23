@@ -339,7 +339,7 @@ class _FFISpecification(object):
     c = self._ffi.from_handle(context_handle)
     return c.utf8_buf(str(c.from_id(type_id.tup_0).__name__))
 
-  # If we try to pass a None to the CFFI layer, it will silently fail 
+  # If we try to pass a None to the CFFI layer, it will silently fail
   # in a weird way. So instead we use the empty string/bytestring as
   # a de-facto null value, in both `extern_val_to_str` and
   # `extern_val_to_bytes`.
@@ -810,6 +810,9 @@ class Native(Singleton):
                     construct_file_content,
                     construct_files_content,
                     construct_process_result,
+                    construct_materialized_directory,
+                    type_directory_to_materialize,
+                    type_materialized_directory,
                     type_address,
                     type_path_globs,
                     type_directory_digest,
@@ -841,7 +844,10 @@ class Native(Singleton):
         func(construct_file_content),
         func(construct_files_content),
         func(construct_process_result),
+        func(construct_materialized_directory),
         # Types.
+        ti(type_directory_to_materialize),
+        ti(type_materialized_directory),
         ti(type_address),
         ti(type_path_globs),
         ti(type_directory_digest),
