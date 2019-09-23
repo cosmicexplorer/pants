@@ -36,7 +36,7 @@ from pants.engine.rules import RootRule, rule
 from pants.engine.scheduler import Scheduler
 from pants.engine.selectors import Params
 from pants.init.options_initializer import BuildConfigInitializer, OptionsInitializer
-from pants.option.global_options import (DEFAULT_EXECUTION_OPTIONS, ExecutionOptions,
+from pants.option.global_options import (DEFAULT_EXECUTION_OPTIONS, DistDir, ExecutionOptions,
                                          GlobMatchErrorBehavior)
 from pants.util.objects import datatype
 
@@ -325,6 +325,10 @@ class EngineInitializer:
                                    exclude_target_regexps=exclude_target_regexps,
                                    subproject_roots=subproject_roots)
 
+    @rule(DistDir, [])
+    def dist_dir_singleton():
+      return DistDir(path=bootstrap_options.pants_distdir)
+
     @rule(GlobMatchErrorBehavior, [])
     def glob_match_error_behavior_singleton():
       return glob_match_error_behavior or GlobMatchErrorBehavior.ignore
@@ -342,6 +346,7 @@ class EngineInitializer:
     rules = (
       [
         RootRule(Console),
+        dist_dir_singleton,
         glob_match_error_behavior_singleton,
         build_configuration_singleton,
         symbol_table_singleton,

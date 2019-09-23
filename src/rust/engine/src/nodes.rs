@@ -223,15 +223,16 @@ impl WrappedNode for Select {
             .and_then(move |(dir, digest)| {
               core
                 .store()
-                .materialize_directory(dir, digest, context.session.workunit_store())
+                .materialize_directory(dir.clone(), digest, context.session.workunit_store())
                 .map_err(|err| throw(&err))
+                .map(move |metadata| (dir.clone(), metadata))
             })
             .map(
-              move |DirectoryMaterializeMetadata {
+              move |(dir, DirectoryMaterializeMetadata {
                       child_directories,
                       child_files,
                       ..
-                    }| {
+                    })| {
                 assert!(child_directories.is_empty());
                 assert_eq!(child_files.len(), 1);
                 let child_file: String = child_files
@@ -241,7 +242,8 @@ impl WrappedNode for Select {
                   .unwrap()
                   .0
                   .clone();
-                let file_path_bytes: Vec<u8> = child_file.bytes().collect();
+                let full_path = PathBuf::from(dir).join(PathBuf::from(child_file));
+                let file_path_bytes: Vec<u8> = full_path.to_str().unwrap().bytes().collect();
                 let ret_bytes = externs::store_bytes(&file_path_bytes[..]);
                 externs::unsafe_call(&core2.types.construct_materialized_directory, &[ret_bytes])
               },

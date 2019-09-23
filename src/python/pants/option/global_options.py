@@ -4,6 +4,7 @@
 import multiprocessing
 import os
 import sys
+from dataclasses import dataclass
 
 from pants.base.build_environment import (get_buildroot, get_default_pants_config_file,
                                           get_pants_cachedir, get_pants_configdir, pants_version)
@@ -498,3 +499,8 @@ class GlobalOptionsRegistrar(SubsystemClientMixin, Optionable):
     if opts.remote_execution_server and not opts.remote_store_server:
       raise OptionsError("The `--remote-execution-server` option requires also setting "
                          "`--remote-store-server`. Often these have the same value.")
+
+
+@dataclass(frozen=True)
+class DistDir:
+  path: str
