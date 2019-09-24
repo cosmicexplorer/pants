@@ -1,6 +1,7 @@
 # Copyright 2016 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+import datetime
 import logging
 import os
 import queue
@@ -11,6 +12,7 @@ from pants.base.exiter import PANTS_SUCCEEDED_EXIT_CODE
 from pants.engine.fs import PathGlobs, Snapshot
 from pants.init.target_roots_calculator import TargetRootsCalculator
 from pants.pantsd.service.pants_service import PantsService
+from pants.util.dirutil import safe_open
 
 
 class SchedulerService(PantsService):
@@ -49,6 +51,11 @@ class SchedulerService(PantsService):
     self._scheduler = legacy_graph_scheduler.scheduler
     self._scheduler_session = self._scheduler.new_session(False)
     self._logger = logging.getLogger(__name__)
+
+    self._extra_log_file_during_loop_runs = safe_open(
+      os.path.join(build_root, 'extra_loop_log.txt'),
+      mode='a')
+
     self._event_queue = queue.Queue(maxsize=self.QUEUE_SIZE)
     self._watchman_is_running = threading.Event()
     self._invalidating_snapshot = None
@@ -185,6 +192,9 @@ class SchedulerService(PantsService):
       fn = self._body
 
     target_roots, exit_code = fn(session, options, options_bootstrapper)
+
+    self._extra_log_file_during_loop_runs.close()
+
     return session, target_roots, exit_code
 
   def _loop(self, session, options, options_bootstrapper):
@@ -193,11 +203,16 @@ class SchedulerService(PantsService):
     target_roots = None
     exit_code = PANTS_SUCCEEDED_EXIT_CODE
     while iterations and not self._state.is_terminating:
+      start = datetime.datetime.now()
       try:
         target_roots, exit_code = self._body(session, options, options_bootstrapper)
       except session.scheduler_session.execution_error_type as e:
         # Render retryable exceptions raised by the Scheduler.
         print(e, file=sys.stderr)
+      end = datetime.datetime.now()
+
+      self._extra_log_file_during_loop_runs.write(f'iteration took {end - start} seconds!\n')
+      self._extra_log_file_during_loop_runs.flush()
 
       iterations -= 1
       while iterations and not self._state.is_terminating and not self._loop_condition.wait(timeout=1):
