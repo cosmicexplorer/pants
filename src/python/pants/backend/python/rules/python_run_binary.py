@@ -92,7 +92,7 @@ def create_python_binary(python_binary_target, python_setup, source_root_config,
   }
 
   # Produce a pex containing pytest and all transitive 3rdparty requirements.
-  output_thirdparty_requirements_pex_filename = '3rdparty-requirements.pex'
+  output_thirdparty_requirements_pex_filename = f'{python_binary_target.address.target_name}.pex'
   all_target_requirements = []
   for maybe_python_req_lib in all_targets:
     # This is a python_requirement()-like target.
