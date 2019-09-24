@@ -67,7 +67,8 @@ function run_pex() {
 
     pex="${pexdir}/pex"
 
-    curl --fail -sSL "${PEX_DOWNLOAD_PREFIX}/v${PEX_VERSION}/pex" > "${pex}"
+    curl --fail -sSL "${PEX_DOWNLOAD_PREFIX}/v${PEX_VERSION}/pex" > "${pex}" \
+         || exit 1
     "${PY}" "${pex}" "$@"
   )
 }
@@ -191,6 +192,8 @@ function build_pants_packages() {
   mkdir -p "${DEPLOY_PANTS_WHEEL_DIR}/${version}"
 
   pants_version_set "${version}"
+
+  set -exo pipefail
 
   start_travis_section "${NAME}" "Building packages"
   # WONTFIX: fixing the array expansion is too difficult to be worth it. See https://github.com/koalaman/shellcheck/wiki/SC2207.
