@@ -1,16 +1,19 @@
 # Copyright 2017 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+import json
 import logging
 import os
+import subprocess
 from collections import defaultdict
+from hashlib import sha1
 from pathlib import Path
 from typing import Callable, Sequence, Set
 
 from pex.fetcher import Fetcher
 from pex.pex_builder import PEXBuilder
 from pex.resolver import resolve
-from pex.util import DistributionHelper
+from pex.util import CacheHelper, DistributionHelper
 from twitter.common.collections import OrderedSet
 
 from pants.backend.python.python_requirement import PythonRequirement
@@ -25,7 +28,9 @@ from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
 from pants.build_graph.files import Files
 from pants.build_graph.target import Target
+from pants.option.custom_types import file_option
 from pants.subsystem.subsystem import Subsystem
+from pants.util.dirutil import fast_relpath, read_file, safe_file_dump
 from pants.util.collections import assert_single_element
 from pants.util.contextutil import temporary_file
 
@@ -132,6 +137,9 @@ class PexBuilderWrapper:
       register('--setuptools-version', advanced=True, default='40.6.3',
                help='The setuptools version to include in the pex if namespace packages need to be '
                     'injected.')
+      register('--hacky-path-to-pex-incremental', type=file_option, default=None, fingerprint=True,
+               help='The path to a multi-platform pex of the pex package, '
+                    'v1.6.11+with.incrementalism.')
 
     @classmethod
     def subsystem_dependencies(cls):
@@ -141,9 +149,10 @@ class PexBuilderWrapper:
       )
 
     @classmethod
-    def create(cls, builder, log=None):
+    def create(cls, builder, log=None, fast=False, invalidated_map=None, workunit_factory=None):
       options = cls.global_instance().get_options()
       setuptools_requirement = f'setuptools=={options.setuptools_version}'
+      maybe_hacky_pex_path = options.hacky_path_to_pex_incremental
 
       log = log or logging.getLogger(__name__)
 
@@ -151,14 +160,24 @@ class PexBuilderWrapper:
                                python_repos_subsystem=PythonRepos.global_instance(),
                                python_setup_subsystem=PythonSetup.global_instance(),
                                setuptools_requirement=PythonRequirement(setuptools_requirement),
-                               log=log)
+                               log=log,
+                               fast=fast,
+                               invalidated_map=invalidated_map,
+                               workunit_factory=workunit_factory,
+                               hacky_pex_path=maybe_hacky_pex_path,
+                               )
 
   def __init__(self,
                builder,
                python_repos_subsystem,
                python_setup_subsystem,
                setuptools_requirement,
-               log):
+               log,
+               fast=False,
+               invalidated_map=None,
+               workunit_factory=None,
+               hacky_pex_path=None,
+               ):
     assert isinstance(builder, PEXBuilder)
     assert isinstance(python_repos_subsystem, PythonRepos)
     assert isinstance(python_setup_subsystem, PythonSetup)
@@ -170,6 +189,21 @@ class PexBuilderWrapper:
     self._python_setup_subsystem = python_setup_subsystem
     self._setuptools_requirement = setuptools_requirement
     self._log = log
+
+    self._fast = fast
+    self._reqs = []
+    self._constraints = []
+    self._source_roots = OrderedSet()
+    self._source_hashes = defaultdict(lambda: defaultdict(list))
+    self._resource_roots = OrderedSet()
+    self._resource_hashes = defaultdict(lambda: defaultdict(list))
+    self._entry_point = None
+    self._hacky_pex_path = hacky_pex_path
+    if self._fast:
+      assert self._hacky_pex_path is not None
+
+    self._invalidated_map = invalidated_map
+    self._workunit_factory = workunit_factory
 
     self._distributions = {}
     self._frozen = False
@@ -237,14 +271,17 @@ class PexBuilderWrapper:
     :param platforms: A list of :class:`Platform`s to resolve requirements for.
                       Defaults to the platforms specified by PythonSetup.
     """
-    distributions = self._resolve_distributions_by_platform(reqs, platforms=platforms)
-    locations = set()
-    for platform, dists in distributions.items():
-      for dist in dists:
-        if dist.location not in locations:
-          self._log.debug(f'  Dumping distribution: .../{os.path.basename(dist.location)}')
-          self.add_distribution(dist)
-        locations.add(dist.location)
+    if self._fast:
+      self._reqs.extend(reqs)
+    else:
+      distributions = self._resolve_distributions_by_platform(reqs, platforms=platforms)
+      locations = set()
+      for platform, dists in distributions.items():
+        for dist in dists:
+          if dist.location not in locations:
+            self._log.debug(f'  Dumping distribution: .../{os.path.basename(dist.location)}')
+            self.add_distribution(dist)
+          locations.add(dist.location)
 
   def _resolve_multi(self, interpreter, requirements, platforms, find_links):
     """Multi-platform dependency resolution for PEX files.
@@ -285,23 +322,59 @@ class PexBuilderWrapper:
     return distributions
 
   def add_sources_from(self, tgt: Target) -> None:
-    dump_source = _create_source_dumper(self._builder, tgt)
-    self._log.debug(f'  Dumping sources: {tgt}')
-    for relpath in tgt.sources_relative_to_buildroot():
-      try:
-        dump_source(relpath)
-      except OSError:
-        self._log.error(f'Failed to copy {relpath} for target {tgt.address.spec}')
-        raise
+    if self._fast:
+      module_relpath = fast_relpath(tgt.address.spec_path, tgt.target_base)
+      module_name = module_relpath.replace(os.path.sep, '.')
 
-    if (getattr(tgt, '_resource_target_specs', None) or
-      getattr(tgt, '_synthetic_resources_target', None)):
-      # No one should be on old-style resources any more.  And if they are,
-      # switching to the new python pipeline will be a great opportunity to fix that.
-      raise TaskError(
-        f'Old-style resources not supported for target {tgt.address.spec}. Depend on resources() '
-        'targets instead.'
-      )
+      # raise Exception(f'map: {self._invalidated_map}, tgt: {tgt}')
+      vt = self._invalidated_map[tgt]
+      expected_hash_file = os.path.join(vt.results_dir, '.src-digest')
+      # TODO: this should just be `if vt.valid`, but targets are somehow valid even after a
+      # clean-all???
+      if vt.valid and os.path.isfile(expected_hash_file):
+        checksum = read_file(expected_hash_file)
+      else:
+        file_digest_map = {}
+        for f in tgt.sources_relative_to_buildroot():
+          f = os.path.normpath(f)
+          file_digest_map[f] = CacheHelper.hash(f)
+        digest = sha1()
+        self._log.debug(f'file_digest_map: {file_digest_map}')
+        for f in sorted(file_digest_map.keys()):
+          digest.update(f.encode())
+          digest.update(file_digest_map[f].encode())
+        checksum = digest.hexdigest()
+        self._log.debug(f'dir hash of {tgt.address.spec_path} was {checksum} -> {expected_hash_file}')
+        safe_file_dump(expected_hash_file, checksum)
+
+      json_payload = {
+        'files': tgt._sources_field.source_paths,
+        'checksum': checksum
+      }
+      if has_resources(tgt):
+        self._resource_roots.add(tgt.target_base)
+        self._resource_hashes[module_name][tgt.target_base].append(json_payload)
+      if has_python_sources(tgt):
+        self._source_roots.add(tgt.target_base)
+        self._source_hashes[module_name][tgt.target_base].append(json_payload)
+    else:
+      dump_source = _create_source_dumper(self._builder, tgt)
+      self._log.debug(f'  Dumping sources: {tgt}')
+      for relpath in tgt.sources_relative_to_buildroot():
+        try:
+          dump_source(relpath)
+        except OSError:
+          self._log.error(f'Failed to copy {relpath} for target {tgt.address.spec}')
+          raise
+
+      if (getattr(tgt, '_resource_target_specs', None) or
+        getattr(tgt, '_synthetic_resources_target', None)):
+        # No one should be on old-style resources any more.  And if they are,
+        # switching to the new python pipeline will be a great opportunity to fix that.
+        raise TaskError(
+          f'Old-style resources not supported for target {tgt.address.spec}. Depend on resources() '
+          'targets instead.'
+        )
 
   def _prepare_inits(self) -> Set[str]:
     chroot = self._builder.chroot()
@@ -329,17 +402,59 @@ class PexBuilderWrapper:
     self._frozen = True
 
   def set_entry_point(self, entry_point):
-    self._builder.set_entry_point(entry_point)
+    if self._fast:
+      self._entry_point = entry_point
+    else:
+      self._builder.set_entry_point(entry_point)
 
   def build(self, safe_path):
-    self.freeze()
-    self._builder.build(safe_path, bytecode_compile=False, deterministic_timestamp=True)
+    if self._fast:
+      json_payload = {
+        'sources': self._source_hashes,
+        'resources': self._resource_hashes,
+      }
+      self._log.debug(f'json_payload: {json_payload}')
+      with temporary_file(binary_mode=False) as json_inputs:
+        json.dump(json_payload, json_inputs)
+        json_inputs.flush()
+        argv = ([
+          self._hacky_pex_path,
+          '-o', safe_path,
+          '-vvvvvvvvv',
+          '--no-compile',
+          '--no-use-system-time',
+          f'--with-fingerprinted-inputs={json_inputs.name}',
+        ] + [
+
+          repr(req).replace("PythonRequirement(", '').replace(")", '')
+          for req in self._reqs
+        ] + [
+          f'--interpreter-constraint={constraint}' for constraint in self._constraints
+        ] + [
+          f'--sources-directory={d}' for d in self._source_roots
+        ] + [
+          f'--resources-directory={d}' for d in self._resource_roots
+        ] + ([
+          f'--entry-point={self._entry_point}'
+        ] if self._entry_point else []))
+        self._log.debug(f'argv: {argv}')
+        with self._workunit_factory() as workunit:
+          subprocess.run(argv,
+                         stdout=workunit.output('stdout'),
+                         stderr=workunit.output('stderr'),
+                         check=True)
+    else:
+      self.freeze()
+      self._builder.build(safe_path, bytecode_compile=False, deterministic_timestamp=True)
 
   def set_shebang(self, shebang):
     self._builder.set_shebang(shebang)
 
   def add_interpreter_constraint(self, constraint):
-    self._builder.add_interpreter_constraint(constraint)
+    if self._fast:
+      self._constraints.append(constraint)
+    else:
+      self._builder.add_interpreter_constraint(constraint)
 
   def add_interpreter_constraints_from(self, constraint_tgts):
     # TODO this would be a great place to validate the constraints and present a good error message

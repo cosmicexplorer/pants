@@ -21,7 +21,14 @@ class ResolveRequirements(ResolveRequirementsTaskBase):
   def prepare(cls, options, round_manager):
     round_manager.require_data(PythonInterpreter)
 
+  @classmethod
+  def register_options(cls, register):
+    super().register_options(register)
+    register('--skip', type=bool, default=False, fingerprint=True)
+
   def execute(self):
+    if self.get_options().skip:
+      return
     if not self.context.targets(lambda t: is_python_target(t) or has_python_requirements(t)):
       return
     interpreter = self.context.products.get_data(PythonInterpreter)

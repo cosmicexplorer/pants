@@ -6,6 +6,7 @@ import os
 from pex.interpreter import PythonInterpreter
 from pex.pex_builder import PEXBuilder
 from pex.pex_info import PexInfo
+from pex.util import CacheHelper
 
 from pants.backend.python.subsystems.pex_build_util import (
   PexBuilderWrapper,
@@ -19,6 +20,7 @@ from pants.backend.python.targets.python_binary import PythonBinary
 from pants.backend.python.targets.python_requirement_library import PythonRequirementLibrary
 from pants.base.build_environment import get_buildroot
 from pants.base.exceptions import TaskError
+from pants.base.workunit import WorkUnitLabel
 from pants.build_graph.target_scopes import Scopes
 from pants.task.task import Task
 from pants.util.contextutil import temporary_dir
@@ -89,17 +91,26 @@ class PythonBinaryCreate(Task):
                         '{binary} and {names[name]} both have the name {name}.')
       names[name] = binary
 
-    with self.invalidated(binaries, invalidate_dependents=True) as invalidation_check:
+    with self.invalidated(self.get_targets(), invalidate_dependents=True) as invalidation_check:
+      invalidated_map = {
+        vt.target: vt
+        for vt in invalidation_check.all_vts
+      }
+
       python_deployable_archive = self.context.products.get('deployable_archives')
       python_pex_product = self.context.products.get('pex_archives')
+
       for vt in invalidation_check.all_vts:
-        pex_path = os.path.join(vt.results_dir, '{}.pex'.format(vt.target.name))
+        if not self.is_binary(vt.target):
+          continue
+
         if not vt.valid:
           self.context.log.debug('cache for {} is invalid, rebuilding'.format(vt.target))
-          self._create_binary(vt.target, vt.results_dir)
+          self._create_binary(vt.target, vt.results_dir, invalidated_map)
         else:
           self.context.log.debug('using cache for {}'.format(vt.target))
 
+        pex_path = os.path.join(vt.results_dir, '{}.pex'.format(vt.target.name))
         basename = os.path.basename(pex_path)
         python_pex_product.add(vt.target, os.path.dirname(pex_path)).append(basename)
         python_deployable_archive.add(vt.target, os.path.dirname(pex_path)).append(basename)
@@ -111,7 +122,7 @@ class PythonBinaryCreate(Task):
         atomic_copy(pex_path, pex_copy)
         self.context.log.info('created pex {}'.format(os.path.relpath(pex_copy, get_buildroot())))
 
-  def _create_binary(self, binary_tgt, results_dir):
+  def _create_binary(self, binary_tgt, results_dir, invalidated_map):
     """Create a .pex file for the specified binary target."""
     # Note that we rebuild a chroot from scratch, instead of using the REQUIREMENTS_PEX
     # and PYTHON_SOURCES products, because those products are already-built pexes, and there's
@@ -127,9 +138,16 @@ class PythonBinaryCreate(Task):
       pex_info = binary_tgt.pexinfo.copy()
       pex_info.build_properties = build_properties
 
+      def workunit_factory():
+        return self.context.new_workunit('pex-fast-build', labels=[WorkUnitLabel.COMPILER])
       pex_builder = PexBuilderWrapper.Factory.create(
         builder=PEXBuilder(path=tmpdir, interpreter=interpreter, pex_info=pex_info, copy=True),
-        log=self.context.log)
+        log=self.context.log,
+        fast=True,
+        invalidated_map=invalidated_map,
+        workunit_factory=workunit_factory)
+      if binary_tgt.entry_point:
+        pex_builder.set_entry_point(binary_tgt.entry_point)
 
       if binary_tgt.shebang:
         self.context.log.info('Found Python binary target {} with customized shebang, using it: {}'
@@ -162,7 +180,7 @@ class PythonBinaryCreate(Task):
 
       # We need to ensure that we are resolving for only the current platform if we are
       # including local python dist targets that have native extensions.
-      self._python_native_code_settings.check_build_for_current_platform_only(self.context.targets())
+      # self._python_native_code_settings.check_build_for_current_platform_only(self.context.targets())
       pex_builder.add_requirement_libs_from(req_tgts, platforms=binary_tgt.platforms)
 
       # Build the .pex file.

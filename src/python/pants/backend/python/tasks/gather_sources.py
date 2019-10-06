@@ -47,7 +47,14 @@ class GatherSources(Task):
     round_manager.require_data(PythonInterpreter)
     round_manager.optional_data('python')  # For codegen.
 
+  @classmethod
+  def register_options(cls, register):
+    super().register_options(register)
+    register('--skip', type=bool, default=False, fingerprint=True)
+
   def execute(self):
+    if self.get_options().skip:
+      return
     targets = self._collect_source_targets()
     if not targets:
       return
