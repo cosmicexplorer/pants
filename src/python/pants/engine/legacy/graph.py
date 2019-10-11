@@ -11,6 +11,7 @@ from pathlib import PurePath
 from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Set, Tuple, Type, Union, cast
 
 from pants.base.exceptions import ResolveError, TargetDefinitionException
+from pants.base.hash_utils import stable_json_sha1
 from pants.base.parse_context import ParseContext
 from pants.base.specs import (
     AddressSpec,
@@ -64,10 +65,19 @@ from pants.option.global_options import (
 )
 from pants.source.filespec import any_matches_filespec
 from pants.source.wrapped_globs import EagerFilesetWithSpec, FilesetRelPathWrapper, Filespec
+from pants.util.memo import memoized_classmethod
 from pants.util.meta import frozen_after_init
 from pants.util.ordered_set import FrozenOrderedSet, OrderedSet
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class HydratedField:
+    """A wrapper for a fully constructed replacement kwarg for a HydratedTarget."""
+
+    name: str
+    value: Any
 
 
 def target_types_from_build_file_aliases(aliases: BuildFileAliases) -> Dict[str, Type[TargetV1]]:
@@ -499,6 +509,27 @@ class InvalidOwnersOfArgs(Exception):
 
 
 @dataclass(frozen=True)
+class TransitiveFingerprintedTarget:
+    """A dataclass containing memoized fingerprint information for some TransitiveHydratedTarget."""
+
+    was_root: bool
+    address: Address
+    type_alias: str
+    intransitive_fingerprint_arg: str
+    transitive_fingerprint_arg: str
+
+    @memoized_classmethod
+    def calculate_intransitive_fingerprint_for_target_adaptor(cls, adaptor):
+        sources = getattr(adaptor, "sources", None)
+        sources_snapshot = sources.snapshot if sources else None
+        return stable_json_sha1([adaptor.intransitive_fingerprint, sources_snapshot,])
+
+
+class FingerprintedTargetCollection(Collection[TransitiveFingerprintedTarget]):
+    """A collection of fingerprint information for a set of `TransitiveHydratedTarget`s."""
+
+
+@dataclass(frozen=True)
 class OwnersRequest:
     """A request for the owners of a set of file paths."""
 
@@ -604,14 +635,6 @@ async def transitive_hydrated_target(root: HydratedTarget) -> TransitiveHydrated
     return TransitiveHydratedTarget(root, dependencies)
 
 
-@dataclass(frozen=True)
-class HydratedField:
-    """A wrapper for a fully constructed replacement kwarg for a HydratedTarget."""
-
-    name: str
-    value: Any
-
-
 @rule
 async def hydrate_target(hydrated_struct: HydratedStruct) -> HydratedTarget:
     """Construct a HydratedTarget from a TargetAdaptor and hydrated versions of its adapted
@@ -671,6 +694,44 @@ async def resolve_target(
 async def resolve_target_with_origin(address_with_origin: AddressWithOrigin) -> TargetWithOrigin:
     wrapped_target = await Get[WrappedTarget](Address, address_with_origin.address)
     return TargetWithOrigin(wrapped_target.target, address_with_origin.origin)
+
+
+@rule
+async def transitive_fingerprinted_targets(addresses: Addresses) -> FingerprintedTargetCollection:
+    """Traverse BuildFileAddresses to obtain fingerprint information for the target set."""
+
+    root_transitive_hydrated_targets = await MultiGet(
+        Get[TransitiveHydratedTarget](Address, a) for a in addresses
+    )
+    transitive_hydrated_targets = tuple(
+        (tht, True) for tht in root_transitive_hydrated_targets
+    ) + tuple(
+        (dep, False)
+        for tht in root_transitive_hydrated_targets
+        for dep in tht.dependencies
+        if dep not in root_transitive_hydrated_targets
+    )
+
+    def lookup_fingerprint(tht):
+        return TransitiveFingerprintedTarget.calculate_intransitive_fingerprint_for_target_adaptor(
+            tht.root.adaptor
+        )
+
+    fingerprinted_targets = [
+        TransitiveFingerprintedTarget(
+            was_root=was_root,
+            address=tht.root.adaptor.address,
+            type_alias=tht.root.adaptor.type_alias,
+            intransitive_fingerprint_arg=lookup_fingerprint(tht),
+            transitive_fingerprint_arg=stable_json_sha1(
+                (lookup_fingerprint(tht),)
+                + tuple(lookup_fingerprint(dep) for dep in tht.dependencies)
+            ),
+        )
+        for tht, was_root in transitive_hydrated_targets
+    ]
+
+    return FingerprintedTargetCollection(tuple(fingerprinted_targets))
 
 
 @rule
@@ -918,6 +979,7 @@ def create_legacy_graph_tasks():
         resolve_targets_with_origins,
         sources_snapshots_from_address_specs,
         sources_snapshots_from_filesystem_specs,
+        transitive_fingerprinted_targets,
         transitive_hydrated_target,
         transitive_hydrated_targets,
     ]

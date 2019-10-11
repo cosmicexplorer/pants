@@ -1,6 +1,7 @@
 # Copyright 2014 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+import json
 import os
 from textwrap import dedent
 
@@ -183,3 +184,67 @@ class ListTargetsTest(GoalRuleTestBase):
             "  Further description.",
             args=["--documented", "::"],
         )
+
+    def _list_json(self, targets):
+        return [
+            json.loads(target_info)
+            for target_info in self.execute_rule(
+                args=["--output-format=json", *targets],
+            ).splitlines()
+        ]
+
+    def test_list_json(self):
+
+        f_alias, c3, d = tuple(self._list_json(["f:alias"]))
+
+        assert f_alias["address"] == "f:alias"
+        assert f_alias["target_type"] == "target"
+
+        assert c3["address"] == "a/b/c:c3"
+        assert c3["target_type"] == "java_library"
+
+        assert d["address"] == "a/b/d:d"
+        assert d["target_type"] == "java_library"
+
+    def test_list_json_distinct(self):
+        """Test that modifying sources will change the recorded fingerprints."""
+        self.create_file("g/Test.java", contents="")
+        self.add_to_build_file(
+            "g",
+            dedent(
+                """\
+        java_library(
+            name="a",
+            sources=["Test.java"],
+        )
+        java_library(
+            name="b",
+            sources=["Test.java"],
+        )
+        target(
+            name="c",
+            dependencies=[":b"],
+        )
+        """
+            ),
+        )
+
+        g_a_0, g_b_0, g_c_0 = tuple(self._list_json(["g:a", "g:b", "g:c"]))
+
+        # Modify the source file and see that the fingerprints have changed.
+        self.create_file("g/Test.java", contents="\n\n\n")
+
+        g_a_1, g_b_1, g_c_1 = tuple(self._list_json(["g:a", "g:b", "g:c"]))
+
+        # Modified, because sources were changed.
+        assert g_a_0["intransitive_fingerprint"] != g_a_1["intransitive_fingerprint"]
+        assert g_a_0["transitive_fingerprint"] != g_a_1["transitive_fingerprint"]
+
+        # Modified, because sources were changed.
+        assert g_b_0["intransitive_fingerprint"] != g_b_1["intransitive_fingerprint"]
+        assert g_b_0["transitive_fingerprint"] != g_b_1["transitive_fingerprint"]
+
+        # Unchanged.
+        assert g_c_0["intransitive_fingerprint"] == g_c_1["intransitive_fingerprint"]
+        # Modified, because sources of the dependency g:b were changed.
+        assert g_c_0["transitive_fingerprint"] != g_c_1["transitive_fingerprint"]
