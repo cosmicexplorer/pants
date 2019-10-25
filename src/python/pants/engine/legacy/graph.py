@@ -3,6 +3,7 @@
 
 import dataclasses
 import logging
+from abc import ABC, abstractproperty
 from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -27,7 +28,7 @@ from pants.engine.legacy.structs import BundleAdaptor, BundlesField, Hydrateable
 from pants.engine.mapper import AddressMapper
 from pants.engine.objects import Collection
 from pants.engine.parser import HydratedStruct
-from pants.engine.rules import RootRule, rule
+from pants.engine.rules import RootRule, UnionRule, rule, union
 from pants.engine.selectors import Get
 from pants.option.global_options import GlobMatchErrorBehavior
 from pants.source.filespec import any_matches_filespec
@@ -499,6 +500,7 @@ def hydrate_target(hydrated_struct: HydratedStruct) -> HydratedTarget:
   target_adaptor = hydrated_struct.value
   """Construct a HydratedTarget from a TargetAdaptor and hydrated versions of its adapted fields."""
   # Hydrate the fields of the adaptor and re-construct it.
+  # hydrated_fields = yield [Get(HydratedField, HydrateableField, fa)]
   hydrated_fields = yield [Get(HydratedField, HydrateableField, fa)
                            for fa in target_adaptor.field_adaptors]
   kwargs = target_adaptor.kwargs()
@@ -523,9 +525,22 @@ def _eager_fileset_with_spec(spec_path, filespec, snapshot, include_dirs=False):
                               include_dirs=include_dirs)
 
 
+class GeneralAddressable(ABC):
+
+  @abstractproperty
+  def address(self) -> Address: ...
+
+
+@union
+class SourcesLikeField(GeneralAddressable):
+
+  @abstractproperty
+  def path_globs(self) -> PathGlobs: ...
+
+
 @rule
 def hydrate_sources(
-  sources_field: SourcesField, glob_match_error_behavior: GlobMatchErrorBehavior
+  sources_field: SourcesLikeField, glob_match_error_behavior: GlobMatchErrorBehavior
 ) -> HydratedField:
   """Given a SourcesField, request a Snapshot for its path_globs and create an EagerFilesetWithSpec.
   """
@@ -585,4 +600,5 @@ def create_legacy_graph_tasks():
     hydrate_sources,
     hydrate_bundles,
     RootRule(OwnersRequest),
+    UnionRule(SourcesLikeField, SourcesField),
   ]

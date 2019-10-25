@@ -47,7 +47,6 @@ from pants.backend.python.tasks.setup_py import SetupPy
 from pants.backend.python.tasks.unpack_wheels import UnpackWheels
 from pants.build_graph.build_file_aliases import BuildFileAliases
 from pants.build_graph.resources import Resources
-from pants.engine.legacy.structs import PythonTestsAdaptor
 from pants.goal.task_registrar import TaskRegistrar as task
 
 
@@ -77,7 +76,7 @@ def build_file_aliases():
       PantsRequirement.alias: PantsRequirement,
     },
     target_adaptors={
-      PythonTests.alias(): PythonTestsAdaptor,
+      PythonTests.alias(): pex.PythonTargetAdaptor,
     },
   )
 
