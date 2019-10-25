@@ -24,11 +24,11 @@ from pants.build_graph.remote_sources import RemoteSources
 from pants.engine.addressable import BuildFileAddresses
 from pants.engine.fs import PathGlobs, Snapshot
 from pants.engine.legacy.address_mapper import LegacyAddressMapper
-from pants.engine.legacy.structs import BundleAdaptor, BundlesField, HydrateableField, SourcesField
+from pants.engine.legacy.structs import TargetAdaptor, BundleAdaptor, BundlesField, HydrateableField, SourcesField
 from pants.engine.mapper import AddressMapper
 from pants.engine.objects import Collection
 from pants.engine.parser import HydratedStruct
-from pants.engine.rules import RootRule, UnionRule, rule, union
+from pants.engine.rules import RootRule, UnionMembership, UnionRule, rule, union
 from pants.engine.selectors import Get
 from pants.option.global_options import GlobMatchErrorBehavior
 from pants.source.filespec import any_matches_filespec
@@ -488,6 +488,23 @@ def hydrated_targets(build_file_addresses: BuildFileAddresses) -> HydratedTarget
   yield HydratedTargets(targets)
 
 
+
+@dataclass(frozen=True)
+class DehydratedField:
+  underlying: Any
+
+
+FieldAdaptors = Collection.of(DehydratedField)
+
+
+@rule
+def extract_fields(target_adaptor: TargetAdaptor, union_rules: UnionMembership) -> FieldAdaptors:
+  return FieldAdaptors(tuple(
+    DehydratedField(f)
+    for f in target_adaptor.field_adaptors
+  ))
+
+
 @dataclass(frozen=True)
 class HydratedField:
   """A wrapper for a fully constructed replacement kwarg for a HydratedTarget."""
@@ -500,9 +517,9 @@ def hydrate_target(hydrated_struct: HydratedStruct) -> HydratedTarget:
   target_adaptor = hydrated_struct.value
   """Construct a HydratedTarget from a TargetAdaptor and hydrated versions of its adapted fields."""
   # Hydrate the fields of the adaptor and re-construct it.
-  # hydrated_fields = yield [Get(HydratedField, HydrateableField, fa)]
-  hydrated_fields = yield [Get(HydratedField, HydrateableField, fa)
-                           for fa in target_adaptor.field_adaptors]
+  field_adaptors = yield Get(FieldAdaptors, TargetAdaptor, target_adaptor)
+  hydrated_fields = yield [Get(HydratedField, HydrateableField, fa.underlying)
+                           for fa in field_adaptors]
   kwargs = target_adaptor.kwargs()
   for field in hydrated_fields:
     kwargs[field.name] = field.value
@@ -536,6 +553,9 @@ class SourcesLikeField(GeneralAddressable):
 
   @abstractproperty
   def path_globs(self) -> PathGlobs: ...
+
+  @abstractproperty
+  def filespec(self): ...
 
 
 @rule
@@ -601,4 +621,6 @@ def create_legacy_graph_tasks():
     hydrate_bundles,
     RootRule(OwnersRequest),
     UnionRule(SourcesLikeField, SourcesField),
+    extract_fields,
+    RootRule(TargetAdaptor),
   ]
