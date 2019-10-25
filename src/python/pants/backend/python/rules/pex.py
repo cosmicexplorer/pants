@@ -1,6 +1,7 @@
 # Copyright 2019 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+from abc import ABC, abstractproperty
 from dataclasses import dataclass
 from typing import FrozenSet, List, Optional, Tuple
 
@@ -9,17 +10,70 @@ from pants.backend.python.rules.hermetic_pex import HermeticPex
 from pants.backend.python.subsystems.python_native_code import PexBuildEnvironment
 from pants.backend.python.subsystems.python_setup import PythonSetup
 from pants.backend.python.subsystems.subprocess_environment import SubprocessEncodingEnvironment
+from pants.build_graph.address import Address
 from pants.engine.fs import (
   EMPTY_DIRECTORY_DIGEST,
   Digest,
   DirectoriesToMerge,
   DirectoryWithPrefixToAdd,
+  GlobExpansionConjunction,
 )
 from pants.engine.isolated_process import ExecuteProcessResult, MultiPlatformExecuteProcessRequest
-from pants.engine.legacy.structs import PythonTargetAdaptor, TargetAdaptor
+from pants.engine.legacy.graph import HydratedField
+from pants.engine.legacy.structs import BaseGlobs, SourcesField, TargetAdaptor
 from pants.engine.platform import Platform, PlatformConstraint
-from pants.engine.rules import optionable_rule, rule
+from pants.engine.rules import UnionRule, optionable_rule, rule, union
 from pants.engine.selectors import Get
+
+
+class ResourcesField(SourcesField):
+  pass
+
+
+class PythonTargetAdaptor(TargetAdaptor):
+  pass
+
+
+class BaseAddressable(ABC):
+
+  @abstractproperty
+  def address(self) -> Address: ...
+
+
+@union
+class Resourceable(BaseAddressable):
+
+  @abstractproperty
+  def resources(self): ...
+
+
+@rule
+def hydrate_resources(resources_field: ResourcesField) -> HydratedField:
+  return HydratedField('resources')
+
+
+# @rule
+# def hydrate_resources_python(resourceable: PythonTargetAdaptor) -> ResourcesField:
+#   ...
+
+#  ^
+#/ | \
+#  |
+#  |
+# The below should get automatically converted to an instance like the above for each concrete
+# instance of the union!
+
+@rule
+def get_resources_field(resourceable: Resourceable) -> ResourcesField:
+  base_globs = BaseGlobs.from_sources_field(resourceable.resources, resourceable.address.spec_path)
+  path_globs = base_globs.to_path_globs(resourceable.address.spec_path, GlobExpansionConjunction.all_match)
+  resources_field = ResourcesField(resourceable.address,
+                                   'resources',
+                                   base_globs.filespecs,
+                                   base_globs,
+                                   path_globs,
+                                   lambda _: None)
+  return resources_field
 
 
 @dataclass(frozen=True)
@@ -145,4 +199,7 @@ def rules():
   return [
     create_pex,
     optionable_rule(PythonSetup),
+    UnionRule(Resourceable, PythonTargetAdaptor),
+    hydrate_resources,
+    get_resources_field,
   ]
