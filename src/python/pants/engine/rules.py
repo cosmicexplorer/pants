@@ -420,12 +420,50 @@ class UnionRule:
   union_base: Type
   union_member: Type
 
+  class _CompareTypeDeclarationsError(TypeError): pass
+
+  def _compare_declarations_for_abstract_method(self, abstract_method_name) -> None:
+    """???"""
+    maybe_typed_method_decl = getattr(self.union_base, abstract_method_name)
+    member_method_decl = getattr(self.union_member, abstract_method_name, None)
+    if member_method_decl is None:
+      maybe_dataclass_field_type = self.union_member.__annotations__.get(abstract_method_name, None)
+      if maybe_dataclass_field_type is None:
+        raise self._CompareTypeDeclarationsError(f'Was not defined on attempted union member!')
+      if not isinstance(maybe_typed_method_decl, property):
+        raise self._CompareTypeDeclarationsError('???/1')
+      union_base_decl_types = maybe_typed_method_decl.fget.__annotations__
+      union_member_decl_types = {'return': maybe_dataclass_field_type}
+    else:
+      # If the method was a property, get the underlying function.
+      if isinstance(maybe_typed_method_decl, property):
+        if not isinstance(member_method_decl, property):
+          raise self._CompareTypeDeclarationsError('???/2')
+        maybe_typed_method_decl = maybe_typed_method_decl.fget
+        member_method_decl = member_method_decl.fget
+      union_base_decl_types = maybe_typed_method_decl.__annotations__
+      union_member_decl_types = member_method_decl.__annotations__
+
+    if union_base_decl_types != union_member_decl_types:
+      raise self._CompareTypeDeclarationsError(f'Declared types did not match! '
+                                               f'Base: {union_base_decl_types}, '
+                                               f'member: {union_member_decl_types}')
+
   def __post_init__(self) -> None:
     if not getattr(self.union_base, '_is_union', False):
       raise ValueError(
         f'union_base must be a type annotated with @union: was {self.union_base} '
         f'(type {type(self.union_base).__name__})'
       )
+
+    if issubclass(self.union_base, ABC):
+      for abstract_method_name in self.union_base.__abstractmethods__:
+        try:
+          self._compare_declarations_for_abstract_method(abstract_method_name)
+        except self._CompareTypeDeclarationsError as e:
+          raise TypeError(
+            f'Abstract method or property `{abstract_method_name}` on ABC @union base '
+            f'{self.union_base}, for union member {self.union_member}: {e}')
 
 
 @dataclass(frozen=True)

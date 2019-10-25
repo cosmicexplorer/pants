@@ -8,6 +8,7 @@ from collections.abc import MutableSequence, MutableSet
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from pants.build_graph.address import Address
 from pants.build_graph.target import Target
 from pants.engine.addressable import addressable_list
 from pants.engine.fs import GlobExpansionConjunction, PathGlobs
@@ -144,7 +145,7 @@ class SourcesField:
   :param validate_fn: A function which takes an EagerFilesetWithSpec and throws if it's not
     acceptable. This API will almost certainly change in the near future.
   """
-  address: Any
+  address: Address
   arg: Any
   filespecs: Any
   base_globs: Any

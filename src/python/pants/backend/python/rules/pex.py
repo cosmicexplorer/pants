@@ -199,8 +199,8 @@ def rules():
   return [
     create_pex,
     optionable_rule(PythonSetup),
-    # UnionRule(Resourceable, PythonTargetAdaptor),
-    # UnionRule(HydrateableField, ResourcesField),
-    # hydrate_resources,
-    # get_resources_field,
+    UnionRule(Resourceable, PythonTargetAdaptor),
+    UnionRule(HydrateableField, ResourcesField),
+    hydrate_resources,
+    get_resources_field,
   ]
