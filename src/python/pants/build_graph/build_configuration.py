@@ -11,6 +11,7 @@ from pants.base.parse_context import ParseContext
 from pants.build_graph.addressable import AddressableCallProxy
 from pants.build_graph.build_file_aliases import BuildFileAliases
 from pants.build_graph.target_addressable import TargetAddressable
+from pants.engine.legacy.structs import TargetAdaptor
 from pants.engine.rules import RuleIndex
 from pants.option.optionable import Optionable
 from pants.util.memo import memoized_method
@@ -35,6 +36,7 @@ class BuildConfiguration:
     self._optionables = OrderedSet()
     self._rules = OrderedSet()
     self._union_rules = OrderedDict()
+    self._target_adaptors_by_alias = {}
 
   def registered_aliases(self):
     """Return the registered aliases exposed in BUILD files.
@@ -51,7 +53,8 @@ class BuildConfiguration:
     return BuildFileAliases(
         targets=target_factories_by_alias,
         objects=self._exposed_object_by_alias.copy(),
-        context_aware_object_factories=self._exposed_context_aware_object_factory_by_alias.copy()
+        context_aware_object_factories=self._exposed_context_aware_object_factory_by_alias.copy(),
+        target_adaptors=self._target_adaptors_by_alias.copy(),
     )
 
   def register_aliases(self, aliases):
@@ -65,6 +68,14 @@ class BuildConfiguration:
 
     for alias, target_type in aliases.target_types.items():
       self._register_target_alias(alias, target_type)
+
+    for alias, target_adaptor in aliases.target_adaptors.items():
+      prev_adaptor = self._target_adaptors_by_alias.get(alias, None)
+      if prev_adaptor is not None:
+        raise ValueError(f'adaptor for {alias} was already defined as {prev_adaptor}! new value: {target_adaptor}')
+      else:
+        assert issubclass(target_adaptor, TargetAdaptor), f'type  must be a TargetAdaptor subclas: was {target_adaptor}'
+        self._target_adaptors_by_alias[alias] = target_adaptor
 
     for alias, target_macro_factory in aliases.target_macro_factories.items():
       self._register_target_macro_factory_alias(alias, target_macro_factory)

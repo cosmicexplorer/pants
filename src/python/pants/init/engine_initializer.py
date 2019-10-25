@@ -143,6 +143,9 @@ def _legacy_symbol_table(build_file_aliases):
   table['pants_plugin'] = PantsPluginAdaptor
   table['contrib_plugin'] = PantsPluginAdaptor
 
+  for alias, target_adaptor in build_file_aliases.target_adaptors.items():
+    table[alias] = target_adaptor
+
   return SymbolTable(table)
 
 

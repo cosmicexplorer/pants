@@ -165,7 +165,8 @@ class BuildFileAliases:
 
     return context_aware_object_factories.copy()
 
-  def __init__(self, targets=None, objects=None, context_aware_object_factories=None):
+  def __init__(self, targets=None, objects=None, context_aware_object_factories=None,
+               target_adaptors=None):
     """
     :API: public
 
@@ -179,6 +180,7 @@ class BuildFileAliases:
     self._objects = self._validate_objects(objects)
     self._context_aware_object_factories = self._validate_context_aware_object_factories(
       context_aware_object_factories)
+    self._target_adaptors = target_adaptors or {}
 
   @property
   def target_types(self):
@@ -219,6 +221,11 @@ class BuildFileAliases:
     :rtype: dict
     """
     return self._context_aware_object_factories
+
+  @property
+  def target_adaptors(self):
+    """???"""
+    return self._target_adaptors
 
   @memoized_property
   def target_types_by_alias(self):
