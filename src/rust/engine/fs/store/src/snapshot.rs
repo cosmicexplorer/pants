@@ -33,8 +33,8 @@ impl Snapshot {
   }
 
   pub fn from_path_stats<
-    S: StoreFileByDigest<Error> + Sized + Clone,
-    Error: fmt::Debug + 'static + Send,
+    S: StoreFileByDigest<Error>,
+    Error: fmt::Debug + 'static,
   >(
     store: Store,
     file_digester: &S,
@@ -105,7 +105,7 @@ impl Snapshot {
 
   pub fn digest_from_path_stats<
     S: StoreFileByDigest<Error> + Sized + Clone,
-    Error: fmt::Debug + 'static + Send,
+    Error: fmt::Debug + 'static,
   >(
     store: Store,
     file_digester: &S,
@@ -123,15 +123,15 @@ impl Snapshot {
   }
 
   fn ingest_directory_from_sorted_path_stats<
-    S: StoreFileByDigest<Error> + Sized + Clone,
-    Error: fmt::Debug + 'static + Send,
+    S: StoreFileByDigest<Error>,
+    Error: fmt::Debug + 'static,
   >(
     store: Store,
     file_digester: &S,
     path_stats: &[PathStat],
     workunit_store: WorkUnitStore,
   ) -> BoxFuture<Digest, String> {
-    let mut file_futures: Vec<BoxFuture<bazel_protos::remote_execution::FileNode, String>> =
+    let mut file_futures: Vec<BoxFuture<Arc<bazel_protos::remote_execution::FileNode>, String>> =
       Vec::new();
     let mut dir_futures: Vec<BoxFuture<bazel_protos::remote_execution::DirectoryNode, String>> =
       Vec::new();
@@ -156,13 +156,13 @@ impl Snapshot {
               file_digester
                 .clone()
                 .store_by_digest(stat.clone(), workunit_store.clone())
-                .map_err(|e| format!("{:?}", e))
+                .map_err(|e| format!("{:?}", &e))
                 .and_then(move |digest| {
                   let mut file_node = bazel_protos::remote_execution::FileNode::new();
                   file_node.set_name(osstring_as_utf8(first_component)?);
                   file_node.set_digest((&digest).into());
                   file_node.set_is_executable(is_executable);
-                  Ok(file_node)
+                  Ok(Arc::new(file_node))
                 })
                 .to_boxed(),
             );
@@ -206,7 +206,9 @@ impl Snapshot {
       .and_then(move |(dirs, files)| {
         let mut directory = bazel_protos::remote_execution::Directory::new();
         directory.set_directories(protobuf::RepeatedField::from_vec(dirs));
-        directory.set_files(protobuf::RepeatedField::from_vec(files));
+        directory.set_files(protobuf::RepeatedField::from_vec(
+          files.into_iter().map(|x| (*x).clone()).collect()
+        ));
         store.record_directory(&directory, true)
       })
       .to_boxed()
@@ -605,8 +607,15 @@ fn osstring_as_utf8(path: OsString) -> Result<String, String> {
 // looked up by the Digest produced by the store_by_digest method.
 // It is a separate trait so that caching implementations can be written which wrap the Store (used
 // to store the bytes) and VFS (used to read the files off disk if needed).
-pub trait StoreFileByDigest<Error> {
+pub trait StoreFileByDigest<Error>: Send + Sync {
   fn store_by_digest(&self, file: File, workunit_store: WorkUnitStore) -> BoxFuture<Digest, Error>;
+}
+
+impl <E> StoreFileByDigest<E> for Arc<dyn StoreFileByDigest<E>> {
+  fn store_by_digest(&self, file: File, workunit_store: WorkUnitStore) -> BoxFuture<Digest, E> {
+    let inner: &dyn StoreFileByDigest<E> = &*Arc::clone(self);
+    inner.store_by_digest(file, workunit_store)
+  }
 }
 
 ///

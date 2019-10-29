@@ -31,6 +31,8 @@ extern crate derivative;
 
 use boxfuture::BoxFuture;
 use bytes::Bytes;
+use fs::PosixFS;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::ops::AddAssign;
@@ -254,6 +256,8 @@ impl AddAssign<UploadSummary> for ExecutionStats {
 
 #[derive(Clone, Default)]
 pub struct Context {
+  pub vfs: Option<Arc<PosixFS>>,
+  pub digester: Option<Arc<dyn store::StoreFileByDigest<dyn std::fmt::Debug + 'static>>>,
   pub workunit_store: WorkUnitStore,
   pub build_id: String,
 }

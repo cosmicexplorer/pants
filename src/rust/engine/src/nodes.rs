@@ -525,6 +525,8 @@ impl WrappedNode for MultiPlatformExecuteProcess {
   fn run(self, context: Context) -> NodeFuture<ProcessResult> {
     let request = self.0;
     let execution_context = process_execution::Context {
+      vfs: Some(Arc::new(RefCell(context.core.vfs.clone()))),
+      digester: Some(Arc::new(context)),
       workunit_store: context.session.workunit_store(),
       build_id: context.session.build_id().to_string(),
     };

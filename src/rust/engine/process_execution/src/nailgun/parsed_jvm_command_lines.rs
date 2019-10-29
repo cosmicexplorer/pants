@@ -4,14 +4,25 @@ use std::slice::Iter;
 /// Represents the result of parsing the args of a nailgunnable ExecuteProcessRequest
 /// TODO(#8481) We may want to split the classpath by the ":", and store it as a Vec<String>
 ///         to allow for deep fingerprinting.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct ParsedJVMCommandLines {
-  pub nailgun_args: Vec<String>,
+  pub jdk_location: String,
+  pub nailgun_args_before_classpath: Vec<String>,
+  pub classpath: Vec<String>,
+  pub nailgun_args_after_classpath: Vec<String>,
   pub client_args: Vec<String>,
   pub client_main_class: String,
 }
 
 impl ParsedJVMCommandLines {
+  pub fn get_nailgun_command_line(&self, classpath_paths: Vec<&std::path::Path>) -> Vec<String> {
+    vec![self.jdk_location].into_iter()
+      .chain(self.nailgun_args_before_classpath.into_iter())
+      .chain(vec!["-cp".to_string(), classpath_paths.into_iter().map(|p| p.to_string_lossy()).collect::<Vec<_>>().into_iter().join(":")])
+      .chain(self.nailgun_args_after_classpath.into_iter())
+      .collect()
+  }
+
   ///
   /// Given a list of args that one would likely pass to a java call,
   /// we automatically split it to generate two argument lists:
@@ -49,14 +60,11 @@ impl ParsedJVMCommandLines {
       ));
     }
 
-    let mut nailgun_args = vec![jdk];
-    nailgun_args.extend(nailgun_args_before_classpath);
-    nailgun_args.push(classpath_flag);
-    nailgun_args.push(classpath_value);
-    nailgun_args.extend(nailgun_args_after_classpath);
-
     Ok(ParsedJVMCommandLines {
-      nailgun_args: nailgun_args,
+      jdk_location: jdk,
+      nailgun_args_before_classpath,
+      classpath: classpath_value.split(":").map(|s| s.to_string()).collect(),
+      nailgun_args_after_classpath,
       client_args: client_args,
       client_main_class: main_class,
     })

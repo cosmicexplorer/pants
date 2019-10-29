@@ -10,6 +10,8 @@ use log::{debug, trace};
 
 use boxfuture::{try_future, BoxFuture, Boxable};
 use hashing::Digest;
+use fs::GlobMatching;
+use store::Snapshot;
 
 use crate::nailgun::nailgun_pool::{NailgunProcessName, Port};
 use crate::{
@@ -52,18 +54,23 @@ static NG_CLIENT_PATH: &str = "bin/ng/1.0.0/ng";
 // TODO(#8481) We should calculate the input_files by deeply fingerprinting the classpath.
 fn construct_nailgun_server_request(
   nailgun_name: &str,
-  args_for_the_jvm: Vec<String>,
+  classpath: Snapshot,
+  parsed_args: &ParsedJVMCommandLines,
   jdk: PathBuf,
   platform: Platform,
 ) -> ExecuteProcessRequest {
-  let mut full_args = args_for_the_jvm;
+  let Snapshot {
+    digest, path_stats
+  } = classpath;
+  let mut full_args: Vec<String> = parsed_args.get_nailgun_command_line(
+    path_stats.iter().map(|p| p.path()).collect());
   full_args.push(NAILGUN_MAIN_CLASS.to_string());
   full_args.extend(ARGS_TO_START_NAILGUN.iter().map(|a| a.to_string()));
 
   ExecuteProcessRequest {
     argv: full_args,
     env: BTreeMap::new(),
-    input_files: hashing::EMPTY_DIGEST,
+    input_files: digest,
     output_files: BTreeSet::new(),
     output_directories: BTreeSet::new(),
     timeout: Duration::new(1000, 0),
@@ -238,6 +245,15 @@ impl super::CommandRunner for CommandRunner {
     req: MultiPlatformExecuteProcessRequest,
     context: Context,
   ) -> BoxFuture<FallibleExecuteProcessResult, String> {
+    let (vfs, digester) = match (context.vfs, context.digester) {
+      (Some(vfs), Some(digester)) => (vfs, digester),
+      _ => {
+        debug!("vfs or digester not provided in context -- nailgun cannot execute! falling back to inner command runner...");
+        return self.inner.run(req, context)
+      }
+    };
+
+
     let nailgun_pool = self.nailgun_pool.clone();
     let inner = self.inner.clone();
     let python_distribution = self.get_python_distribution_path();
@@ -252,13 +268,36 @@ impl super::CommandRunner for CommandRunner {
     debug!("Running request under nailgun:\n {:#?}", &original_request);
 
     // Separate argument lists, to form distinct EPRs for (1) starting the nailgun server and (2) running the client in it.
-    let ParsedJVMCommandLines {
-      nailgun_args,
-      client_args,
-      client_main_class,
-    } = try_future!(ParsedJVMCommandLines::parse_command_lines(
+    let parsed_jvm_command_lines = try_future!(ParsedJVMCommandLines::parse_command_lines(
       &original_request.argv
     ));
+    let nailgun_args = parsed_jvm_command_lines.clone();
+    let ParsedJVMCommandLines {
+      client_args,
+      client_main_class,
+      classpath,
+      ..
+    } = parsed_jvm_command_lines;
+
+    let store = self.inner.store.clone();
+    let workunit_store = context.workunit_store.clone();
+
+    let classpath_globs = try_future!(
+      fs::PathGlobs::create(
+        &classpath, &[], fs::StrictGlobMatching::Error, fs::GlobExpansionConjunction::AllMatch));
+
+    let classpath_path_stats: BoxFuture<Vec<fs::PathStat>, String> = vfs.expand(classpath_globs)
+      .map_err(|e| format!("{}", &e))
+      .to_boxed();
+    let classpath_snapshot: BoxFuture<Snapshot, String> = classpath_path_stats
+      .and_then(move |path_stats| {
+        store::Snapshot::from_path_stats::<Arc<dyn store::StoreFileByDigest<dyn std::fmt::Debug + 'static>>, _>(
+          store,
+          &Arc::clone(&digester),
+          path_stats,
+          workunit_store,
+        )
+      }).to_boxed();
 
     let nailgun_name = CommandRunner::calculate_nailgun_name(&client_main_class);
     let nailgun_name2 = nailgun_name.clone();
@@ -268,49 +307,49 @@ impl super::CommandRunner for CommandRunner {
       .jdk_home
       .clone()
       .ok_or_else(|| "JDK home must be specified for all nailgunnable requests.".to_string()));
-    let nailgun_req = construct_nailgun_server_request(
-      &nailgun_name,
-      nailgun_args,
-      jdk_home.clone(),
-      original_request.target_platform,
-    );
-    trace!("Extracted nailgun request:\n {:#?}", &nailgun_req);
+    let nailgun_req: BoxFuture<ExecuteProcessRequest, _> = classpath_snapshot.map(|classpath| {
+      let nailgun_req = construct_nailgun_server_request(
+        &nailgun_name,
+        classpath,
+        &nailgun_args,
+        jdk_home.clone(),
+        original_request.target_platform,
+      );
+      trace!("Extracted nailgun request:\n {:#?}", &nailgun_req);
+      nailgun_req
+    }).to_boxed();
 
-    let nailgun_req_digest = crate::digest(
-      MultiPlatformExecuteProcessRequest::from(nailgun_req.clone()),
-      &self.metadata,
-    );
+    let nailgun_req_digest: BoxFuture<(_, _), _> = nailgun_req.map(|nailgun_req| {
+      let nailgun_req_digest = crate::digest(
+        MultiPlatformExecuteProcessRequest::from(nailgun_req.clone()),
+        &self.metadata,
+      );
+      (nailgun_req, nailgun_req_digest)
+    }).to_boxed();
 
     let workdir_for_this_nailgun = try_future!(self.get_nailgun_workdir(&nailgun_name));
     let workdir_for_this_nailgun1 = workdir_for_this_nailgun.clone();
     let executor = self.executor.clone();
     let build_id = context.build_id.clone();
-    let store = self.inner.store.clone();
-    let workunit_store = context.workunit_store.clone();
+
+    let nailgun_connection: BoxFuture<_, _> = nailgun_req_digest
+      .and_then(|(nailgun_req, nailgun_req_digest)| {
+        nailgun_pool.connect(
+          nailgun_name.clone(),
+          nailgun_req,
+          &workdir_for_this_nailgun1,
+          nailgun_req_digest,
+          build_id,
+        )
+      }).to_boxed();
 
     self
       .async_semaphore
       .with_acquired(move || {
-        Self::materialize_workdir_for_server(
-          store,
-          workdir_for_this_nailgun.clone(),
-          jdk_home,
-          original_request.input_files,
-          workunit_store,
-        )
-        .and_then(move |_metadata| {
-          // Connect to a running nailgun.
-          executor.spawn_on_io_pool(futures::future::lazy(move || {
-            nailgun_pool.connect(
-              nailgun_name.clone(),
-              nailgun_req,
-              &workdir_for_this_nailgun1,
-              nailgun_req_digest,
-              build_id,
-            )
-          }))
-        })
-        .map_err(|e| format!("Failed to connect to nailgun! {}", e))
+        // Connect to a running nailgun.
+        executor.spawn_on_io_pool(
+          nailgun_connection)
+          .map_err(|e| format!("Failed to connect to nailgun! {}", e))
       })
       .inspect(move |_| debug!("Connected to nailgun instance {}", &nailgun_name3))
       .and_then(move |nailgun_port| {
