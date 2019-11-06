@@ -6,15 +6,12 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import logging
 import os
-from builtins import str
-
-from future.utils import binary_type
 
 from pants.backend.native.config.environment import Platform
 from pants.backend.native.subsystems.native_toolchain import GCCCToolchain, NativeToolchain
 from pants.binaries.binary_tool import NativeTool
 from pants.binaries.binary_util import BinaryToolUrlGenerator
-from pants.engine.fs import Digest, MergedDirectories, Snapshot, rooted_toplevel_globs_for_paths
+from pants.engine.fs import Digest, DirectoriesToMerge, Snapshot, rooted_toplevel_globs_for_paths
 from pants.engine.isolated_process import ExecuteProcessRequest, ExecuteProcessResult
 from pants.engine.rules import RootRule, rule
 from pants.engine.selectors import Get, Params
@@ -199,8 +196,8 @@ class NativeImageBuildEnvironment(datatype([
 class CompiledNativeImage(datatype([
     ('file_path', string_type),
     ('built_image', Digest),
-    ('stdout', binary_type),
-    ('stderr', binary_type),
+    ('stdout', bytes),
+    ('stderr', bytes),
 ])): pass
 
 
@@ -222,7 +219,7 @@ def build_native_image(platform, build_native_image, native_image_build_env, nat
 
   all_digests = yield Get(
     Digest,
-    MergedDirectories(directories=tuple([
+    DirectoriesToMerge(directories=tuple([
       graal_digest,
       tool_classpath_snapshot.directory_digest,
     ]))

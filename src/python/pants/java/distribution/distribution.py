@@ -653,7 +653,7 @@ class HermeticDistribution(object):
     libs_unrooted = [self._unroot_lib_path(l) for l in libs_abs]
     path_globs = PathGlobsAndRoot(
       PathGlobs(tuple(libs_unrooted)),
-      text_type(self._underlying.home))
+      str(self._underlying.home))
     return (libs_unrooted, path_globs)
 
   @property

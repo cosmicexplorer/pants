@@ -4,8 +4,6 @@
 from collections import namedtuple
 from textwrap import dedent
 
-from future.utils import text_type
-
 from pants.base.exceptions import TaskError
 from pants.engine.fs import PathGlobs, PathGlobsAndRoot
 from pants.java.distribution.distribution import DistributionLocator, HermeticDistribution
@@ -250,6 +248,6 @@ class JvmToolMixin:
     return scheduler.capture_merged_snapshot(tuple([
       PathGlobsAndRoot(
         PathGlobs(include=classpath_relative_paths),
-        root=text_type(root),
+        root=str(root),
       ),
     ]))

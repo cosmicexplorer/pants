@@ -4,8 +4,6 @@
 import os
 from abc import abstractmethod, abstractproperty
 
-from future.utils import text_type
-
 from pants.backend.jvm.subsystems.graal import (BuildNativeImage, CompiledNativeImage, GraalCE,
                                                 NativeImageBuildRequest)
 from pants.backend.jvm.tasks.rewrite_base import RewriteBase
@@ -134,7 +132,7 @@ class ScalaFmt(RewriteBase):
       merged_snapshot = self.context._scheduler.capture_merged_snapshot(tuple([
         PathGlobsAndRoot(
           PathGlobs([config_rel_path]),
-          root=text_type(get_buildroot()),
+          root=str(get_buildroot()),
         )
       ]))
       config_args = ['--config', config_rel_path]
@@ -172,7 +170,7 @@ class ScalaFmt(RewriteBase):
       output_dir = self.get_options().output_dir or get_buildroot()
       self.context._scheduler.materialize_directories(tuple([
         DirectoryToMaterialize(
-          path=text_type(output_dir),
+          path=str(output_dir),
           directory_digest=result.output_directory_digest,
         ),
         ]))

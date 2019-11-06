@@ -295,6 +295,7 @@ class Scheduler:
     """
     result = self._native.lib.capture_snapshots(
       self._scheduler,
+      self._session,
       self._to_value(_PathGlobsAndRootCollection(path_globs_and_roots)),
     )
     return self._raise_or_return(result)

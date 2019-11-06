@@ -208,14 +208,14 @@ class BinaryToolBase(Subsystem):
     if os.path.isdir(extracted):
       rooted_glob = PathGlobsAndRoot(
         path_globs=PathGlobs(include=['**/*']),
-        root=text_type(extracted),
+        root=str(extracted),
         # TODO: consider `digest_hint`!
       )
     else:
       assert os.path.isfile(extracted)
       rooted_glob = PathGlobsAndRoot(
         path_globs=PathGlobs(include=[os.path.basename(extracted)]),
-        root=text_type(os.path.dirname(extracted)),
+        root=str(os.path.dirname(extracted)),
       )
     return rooted_glob
 

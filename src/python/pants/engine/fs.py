@@ -6,8 +6,6 @@ import os
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional, Tuple
 
-from future.utils import bytes, str
-
 from pants.base.build_environment import get_buildroot
 from pants.engine.objects import Collection
 from pants.engine.rules import RootRule
