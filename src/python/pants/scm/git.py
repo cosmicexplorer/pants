@@ -95,7 +95,8 @@ class Git(Scm):
     return output.strip().decode('utf-8', errors=errors)
 
   @classmethod
-  def _check_result(cls, cmd, result, failure_msg=None, raise_type=Scm.ScmException):
+  def _check_result(cls, cmd, result, failure_msg=None, raise_type=None):
+    raise_type = raise_type or Scm.ScmException
     if result != 0:
       cmd_str = ' '.join(cmd)
       raise raise_type(failure_msg or f'{cmd_str} failed with exit code {result}')
