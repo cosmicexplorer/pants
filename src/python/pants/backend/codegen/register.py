@@ -12,6 +12,7 @@ from pants.backend.codegen.jaxb.jaxb_gen import JaxbGen
 from pants.backend.codegen.jaxb.jaxb_library import JaxbLibrary
 from pants.backend.codegen.protobuf.java.java_protobuf_library import JavaProtobufLibrary
 from pants.backend.codegen.protobuf.java.protobuf_gen import ProtobufGen
+from pants.backend.codegen.swagger.java.swagger_gen import SwaggerGen
 from pants.backend.codegen.ragel.java.java_ragel_library import JavaRagelLibrary
 from pants.backend.codegen.ragel.java.ragel_gen import RagelGen
 from pants.backend.codegen.thrift.java.apache_thrift_java_gen import ApacheThriftJavaGen
@@ -29,6 +30,7 @@ def build_file_aliases():
     targets={
       'java_antlr_library': JavaAntlrLibrary,
       'java_protobuf_library': JavaProtobufLibrary,
+      'java_swagger_library': JavaSwaggerLibrary,
       'java_ragel_library': JavaRagelLibrary,
       'java_thrift_library': JavaThriftLibrary,
       'java_wire_library': JavaWireLibrary,
@@ -46,6 +48,7 @@ def register_goals():
   task(name='grpcio-prep', action=GrpcioPrep).install('gen')
   task(name='grpcio-run', action=GrpcioRun).install('gen')
   task(name='protoc', action=ProtobufGen).install('gen')
+  task(name='swagger', action=SwaggerGen).install('gen')
   task(name='antlr-java', action=AntlrJavaGen).install('gen')
   task(name='antlr-py', action=AntlrPyGen).install('gen')
   task(name='ragel', action=RagelGen).install('gen')
