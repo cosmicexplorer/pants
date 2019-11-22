@@ -9,6 +9,7 @@ from twitter.common.collections import OrderedSet
 
 from pants.base.exceptions import BackendConfigurationError
 from pants.build_graph.build_configuration import BuildConfiguration
+from pants.subsystem.subsystem import Subsystem
 
 
 class PluginLoadingError(Exception): pass
@@ -127,6 +128,20 @@ def load_backend(build_configuration: BuildConfiguration, backend_package: str) 
   except ImportError as e:
     traceback.print_exc()
     raise BackendConfigurationError(f'Failed to load the {backend_module} backend: {e!r}')
+
+  plugin_name = getattr(module, name, None)
+  if plugin_name:
+    class BackendPluginOptionsSubsystem(Subsystem):
+      options_scope = f'{plugin_name}-plugin'
+
+      @classmethod
+      def register_options(cls, register):
+        super().register_options(cls)
+        register('--enable', type=bool, default=True, help='???')
+
+    build_configuration.register_optionables([BackendPluginOptionsSubsystem])
+
+
 
   def invoke_entrypoint(name):
     entrypoint = getattr(module, name, lambda: None)
