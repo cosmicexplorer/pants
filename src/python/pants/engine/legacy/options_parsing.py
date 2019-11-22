@@ -19,7 +19,7 @@ class _Options:
 @rule
 def parse_options(options_bootstrapper: OptionsBootstrapper) -> _Options:
   # TODO: Because _OptionsBootstapper is currently provided as a Param, this @rule relies on options
-  # remaining relatively stable in order to be efficient. See #6845 for a discussion of how to make
+  # remaining relatively stable in order to be efficient. See #6845 for a discussion of how to
   # minimize the size of that value.
   build_config = BuildConfigInitializer.get(options_bootstrapper)
   return _Options(OptionsInitializer.create(options_bootstrapper, build_config, init_subsystems=False))

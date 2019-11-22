@@ -172,12 +172,21 @@ class GlobalOptionsRegistrar(SubsystemClientMixin, Optionable):
              help='The name of the script or binary used to invoke pants. '
                   'Useful when printing help messages.')
 
-    register('--plugins', advanced=True, type=list, help='Load these plugins.')
+    register('--plugin-requirements', advanced=True, type=list, 'These requirements will be '
+                                                                'resolved and scanned for pants '
+                                                                'plugins to load.')
+    register('--plugins', advanced=True, type=list, help='These requirements will be resolved and '
+                                                         'scanned for pants plugins to load.')
     register('--plugin-cache-dir', advanced=True,
              default=os.path.join(get_pants_cachedir(), 'plugins'),
              help='Cache resolved plugin requirements here.')
 
+    register('--plugins-from-pythonpath', advanced=True, type=list,
+             default=[
+               
+             ])
     register('--backend-packages', advanced=True, type=list,
+             removal_version='1.23.0.dev2', removal_hint='use --plugins-from-pythonpath instead!',
              default=['pants.backend.graph_info',
                       'pants.backend.python',
                       'pants.backend.jvm',

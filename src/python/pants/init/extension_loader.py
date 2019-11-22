@@ -141,7 +141,7 @@ def load_backend(build_configuration: BuildConfiguration, backend_package: str) 
 
     build_configuration.register_optionables([BackendPluginOptionsSubsystem])
 
-
+    
 
   def invoke_entrypoint(name):
     entrypoint = getattr(module, name, lambda: None)
