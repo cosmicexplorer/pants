@@ -94,6 +94,10 @@ impl Session {
     self.0.should_report_workunits
   }
 
+  pub fn should_handle_workunits(&self) -> bool {
+    self.should_report_workunits() || self.should_record_zipkin_spans()
+  }
+
   pub fn workunit_store(&self) -> WorkUnitStore {
     self.0.workunit_store.clone()
   }

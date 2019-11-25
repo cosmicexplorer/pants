@@ -34,7 +34,9 @@ use rule_graph;
 
 use graph::{Entry, Node, NodeError, NodeTracer, NodeVisualizer};
 use store::{self, StoreFileByDigest};
-use workunit_store::{generate_random_64bit_string, set_parent_id, WorkUnit, WorkUnitStore};
+use workunit_store::{
+  generate_random_64bit_string, get_parent_id, set_parent_id, WorkUnit, WorkUnitStore,
+};
 
 pub type NodeFuture<T> = BoxFuture<T, Failure>;
 
@@ -743,11 +745,46 @@ impl WrappedNode for Snapshot {
   type Item = Arc<store::Snapshot>;
 
   fn run(self, context: Context) -> NodeFuture<Arc<store::Snapshot>> {
+    let maybe_workunit_params = if context.session.should_handle_workunits() {
+      let display_info = format!("{}", NodeKey::Snapshot(self));
+      let span_id = generate_random_64bit_string();
+      let start_time = std::time::SystemTime::now();
+
+      Some((display_info, span_id, start_time))
+    } else {
+      None
+    };
+
+    let cur_parent_id = get_parent_id();
+
+    let maybe_span_id = maybe_workunit_params
+      .clone()
+      .map(|(_, span_id, _)| span_id.clone());
+    if let Some(span_id) = maybe_span_id {
+      set_parent_id(span_id);
+    }
+
+    let context2 = context.clone();
+
     let lifted_path_globs = Self::lift_path_globs(&externs::val_for(&self.0));
     future::result(lifted_path_globs)
       .map_err(|e| throw(&format!("Failed to parse PathGlobs: {}", e)))
       .and_then(move |path_globs| Self::create(context, path_globs))
       .map(Arc::new)
+      .inspect(move |_| {
+        if let Some((display_info, span_id, start_time)) = maybe_workunit_params {
+          let workunit = WorkUnit {
+            name: display_info,
+            time_span: TimeSpan::since(&start_time),
+            span_id,
+            parent_id: cur_parent_id.clone(),
+          };
+          context2.session.workunit_store().add_workunit(workunit);
+          if let Some(parent_span_id) = cur_parent_id {
+            set_parent_id(parent_span_id);
+          }
+        }
+      })
       .to_boxed()
   }
 }
@@ -1044,6 +1081,27 @@ impl WrappedNode for Task {
   type Item = Value;
 
   fn run(self, context: Context) -> NodeFuture<Value> {
+    let maybe_workunit_params = if context.session.should_handle_workunits() {
+      let display_info = self.get_display_info().map(|s| s.to_owned()).unwrap();
+      let span_id = generate_random_64bit_string();
+      let start_time = std::time::SystemTime::now();
+
+      Some((display_info, span_id, start_time))
+    } else {
+      None
+    };
+
+    let cur_parent_id = get_parent_id();
+
+    let maybe_span_id = maybe_workunit_params
+      .clone()
+      .map(|(_, span_id, _)| span_id.clone());
+    if let Some(span_id) = maybe_span_id {
+      set_parent_id(span_id);
+    }
+
+    let context2 = context.clone();
+
     let params = self.params;
     let deps = {
       let edges = &context
@@ -1079,6 +1137,20 @@ impl WrappedNode for Task {
           ))),
         },
         Err(failure) => err(failure),
+      })
+      .inspect(move |_| {
+        if let Some((display_info, span_id, start_time)) = maybe_workunit_params {
+          let workunit = WorkUnit {
+            name: display_info,
+            time_span: TimeSpan::since(&start_time),
+            span_id,
+            parent_id: cur_parent_id.clone(),
+          };
+          context2.session.workunit_store().add_workunit(workunit);
+          if let Some(parent_span_id) = cur_parent_id {
+            set_parent_id(parent_span_id);
+          }
+        }
       })
       .to_boxed()
   }
@@ -1208,56 +1280,15 @@ impl Node for NodeKey {
   type Error = Failure;
 
   fn run(self, context: Context) -> NodeFuture<NodeResult> {
-    let handle_workunits =
-      context.session.should_report_workunits() || context.session.should_record_zipkin_spans();
-
-    let (node_workunit_params, maybe_span_id) = if handle_workunits {
-      let span_id = generate_random_64bit_string();
-      let maybe_display_info: Option<String> = match self {
-        NodeKey::Task(ref task) => task.get_display_info().map(|s| s.to_owned()),
-        NodeKey::Snapshot(_) => Some(format!("{}", self)),
-        _ => None,
-      };
-
-      let node_workunit_params = match maybe_display_info {
-        Some(ref node_name) => {
-          let start_time = std::time::SystemTime::now();
-          Some((node_name.clone(), start_time, span_id.clone()))
-        }
-        _ => None,
-      };
-      (node_workunit_params, Some(span_id))
-    } else {
-      (None, None)
-    };
-
-    let context2 = context.clone();
-    futures::future::lazy(|| {
-      if let Some(span_id) = maybe_span_id {
-        set_parent_id(span_id);
-      }
-      match self {
-        NodeKey::DigestFile(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::DownloadedFile(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::MultiPlatformExecuteProcess(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::ReadLink(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::Scandir(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::Select(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::Snapshot(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::Task(n) => n.run(context).map(NodeResult::from).to_boxed(),
-      }
-    })
-    .inspect(move |_: &NodeResult| {
-      if let Some((name, start_time, span_id)) = node_workunit_params {
-        let workunit = WorkUnit {
-          name,
-          time_span: TimeSpan::since(&start_time),
-          span_id,
-          // TODO: set parent_id with the proper value, issue #7969
-          parent_id: None,
-        };
-        context2.session.workunit_store().add_workunit(workunit)
-      };
+    futures::future::lazy(|| match self {
+      NodeKey::DigestFile(n) => n.run(context).map(NodeResult::from).to_boxed(),
+      NodeKey::DownloadedFile(n) => n.run(context).map(NodeResult::from).to_boxed(),
+      NodeKey::MultiPlatformExecuteProcess(n) => n.run(context).map(NodeResult::from).to_boxed(),
+      NodeKey::ReadLink(n) => n.run(context).map(NodeResult::from).to_boxed(),
+      NodeKey::Scandir(n) => n.run(context).map(NodeResult::from).to_boxed(),
+      NodeKey::Select(n) => n.run(context).map(NodeResult::from).to_boxed(),
+      NodeKey::Snapshot(n) => n.run(context).map(NodeResult::from).to_boxed(),
+      NodeKey::Task(n) => n.run(context).map(NodeResult::from).to_boxed(),
     })
     .to_boxed()
   }
