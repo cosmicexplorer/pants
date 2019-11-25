@@ -389,7 +389,8 @@ fn main() {
   }
 
   print!("{}", String::from_utf8(result.stdout.to_vec()).unwrap());
-  eprint!("{}", String::from_utf8(result.stderr.to_vec()).unwrap());
+  eprintln!("{}", String::from_utf8(result.stderr.to_vec()).unwrap());
+  eprintln!("output digest: {:?}", result.output_directory);
   exit(result.exit_code);
 }
 

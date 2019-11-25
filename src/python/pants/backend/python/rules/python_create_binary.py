@@ -66,6 +66,7 @@ async def create_python_binary(python_binary_adaptor: PythonBinaryAdaptor,
     interpreter_constraints=interpreter_constraints,
     entry_point=entry_point,
     input_files_digest=merged_input_files,
+    dehydrated=True,
   )
 
   pex = await Get(Pex, CreatePex, create_requirements_pex)

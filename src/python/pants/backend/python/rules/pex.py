@@ -73,6 +73,7 @@ class CreatePex:
   interpreter_constraints: PexInterpreterConstraints = PexInterpreterConstraints()
   entry_point: Optional[str] = None
   input_files_digest: Optional[Digest] = None
+  dehydrated: bool = False
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,10 @@ async def create_pex(
   argv = ["--output-file", request.output_filename]
   if request.entry_point is not None:
     argv.extend(["--entry-point", request.entry_point])
+  argv.append('-vvvvvvvvv')
+  argv.append('--platform=current')
+  if request.dehydrated:
+    argv.append('--dehydrated')
   argv.extend(request.interpreter_constraints.generate_pex_arg_list())
   argv.extend(request.requirements.requirements)
 
