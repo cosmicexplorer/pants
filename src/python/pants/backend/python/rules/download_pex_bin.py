@@ -1,6 +1,8 @@
 # Copyright 2019 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+import os
+import sys
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -13,6 +15,7 @@ from pants.engine.isolated_process import ExecuteProcessRequest
 from pants.engine.rules import optionable_rule, rule
 from pants.engine.selectors import Get
 from pants.subsystem.subsystem import Subsystem
+from pants.util.strutil import create_path_env_var
 
 
 @dataclass(frozen=True)
@@ -49,7 +52,8 @@ class DownloadedPexBin(HermeticPex):
       python_setup=python_setup,
       subprocess_encoding_environment=subprocess_encoding_environment,
       pex_path=self.executable,
-      pex_args=["--disable-cache"] + list(pex_args),
+      pex_args=list(pex_args),
+      # pex_args=["--disable-cache"] + list(pex_args),
       description=description,
       input_files=input_files or self.directory_digest,
       env=pex_build_environment.invocation_environment_dict,

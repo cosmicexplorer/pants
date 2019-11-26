@@ -1,6 +1,7 @@
 # Copyright 2019 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+import os
 from typing import Any, Dict, Iterable, Optional
 
 from pants.backend.python.subsystems.python_setup import PythonSetup
@@ -50,7 +51,11 @@ class HermeticPex:
 
     hermetic_env = env.copy() if env else {}
     hermetic_env.update(
-      PATH=create_path_env_var(python_setup.interpreter_search_paths),
+      PATH=create_path_env_var([
+        p if os.path.isdir(p) else os.path.dirname(p)
+        for p in
+        python_setup.interpreter_search_paths
+      ], env=os.environ.copy()),
       PEX_ROOT='./pex_root',
       PEX_INHERIT_PATH='false',
       PEX_IGNORE_RCFILES='true',

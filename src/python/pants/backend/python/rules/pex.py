@@ -7,6 +7,7 @@ from typing import Iterable, List, Optional, Tuple
 from pants.backend.python.rules.download_pex_bin import DownloadedPexBin
 from pants.backend.python.rules.hermetic_pex import HermeticPex
 from pants.backend.python.subsystems.python_native_code import PexBuildEnvironment
+from pants.backend.python.subsystems.python_repos import PythonRepos
 from pants.backend.python.subsystems.python_setup import PythonSetup
 from pants.backend.python.subsystems.subprocess_environment import SubprocessEncodingEnvironment
 from pants.engine.fs import (
@@ -90,6 +91,7 @@ async def create_pex(
     request: CreatePex,
     pex_bin: DownloadedPexBin,
     python_setup: PythonSetup,
+    python_repos: PythonRepos,
     subprocess_encoding_environment: SubprocessEncodingEnvironment,
     pex_build_environment: PexBuildEnvironment,
     platform: Platform
@@ -106,6 +108,9 @@ async def create_pex(
     argv.append('--dehydrated')
   argv.extend(request.interpreter_constraints.generate_pex_arg_list())
   argv.extend(request.requirements.requirements)
+
+  argv.extend(f'--repo={r}' for r in python_repos.repos)
+  argv.extend(f'--index={i}' for i in python_repos.indexes)
 
   source_dir_name = 'source_files'
 
@@ -151,4 +156,5 @@ def rules():
   return [
     create_pex,
     optionable_rule(PythonSetup),
+    optionable_rule(PythonRepos),
   ]

@@ -1,6 +1,8 @@
 # Copyright 2019 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+import logging
+
 from pants.backend.python.rules.inject_init import InjectedInitDigest
 from pants.backend.python.rules.pex import (
   CreatePex,
@@ -17,6 +19,9 @@ from pants.engine.rules import UnionRule, rule
 from pants.engine.selectors import Get, MultiGet
 from pants.rules.core.binary import BinaryTarget, CreatedBinary
 from pants.rules.core.strip_source_root import SourceRootStrippedSources
+
+
+logger = logging.getLogger(__name__)
 
 
 @rule
@@ -58,6 +63,7 @@ async def create_python_binary(python_binary_adaptor: PythonBinaryAdaptor,
   merged_input_files = await Get(Digest, DirectoriesToMerge, DirectoriesToMerge(directories=tuple(all_input_digests)))
 
   requirements = PexRequirements.create_from_adaptors(all_target_adaptors)
+  logger.debug(f'requirements: {requirements}')
   output_filename = f"{python_binary_adaptor.address.target_name}.pex"
 
   create_requirements_pex = CreatePex(
