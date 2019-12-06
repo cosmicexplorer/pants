@@ -156,7 +156,8 @@ class PexBuilderWrapper:
                python_repos_subsystem,
                python_setup_subsystem,
                setuptools_requirement,
-               log):
+               log,
+               generate_ipex=False):
     assert isinstance(builder, PEXBuilder)
     assert isinstance(python_repos_subsystem, PythonRepos)
     assert isinstance(python_setup_subsystem, PythonSetup)
@@ -171,6 +172,10 @@ class PexBuilderWrapper:
 
     self._distributions = {}
     self._frozen = False
+
+    self._generate_ipex = generate_ipex
+    if self._generate_ipex:
+      self._builder.info.zip_safe = False
 
   def add_requirement_libs_from(self, req_libs, platforms=None):
     """Multi-platform dependency resolution for PEX files.

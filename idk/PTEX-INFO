@@ -1,0 +1,10 @@
+{
+  "code": ["main.py"],
+  "resolver_settings": {
+    "indexes": [],
+    "find_links": [
+      "/Users/dmcclanahan/.pex/install/setuptools-40.6.3-py2.py3-none-any.whl.4a47c8d55bbea45ef1029b493d822f7c1d55a196"
+    ],
+    "build": false
+  }
+}
