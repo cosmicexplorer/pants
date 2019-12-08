@@ -42,7 +42,7 @@ class PythonBinaryCreate(Task):
   @classmethod
   def subsystem_dependencies(cls):
     return super().subsystem_dependencies() + (
-      PexBuilderWrapper.Factory,
+      PexBuilderWrapper.Factory.scoped(cls),
       PythonNativeCode.scoped(cls),
     )
 
@@ -129,7 +129,8 @@ class PythonBinaryCreate(Task):
 
       pex_builder = PexBuilderWrapper.Factory.create(
         builder=PEXBuilder(path=tmpdir, interpreter=interpreter, pex_info=pex_info, copy=True),
-        log=self.context.log)
+        log=self.context.log,
+        parent_optionable=self)
 
       if binary_tgt.shebang:
         self.context.log.info('Found Python binary target {} with customized shebang, using it: {}'

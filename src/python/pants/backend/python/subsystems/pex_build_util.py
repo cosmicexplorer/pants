@@ -1,6 +1,7 @@
 # Copyright 2017 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+import json
 import logging
 import os
 from collections import defaultdict
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Callable, Sequence, Set
 
 from pex.pex_builder import PEXBuilder
+from pex.pex_info import PexInfo
 from pex.resolver import resolve_multi
 from pex.util import DistributionHelper
 from twitter.common.collections import OrderedSet
@@ -26,6 +28,55 @@ from pants.build_graph.files import Files
 from pants.build_graph.target import Target
 from pants.subsystem.subsystem import Subsystem
 from pants.util.contextutil import temporary_file
+
+
+_IPEX_PREAMBLE = """\
+import json
+import os
+import sys
+
+from pex import resolver
+from pex.common import open_zip
+from pex.pex_builder import PEXBuilder
+from pex.pex_info import PexInfo
+from pex.util import CacheHelper
+from pex.variables import ENV
+
+self = sys.argv[0]
+ipex_file = '{}.ipex'.format(os.path.splitext(self)[0])
+
+if not os.path.isfile(ipex_file):
+  print('Hydrating {} to {}'.format(self, ipex_file))
+
+  ptex_pex_info = PexInfo.from_pex(self)
+  code_root = os.path.join(ptex_pex_info.zip_unsafe_cache, ptex_pex_info.code_hash)
+  with open_zip(self) as zf:
+    # Populate the pex with the pinned requirements and distribution names & hashes.
+    ipex_info = PexInfo.from_json(zf.read('IPEX-INFO'))
+    ipex_builder = PEXBuilder(pex_info=ipex_info)
+
+    # Populate the pex with the needed code.
+    ptex_info = json.loads(zf.read('PTEX-INFO').decode('utf-8'))
+    for path in ptex_info['code']:
+      ipex_builder.add_source(os.path.join(code_root, path), path)
+
+  # Perform a fully pinned intransitive resolve to hydrate the install cache (not the
+  # pex!).
+  resolver_settings = ptex_info['resolver_settings']
+  resolved_distributions = resolver.resolve(
+    requirements=[str(req) for req in ipex_info.requirements],
+    cache=ipex_info.pex_root,
+    transitive=False,
+    **resolver_settings
+  )
+
+  for resolved_dist in resolved_distributions:
+    ipex_builder.add_distribution(resolved_dist.distribution)
+    ipex_builder.add_requirement(resolved_dist.requirement)
+  ipex_builder.build(ipex_file, bytecode_compile=False)
+
+os.execv(ipex_file, [ipex_file] + sys.argv[1:])
+"""
 
 
 def is_python_target(tgt: Target) -> bool:
@@ -130,6 +181,8 @@ class PexBuilderWrapper:
       register('--setuptools-version', advanced=True, default='40.6.3',
                help='The setuptools version to include in the pex if namespace packages need to be '
                     'injected.')
+      register('--generate-ipex', type=bool, default=False, fingerprint=False,
+               help='???')
 
     @classmethod
     def subsystem_dependencies(cls):
@@ -139,8 +192,11 @@ class PexBuilderWrapper:
       )
 
     @classmethod
-    def create(cls, builder, log=None):
-      options = cls.global_instance().get_options()
+    def create(cls, builder, log=None, parent_optionable=None):
+      if parent_optionable is None:
+        options = cls.global_instance().get_options()
+      else:
+        options = cls.scoped_instance(parent_optionable).get_options()
       setuptools_requirement = f'setuptools=={options.setuptools_version}'
 
       log = log or logging.getLogger(__name__)
@@ -149,7 +205,8 @@ class PexBuilderWrapper:
                                python_repos_subsystem=PythonRepos.global_instance(),
                                python_setup_subsystem=PythonSetup.global_instance(),
                                setuptools_requirement=PythonRequirement(setuptools_requirement),
-                               log=log)
+                               log=log,
+                               generate_ipex=options.generate_ipex)
 
   def __init__(self,
                builder,
@@ -176,6 +233,8 @@ class PexBuilderWrapper:
     self._generate_ipex = generate_ipex
     if self._generate_ipex:
       self._builder.info.zip_safe = False
+    self._all_find_links = set()
+    self._quickly_parse_sub_requirements = self._generate_ipex
 
   def add_requirement_libs_from(self, req_libs, platforms=None):
     """Multi-platform dependency resolution for PEX files.
@@ -204,7 +263,7 @@ class PexBuilderWrapper:
 
     return self._resolve_multi(deduped_reqs, platforms=platforms, find_links=find_links)
 
-  def add_resolved_requirements(self, reqs, platforms=None):
+  def add_resolved_requirements(self, reqs, platforms=None, override_ipex_skip=False):
     """Multi-platform dependency resolution for PEX files.
 
     :param reqs: A list of :class:`PythonRequirement`s to resolve.
@@ -217,8 +276,12 @@ class PexBuilderWrapper:
       self._builder.add_requirement(str(requirement))
 
       distribution = resolved_dist.distribution
-      self._log.debug(f'  Dumping distribution: .../{os.path.basename(distribution.location)}')
-      self.add_distribution(distribution)
+      dist_loc = os.path.basename(distribution.location)
+      if self._generate_ipex and not override_ipex_skip:
+        self._log.debug(f'  AVOIDING dumping distribution at .../{dist_loc}!')
+      else:
+        self._log.debug(f'  Dumping distribution: .../{dist_loc}')
+        self.add_distribution(distribution)
 
   def _resolve_multi(self, requirements, platforms=None, find_links=None):
     python_setup = self._python_setup_subsystem
@@ -226,6 +289,8 @@ class PexBuilderWrapper:
     platforms = platforms or python_setup.platforms
     find_links = list(find_links) if find_links else []
     find_links.extend(python_repos.repos)
+
+    self._all_find_links |= set(find_links)
 
     return resolve_multi(
       requirements=[str(req.requirement) for req in requirements],
@@ -235,7 +300,8 @@ class PexBuilderWrapper:
       platforms=platforms,
       cache=python_setup.resolver_cache_dir,
       allow_prereleases=python_setup.resolver_allow_prereleases,
-      max_parallel_jobs=python_setup.resolver_jobs)
+      max_parallel_jobs=python_setup.resolver_jobs,
+      quickly_parse_sub_requirements=False)
 
   def add_sources_from(self, tgt: Target) -> None:
     dump_source = _create_source_dumper(self._builder, tgt)
@@ -278,6 +344,50 @@ class PexBuilderWrapper:
       dist = self._distributions.get('setuptools')
       if not dist:
         self.add_resolved_requirements([self._setuptools_requirement])
+
+    if self._generate_ipex:
+      chroot = self._builder.chroot()
+      code = [
+        f for f in chroot.get('source') | chroot.get('resource')
+        if f not in ['__main__.py', PexInfo.PATH]
+      ]
+
+      python_setup = self._python_setup_subsystem
+      python_repos = self._python_repos_subsystem
+      resolver_settings = dict(
+        indexes=python_repos.indexes,
+        find_links=list(self._all_find_links),
+        allow_prereleases=python_setup.resolver_allow_prereleases,
+        max_parallel_jobs=python_setup.resolver_jobs,
+        # quickly_parse_sub_requirements=self._quickly_parse_sub_requirements,
+        quickly_parse_sub_requirements=False,
+      )
+
+      ptex_info = dict(code=code, resolver_settings=resolver_settings)
+      with temporary_file(permissions=0o644) as ptex_info_file:
+        ptex_info_file.write(json.dumps(ptex_info).encode())
+        ptex_info_file.flush()
+        self._builder.add_resource(filename=ptex_info_file.name, env_filename='PTEX-INFO')
+
+      ipex_info = self._builder.info.copy()
+      with temporary_file(permissions=0o644) as ipex_info_file:
+        ipex_info_file.write(ipex_info.dump().encode())
+        ipex_info_file.flush()
+        self._builder.add_resource(filename=ipex_info_file.name, env_filename='IPEX-INFO')
+
+      ptex_launcher = _IPEX_PREAMBLE
+      with temporary_file(permissions=0o644) as ptex_launcher_file:
+        ptex_launcher_file.write(ptex_launcher.encode())
+        ptex_launcher_file.flush()
+        self._builder.add_source(filename=ptex_launcher_file.name, env_filename='_ptex_launcher.py')
+
+      self._builder.info.always_write_cache = True
+      self._builder.requirements = []
+      self._builder.info._requirements = set()
+
+      # self.add_resolved_requirements([PythonRequirement('wheel')], override_ipex_skip=True)
+      self.set_entry_point('_ptex_launcher')
+
     self._builder.freeze(bytecode_compile=False)
     self._frozen = True
 
