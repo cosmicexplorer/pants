@@ -7,6 +7,9 @@ from pex.interpreter import PythonInterpreter
 from pex.pex_builder import PEXBuilder
 from pex.pex_info import PexInfo
 
+from pants.backend.python.subsystems.pex_bootstrap._ptex_launcher import (
+  HYDRATE_ONLY_NO_EXEC_ENV_VAR,
+)
 from pants.backend.python.subsystems.pex_build_util import (
   PexBuilderWrapper,
   has_python_requirements,
@@ -38,6 +41,17 @@ class PythonBinaryCreate(Task):
                   "created and the command line used to create it. This information may be helpful to you, but means "
                   "that the generated PEX will not be reproducible; that is, future runs of `./pants binary` will not "
                   "create the same byte-for-byte identical .pex files.")
+    register('--generate-ptex', type=bool, default=False, fingerprint=True,
+             help='Whether to generate a .ptex file, which will "hydrate" its dependencies when '
+                  'it is executed, rather than at build time (the normal pex behavior). '
+                  'This option can reduce the size of a shipped pex file by over 100x for common'
+                  'deps such as tensorflow, but it does require access to a pypi-esque index '
+                  'when executed. '
+                  'Note: When running a .ptex file, using the environment variable '
+                  f'{HYDRATE_ONLY_NO_EXEC_ENV_VAR}=<filename> will cause an ipex file to be '
+                  'generated at <filename>, *without* executing the python app at all. Without '
+                  'this environment variable, the .ptex will unconditionally generate a .ipex to '
+                  'a temporary directory before immediately executing it.')
 
   @classmethod
   def subsystem_dependencies(cls):
@@ -77,6 +91,17 @@ class PythonBinaryCreate(Task):
     super().__init__(*args, **kwargs)
     self._distdir = self.get_options().pants_distdir
 
+  @property
+  def _generate_ptex(self) -> bool:
+    return self.get_options().generate_ptex
+
+  def _get_output_pex_filename(self, target_name):
+    # If generating a dehydrated "ptex" file, name it appropriately. Note that the the ptex will
+    # fail with an exception when it is first run if it is named with the normal .pex extension.
+    if self._generate_ptex:
+      return f'{target_name}.ptex'
+    return f'{target_name}.pex'
+
   def execute(self):
     binaries = self.context.targets(self.is_binary)
 
@@ -93,7 +118,7 @@ class PythonBinaryCreate(Task):
       python_deployable_archive = self.context.products.get('deployable_archives')
       python_pex_product = self.context.products.get('pex_archives')
       for vt in invalidation_check.all_vts:
-        pex_path = os.path.join(vt.results_dir, f'{vt.target.name}.pex')
+        pex_path = os.path.join(vt.results_dir, self._get_output_pex_filename(vt.target.name))
         if not vt.valid:
           self.context.log.debug(f'cache for {vt.target} is invalid, rebuilding')
           self._create_binary(vt.target, vt.results_dir)
@@ -129,7 +154,9 @@ class PythonBinaryCreate(Task):
 
       pex_builder = PexBuilderWrapper.Factory.create(
         builder=PEXBuilder(path=tmpdir, interpreter=interpreter, pex_info=pex_info, copy=True),
-        log=self.context.log)
+        log=self.context.log,
+        generate_ptex=self._generate_ptex,
+      )
 
       if binary_tgt.shebang:
         self.context.log.info('Found Python binary target {} with customized shebang, using it: {}'
@@ -166,6 +193,7 @@ class PythonBinaryCreate(Task):
       pex_builder.add_requirement_libs_from(req_tgts, platforms=binary_tgt.platforms)
 
       # Build the .pex file.
-      pex_path = os.path.join(results_dir, f'{binary_tgt.name}.pex')
+      pex_filename = self._get_output_pex_filename(binary_tgt.name)
+      pex_path = os.path.join(results_dir, pex_filename)
       pex_builder.build(pex_path)
       return pex_path

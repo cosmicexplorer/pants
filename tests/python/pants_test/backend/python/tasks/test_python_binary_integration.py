@@ -2,13 +2,16 @@
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 import functools
+import glob
 import os
+import subprocess
 from contextlib import contextmanager
 from textwrap import dedent
 
 from pex.pex_info import PexInfo
 
 from pants.testutil.pants_run_integration_test import PantsRunIntegrationTest
+from pants.util.collections import assert_single_element
 from pants.util.contextutil import open_zip, temporary_dir
 
 
@@ -197,3 +200,25 @@ class PythonBinaryIntegrationTest(PantsRunIntegrationTest):
       testprojects/src/python/python_distribution/ctypes:with_platforms
     """), result.stderr_data)
     self.assertNotIn('testprojects/src/python/python_distribution/ctypes:bin', result.stderr_data)
+
+  def test_generate_ptex_tensorflow(self):
+    with temporary_dir() as tmp_distdir:
+      with self.pants_results([
+          f'--pants-distdir={tmp_distdir}',
+          # tensorflow==1.14.0 has a setuptools>=41.0.0 requirement, so the .ptex resolve fails
+          # without this override.
+          f'--pex-builder-wrapper-setuptools-version=41.0.0',
+          '--binary-py-generate-ptex',
+          'binary',
+          'examples/src/python/example/tensorflow_custom_op:show-tf-version']) as pants_run:
+        self.assert_success(pants_run)
+        output_ptex = assert_single_element(glob.glob(os.path.join(tmp_distdir, '*')))
+        ptex_basename = os.path.basename(output_ptex)
+        self.assertEqual(ptex_basename, 'show-tf-version.ptex')
+
+        pex_execution_output = subprocess.check_output(
+          [output_ptex],
+          stderr=subprocess.STDOUT,
+        ).decode('utf-8')
+        self.assertIn(f'Hydrating {output_ptex} to', pex_execution_output)
+        self.assertIn('tf version: 1.14.0', pex_execution_output)

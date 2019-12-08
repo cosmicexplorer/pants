@@ -5,11 +5,14 @@ import os
 import subprocess
 from textwrap import dedent
 
+from colors import blue
+
 from pants.backend.python.tasks.gather_sources import GatherSources
 from pants.backend.python.tasks.python_binary_create import PythonBinaryCreate
 from pants.backend.python.tasks.select_interpreter import SelectInterpreter
 from pants.base.run_info import RunInfo
 from pants.build_graph.register import build_file_aliases as register_core
+from pants.util.contextutil import environment_as
 from pants_test.backend.python.tasks.python_task_test_base import PythonTaskTestBase
 
 
@@ -38,10 +41,12 @@ class PythonBinaryCreateTest(PythonTaskTestBase):
     test_task = self.create_task(task_context)
     test_task.execute()
 
-    self._check_products(task_context, binary, expected_output=expected_output, expected_shebang=expected_shebang)
+    self._check_products(test_task, task_context, binary,
+                         expected_output=expected_output,
+                         expected_shebang=expected_shebang)
 
-  def _check_products(self, context, binary, expected_output=None, expected_shebang=None):
-    pex_name = f'{binary.address.target_name}.pex'
+  def _check_products(self, test_task, context, binary, expected_output=None, expected_shebang=None):
+    pex_name = test_task._get_output_pex_filename(binary.address.target_name)
     products = context.products.get('deployable_archives')
     self.assertIsNotNone(products)
     product_data = products.get(binary)
@@ -107,3 +112,29 @@ class PythonBinaryCreateTest(PythonTaskTestBase):
                                        dependencies=['src/python/lib'])
 
     self._assert_pex(binary, expected_output='Hello World!\n', expected_shebang=b'#!/usr/bin/env python2\n')
+
+  def test_generate_ipex_ansicolors(self):
+    self.create_python_requirement_library('3rdparty/ipex', 'ansicolors',
+                                           requirements=['ansicolors'])
+    self.create_python_library('src/ipex', 'lib', {'main.py': dedent("""\
+    from colors import blue
+
+    print(blue('i just lazy-loaded the ansicolors dependency!'))
+    """)})
+    binary = self.create_python_binary('src/ipex', 'bin', 'main',
+                                       dependencies=[
+                                         '3rdparty/ipex:ansicolors',
+                                         ':lib',
+                                       ])
+
+    self.set_options(generate_ptex=True)
+    dist_dir = os.path.join(self.build_root, 'dist')
+
+    ipex_output_file = os.path.join(dist_dir, 'bin.ipex')
+    with environment_as(PANTS_PTEX_HYDRATE_ONLY_TO_IPEX=ipex_output_file):
+      self._assert_pex(binary)
+      self.assertEqual(
+        subprocess.check_output(ipex_output_file, stderr=subprocess.STDOUT).decode(),
+        blue('i just lazy-loaded the ansicolors dependency!') + '\n')
+
+    self._assert_pex(binary, expected_output=blue('i just lazy-loaded the ansicolors dependency!') + '\n')
