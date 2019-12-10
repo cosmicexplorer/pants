@@ -11,6 +11,7 @@ from typing import Callable, Sequence, Set
 from pex.pex_builder import PEXBuilder
 from pex.pex_info import PexInfo
 from pex.resolver import resolve_multi
+from pex.ipex_compat import MetadataOnlyResolveException
 from pex.util import DistributionHelper
 from twitter.common.collections import OrderedSet
 
@@ -263,25 +264,29 @@ class PexBuilderWrapper:
 
     return self._resolve_multi(deduped_reqs, platforms=platforms, find_links=find_links)
 
-  def add_resolved_requirements(self, reqs, platforms=None, override_ipex_skip=False):
+  def add_resolved_requirements(self, reqs, platforms=None):
     """Multi-platform dependency resolution for PEX files.
 
     :param reqs: A list of :class:`PythonRequirement`s to resolve.
     :param platforms: A list of platform strings to resolve requirements for.
                       Defaults to the platforms specified by PythonSetup.
     """
-    for resolved_dist in self.resolve_distributions(reqs, platforms=platforms):
-      requirement = resolved_dist.requirement
-      self._log.debug(f'  Dumping requirement: {requirement}')
-      self._builder.add_requirement(str(requirement))
+    try:
+      for resolved_dist in self.resolve_distributions(reqs, platforms=platforms):
+        requirement = resolved_dist.requirement
+        self._log.debug(f'  Dumping requirement: {requirement}')
+        self._builder.add_requirement(str(requirement))
 
-      distribution = resolved_dist.distribution
-      dist_loc = os.path.basename(distribution.location)
-      if self._generate_ipex and not override_ipex_skip:
-        self._log.debug(f'  AVOIDING dumping distribution at .../{dist_loc}!')
-      else:
+        distribution = resolved_dist.distribution
+        dist_loc = os.path.basename(distribution.location)
+        assert not self._generate_ipex
         self._log.debug(f'  Dumping distribution: .../{dist_loc}')
         self.add_distribution(distribution)
+    except MetadataOnlyResolveException as e:
+      for requirement in e.requirements:
+        self._log.debug(f'  Dumping (non-dist!!!) requirement: {requirement}')
+        self._builder.add_requirement(str(requirement))
+
 
   def _resolve_multi(self, requirements, platforms=None, find_links=None):
     python_setup = self._python_setup_subsystem
@@ -301,7 +306,7 @@ class PexBuilderWrapper:
       cache=python_setup.resolver_cache_dir,
       allow_prereleases=python_setup.resolver_allow_prereleases,
       max_parallel_jobs=python_setup.resolver_jobs,
-      quickly_parse_sub_requirements=False)
+      quickly_parse_sub_requirements=self._quickly_parse_sub_requirements)
 
   def add_sources_from(self, tgt: Target) -> None:
     dump_source = _create_source_dumper(self._builder, tgt)
@@ -385,7 +390,6 @@ class PexBuilderWrapper:
       self._builder.requirements = []
       self._builder.info._requirements = set()
 
-      # self.add_resolved_requirements([PythonRequirement('wheel')], override_ipex_skip=True)
       self.set_entry_point('_ptex_launcher')
 
     self._builder.freeze(bytecode_compile=False)
