@@ -4,7 +4,7 @@ use tempfile;
 use testutil::data::TestDirectory;
 use testutil::make_file;
 
-use crate::{OneOffStoreFileByDigest, Snapshot, Store};
+use crate::{OneOffStoreFileByDigest, MergeDirectoriesStrictness, Snapshot, Store};
 use fs::{
   Dir, File, GlobExpansionConjunction, GlobMatching, PathGlobs, PathStat, PosixFS,
   StrictGlobMatching,
@@ -191,6 +191,7 @@ fn merge_directories_two_files() {
     store,
     vec![containing_treats.digest(), containing_roland.digest()],
     WorkUnitStore::new(),
+    MergeDirectoriesStrictness::NoDuplicates,
   ));
 
   assert_eq!(
@@ -218,6 +219,7 @@ fn merge_directories_clashing_files() {
       store,
       vec![containing_roland.digest(), containing_wrong_roland.digest()],
       WorkUnitStore::new(),
+      MergeDirectoriesStrictness::NoDuplicates,
     ))
     .expect_err("Want error merging");
 
@@ -249,6 +251,7 @@ fn merge_directories_same_files() {
       containing_roland_and_treats.digest(),
     ],
     WorkUnitStore::new(),
+    MergeDirectoriesStrictness::NoDuplicates,
   ));
 
   assert_eq!(

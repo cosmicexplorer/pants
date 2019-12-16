@@ -4,6 +4,7 @@
 from dataclasses import dataclass
 from typing import List
 
+from pants.engine.fs import DirectoriesToMerge, MergeDirectoriesStrictness, Snapshot
 from pants.engine.legacy.structs import (
   PantsPluginAdaptor,
   PythonAppAdaptor,

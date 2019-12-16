@@ -198,7 +198,7 @@ impl WrappedNode for Select {
               futures::future::join_all(digests)
             })
             .and_then(|digests| {
-              store::Snapshot::merge_directories(context.core.store(), digests, workunit_store)
+              store::Snapshot::merge_directories(context.core.store(), digests, workunit_store, store::MergeDirectoriesStrictness::NoDuplicates)
                 .map_err(|err| throw(&err))
                 .map(move |digest: hashing::Digest| {
                   Snapshot::store_directory(&context.core, &digest)
@@ -235,12 +235,19 @@ impl WrappedNode for Select {
           let core = context.core.clone();
           request
             .and_then(move |request| {
+              let strictness_python_enum = externs::project_ignoring_type(&request, "strictness");
+              let strictness = match externs::project_str(&strictness_python_enum, "value").as_str() {
+                "no-duplicates" => store::MergeDirectoriesStrictness::NoDuplicates,
+                "allow-duplicates" => store::MergeDirectoriesStrictness::AllowDuplicates,
+                s => panic!("unrecognized strictness value {:?} for directories to merge {:?}", &s, &request),
+              };
               let digests: Result<Vec<hashing::Digest>, Failure> =
                 externs::project_multi(&request, "directories")
                   .into_iter()
                   .map(|val| lift_digest(&val).map_err(|str| throw(&str)))
                   .collect();
-              store::Snapshot::merge_directories(core.store(), try_future!(digests), workunit_store)
+              store::Snapshot::merge_directories(core.store(), try_future!(digests), workunit_store,
+                                                 strictness)
                 .map_err(|err| throw(&err))
                 .map(move |digest| Snapshot::store_directory(&core, &digest))
                 .to_boxed()

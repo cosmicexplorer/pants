@@ -108,6 +108,10 @@ class EagerFilesetWithSpec(FilesetWithSpec):
   def snapshot(self):
     return self._snapshot
 
+  @snapshot.setter
+  def snapshot(self, snapshot) -> None:
+    self._snapshot = snapshot
+
   def __repr__(self):
     return 'EagerFilesetWithSpec(rel_root={!r}, snapshot={!r})'.format(
       self.rel_root,

@@ -27,7 +27,7 @@
 #![allow(clippy::mutex_atomic)]
 
 mod snapshot;
-pub use crate::snapshot::{OneOffStoreFileByDigest, Snapshot, StoreFileByDigest};
+pub use crate::snapshot::{OneOffStoreFileByDigest, Snapshot, StoreFileByDigest, MergeDirectoriesStrictness};
 #[cfg(test)]
 mod snapshot_tests;
 

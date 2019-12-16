@@ -933,6 +933,7 @@ pub extern "C" fn merge_directories(
         scheduler.core.store(),
         digests,
         workunit_store,
+        store::MergeDirectoriesStrictness::NoDuplicates,
       ))
       .map(|dir| nodes::Snapshot::store_directory(&scheduler.core, &dir))
       .into()

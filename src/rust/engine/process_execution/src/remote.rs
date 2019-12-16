@@ -17,7 +17,7 @@ use libc;
 use log::{debug, trace, warn};
 use protobuf::{self, Message, ProtobufEnum};
 use sha2::Sha256;
-use store::{Snapshot, Store, StoreFileByDigest};
+use store::{MergeDirectoriesStrictness, Snapshot, Store, StoreFileByDigest};
 use tokio_timer::Delay;
 
 use crate::{
@@ -1143,7 +1143,7 @@ pub fn extract_output_files(
   .join(future::join_all(directory_digests))
   .and_then(|(files_digest, mut directory_digests)| {
     directory_digests.push(files_digest);
-    Snapshot::merge_directories(store, directory_digests, workunit_store)
+    Snapshot::merge_directories(store, directory_digests, workunit_store, MergeDirectoriesStrictness::NoDuplicates)
       .map_err(|err| format!("Error when merging output files and directories: {}", err))
   })
   .to_boxed()

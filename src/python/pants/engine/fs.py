@@ -157,9 +157,15 @@ class Snapshot:
     return self == EMPTY_SNAPSHOT
 
 
+class MergeDirectoriesStrictness(Enum):
+  no_duplicates = 'no-duplicates'
+  allow_duplicates = 'allow-duplicates'
+
+
 @dataclass(frozen=True)
 class DirectoriesToMerge:
   directories: Tuple[Digest, ...]
+  strictness: MergeDirectoriesStrictness = MergeDirectoriesStrictness.no_duplicates
 
 
 @dataclass(frozen=True)

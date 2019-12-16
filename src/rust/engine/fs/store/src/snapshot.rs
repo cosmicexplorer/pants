@@ -18,6 +18,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use workunit_store::WorkUnitStore;
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum MergeDirectoriesStrictness {
+  NoDuplicates,
+  AllowDuplicates,
+}
+
 #[derive(Eq, Hash, PartialEq)]
 pub struct Snapshot {
   pub digest: Digest,
@@ -253,6 +259,7 @@ impl Snapshot {
       store,
       snapshots.iter().map(|s| s.digest).collect(),
       workunit_store,
+      MergeDirectoriesStrictness::NoDuplicates,
     )
     .map(move |root_digest| Snapshot {
       digest: root_digest,
@@ -272,6 +279,7 @@ impl Snapshot {
     store: Store,
     dir_digests: Vec<Digest>,
     workunit_store: WorkUnitStore,
+    strictness: MergeDirectoriesStrictness
   ) -> BoxFuture<Digest, String> {
     if dir_digests.is_empty() {
       return future::ok(EMPTY_DIGEST).to_boxed();
@@ -313,20 +321,23 @@ impl Snapshot {
           .map(bazel_protos::remote_execution::FileNode::get_name)
           .dedup()
           .count();
-        if unique_count != out_dir.get_files().len() {
-          let groups = out_dir
-            .get_files()
-            .iter()
-            .group_by(|f| f.get_name().to_owned());
-          for (file_name, group) in &groups {
-            if group.count() > 1 {
-              return future::err(format!(
-                "Can only merge Directories with no duplicates, but found duplicate files: {}",
-                file_name
-              ))
-              .to_boxed();
+        match &strictness {
+          &MergeDirectoriesStrictness::AllowDuplicates => (),
+          &MergeDirectoriesStrictness::NoDuplicates => if unique_count != out_dir.get_files().len() {
+            let groups = out_dir
+              .get_files()
+              .iter()
+              .group_by(|f| f.get_name().to_owned());
+            for (file_name, group) in &groups {
+              if group.count() > 1 {
+                return future::err(format!(
+                  "Can only merge Directories with no duplicates, but found duplicate files: {}",
+                  file_name
+                ))
+                  .to_boxed();
+              }
             }
-          }
+          },
         }
 
         // Group and recurse for DirectoryNodes.
@@ -353,9 +364,11 @@ impl Snapshot {
               let digests_result = group
                 .map(|d| d.get_digest().into())
                 .collect::<Result<Vec<_>, String>>();
+              let strictness = strictness.clone();
               future::done(digests_result)
                 .and_then(move |digests| {
-                  Self::merge_directories(store2.clone(), digests, workunit_store2.clone())
+                  Self::merge_directories(store2.clone(), digests, workunit_store2.clone(),
+                                          strictness)
                 })
                 .map(move |merged_digest| {
                   let mut child_dir = bazel_protos::remote_execution::DirectoryNode::new();
