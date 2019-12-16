@@ -6,6 +6,7 @@ import os.path
 from abc import ABCMeta, abstractmethod
 from collections.abc import MutableSequence, MutableSet
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 from pants.build_graph.target import Target
@@ -305,6 +306,34 @@ class PantsPluginAdaptor(PythonTargetAdaptor):
     return GlobsWithConjunction.for_literal_files(['register.py'], self.address.spec_path)
 
 
+@dataclass(frozen=True)
+class CargoPayloadField:
+  arg: str
+  output_file: str
+
+
+class CargoTargetAdaptor(TargetAdaptor):
+  """???/we hack around not having mutable eaccess to the symbol table by replacing our target.
+
+  This allows us to produce a type that we can then declare as testable with UnionRule!
+  """
+
+  @property
+  def field_adaptors(self):
+    with exception_logging(logger, 'Exception in `field_adaptors` property'):
+      field_adaptors = list(super().field_adaptors)
+      field_adaptors.append(
+        CargoPayloadField(
+          arg='cargo_output',
+          output_file=getattr(self, 'cargo_output_file', self.address.target_name),
+        ))
+      return tuple(field_adaptors)
+
+  @property
+  def binary_name(self) -> Path:
+    return Path(self.address.to_address().target_name)
+
+
 class BaseGlobs(Locatable, metaclass=ABCMeta):
   """An adaptor class to allow BUILD file parsing from ContextAwareObjectFactories."""
 
@@ -442,4 +471,5 @@ def rules():
   return [
     UnionRule(HydrateableField, SourcesField),
     UnionRule(HydrateableField, BundlesField),
+    UnionRule(HydrateableField, CargoPayloadField),
   ]

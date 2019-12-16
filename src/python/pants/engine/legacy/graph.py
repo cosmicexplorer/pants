@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass
 from os.path import dirname
+from pathlib import Path
 from typing import Any, Iterable, Tuple
 
 from twitter.common.collections import OrderedSet
@@ -24,7 +25,13 @@ from pants.build_graph.remote_sources import RemoteSources
 from pants.engine.addressable import BuildFileAddresses
 from pants.engine.fs import PathGlobs, Snapshot
 from pants.engine.legacy.address_mapper import LegacyAddressMapper
-from pants.engine.legacy.structs import BundleAdaptor, BundlesField, HydrateableField, SourcesField
+from pants.engine.legacy.structs import (
+  BundleAdaptor,
+  BundlesField,
+  CargoPayloadField,
+  HydrateableField,
+  SourcesField,
+)
 from pants.engine.mapper import AddressMapper
 from pants.engine.objects import Collection
 from pants.engine.parser import HydratedStruct
@@ -548,6 +555,11 @@ async def hydrate_sources(
 
 
 @rule
+def hydrate_string_payload_field(cargo_payload_field: CargoPayloadField) -> HydratedField:
+  return HydratedField(cargo_payload_field.arg, Path(cargo_payload_field.output_file))
+
+
+@rule
 async def hydrate_bundles(
   bundles_field: BundlesField, glob_match_error_behavior: GlobMatchErrorBehavior,
 ) -> HydratedField:
@@ -587,6 +599,7 @@ def create_legacy_graph_tasks():
     hydrate_target,
     find_owners,
     hydrate_sources,
+    hydrate_string_payload_field,
     hydrate_bundles,
     RootRule(OwnersRequest),
   ]

@@ -33,6 +33,7 @@ from pants.engine.legacy.graph import LegacyBuildGraph, create_legacy_graph_task
 from pants.engine.legacy.options_parsing import create_options_parsing_rules
 from pants.engine.legacy.parser import LegacyPythonCallbacksParser
 from pants.engine.legacy.structs import (
+  CargoTargetAdaptor,
   JvmAppAdaptor,
   JvmBinaryAdaptor,
   PageAdaptor,
@@ -146,6 +147,8 @@ def _legacy_symbol_table(build_file_aliases: BuildFileAliases) -> SymbolTable:
   # applied here too.
   table['pants_plugin'] = PantsPluginAdaptor
   table['contrib_plugin'] = PantsPluginAdaptor
+
+  table['cargo_subproject'] = CargoTargetAdaptor
 
   return SymbolTable(table)
 
