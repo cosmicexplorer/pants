@@ -1,6 +1,7 @@
 # Copyright 2019 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+import logging
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple
 
@@ -21,6 +22,9 @@ from pants.engine.legacy.structs import PythonTargetAdaptor, TargetAdaptor
 from pants.engine.platform import Platform, PlatformConstraint
 from pants.engine.rules import optionable_rule, rule
 from pants.engine.selectors import Get
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,7 @@ async def create_pex(
         )
     }
   )
+  logger.debug(f'exe_req: {execute_process_request}')
 
   result = await Get[ExecuteProcessResult](
     MultiPlatformExecuteProcessRequest,
