@@ -7,7 +7,7 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import MutableSequence, MutableSet
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Tuple
 
 from pants.build_graph.target import Target
 from pants.engine.addressable import addressable_list
@@ -312,6 +312,12 @@ class CargoPayloadField:
   output_file: str
 
 
+@dataclass(frozen=True)
+class GeneratedResourcesPayloadField:
+  arg: str
+  globs: PathGlobs
+
+
 class CargoTargetAdaptor(TargetAdaptor):
   """???/we hack around not having mutable eaccess to the symbol table by replacing our target.
 
@@ -322,11 +328,16 @@ class CargoTargetAdaptor(TargetAdaptor):
   def field_adaptors(self):
     with exception_logging(logger, 'Exception in `field_adaptors` property'):
       field_adaptors = list(super().field_adaptors)
-      field_adaptors.append(
+      field_adaptors.extend([
         CargoPayloadField(
           arg='cargo_output',
           output_file=getattr(self, 'cargo_output_file', self.address.target_name),
-        ))
+        ),
+        GeneratedResourcesPayloadField(
+          arg='generated_resources',
+          globs=PathGlobs(getattr(self, 'generated_resources', [])),
+        ),
+      ])
       return tuple(field_adaptors)
 
   @property
@@ -472,4 +483,5 @@ def rules():
     UnionRule(HydrateableField, SourcesField),
     UnionRule(HydrateableField, BundlesField),
     UnionRule(HydrateableField, CargoPayloadField),
+    UnionRule(HydrateableField, GeneratedResourcesPayloadField),
   ]

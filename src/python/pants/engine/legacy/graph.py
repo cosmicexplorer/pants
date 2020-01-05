@@ -29,6 +29,7 @@ from pants.engine.legacy.structs import (
   BundleAdaptor,
   BundlesField,
   CargoPayloadField,
+  GeneratedResourcesPayloadField,
   HydrateableField,
   SourcesField,
 )
@@ -555,8 +556,15 @@ async def hydrate_sources(
 
 
 @rule
-def hydrate_string_payload_field(cargo_payload_field: CargoPayloadField) -> HydratedField:
+def hydrate_cargo_payload_field(cargo_payload_field: CargoPayloadField) -> HydratedField:
   return HydratedField(cargo_payload_field.arg, Path(cargo_payload_field.output_file))
+
+
+@rule
+def hydrate_generated_resources_payload_field(
+    generated_resources_field: GeneratedResourcesPayloadField,
+) -> HydratedField:
+  return HydratedField(generated_resources_field.arg, generated_resources_field.globs)
 
 
 @rule
@@ -599,7 +607,8 @@ def create_legacy_graph_tasks():
     hydrate_target,
     find_owners,
     hydrate_sources,
-    hydrate_string_payload_field,
+    hydrate_cargo_payload_field,
+    hydrate_generated_resources_payload_field,
     hydrate_bundles,
     RootRule(OwnersRequest),
   ]
