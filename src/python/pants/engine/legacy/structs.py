@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Tuple
 
+from pants.build_graph.address import Address
 from pants.build_graph.target import Target
 from pants.engine.addressable import addressable_list
 from pants.engine.fs import GlobExpansionConjunction, PathGlobs
@@ -313,6 +314,12 @@ class CargoPayloadField:
 
 
 @dataclass(frozen=True)
+class CargoSubprojectsField:
+  arg: str
+  subprojects: Tuple[Address, ...]
+
+
+@dataclass(frozen=True)
 class GeneratedResourcesPayloadField:
   arg: str
   globs: PathGlobs
@@ -332,6 +339,13 @@ class CargoTargetAdaptor(TargetAdaptor):
         CargoPayloadField(
           arg='cargo_output',
           output_file=getattr(self, 'cargo_output_file', self.address.target_name),
+        ),
+        CargoSubprojectsField(
+          arg='cargo_subprojects',
+          subprojects=tuple(
+            Address.parse(a)
+            for a in getattr(self, 'cargo_subprojects', [])
+          ),
         ),
         GeneratedResourcesPayloadField(
           arg='generated_resources',
@@ -484,4 +498,5 @@ def rules():
     UnionRule(HydrateableField, BundlesField),
     UnionRule(HydrateableField, CargoPayloadField),
     UnionRule(HydrateableField, GeneratedResourcesPayloadField),
+    UnionRule(HydrateableField, CargoSubprojectsField),
   ]

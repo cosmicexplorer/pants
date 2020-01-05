@@ -29,6 +29,7 @@ from pants.engine.legacy.structs import (
   BundleAdaptor,
   BundlesField,
   CargoPayloadField,
+  CargoSubprojectsField,
   GeneratedResourcesPayloadField,
   HydrateableField,
   SourcesField,
@@ -568,6 +569,14 @@ def hydrate_generated_resources_payload_field(
 
 
 @rule
+async def hydrate_cargo_subprojects_field(
+    subprojects_field: CargoSubprojectsField,
+) -> HydratedField:
+  deps = await MultiGet(Get[HydratedTarget](Address, a) for a in subprojects_field.subprojects)
+  return HydratedField(subprojects_field.arg, deps)
+
+
+@rule
 async def hydrate_bundles(
   bundles_field: BundlesField, glob_match_error_behavior: GlobMatchErrorBehavior,
 ) -> HydratedField:
@@ -609,6 +618,7 @@ def create_legacy_graph_tasks():
     hydrate_sources,
     hydrate_cargo_payload_field,
     hydrate_generated_resources_payload_field,
+    hydrate_cargo_subprojects_field,
     hydrate_bundles,
     RootRule(OwnersRequest),
   ]
