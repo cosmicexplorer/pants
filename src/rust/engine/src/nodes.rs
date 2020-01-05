@@ -198,11 +198,14 @@ impl WrappedNode for Select {
               futures::future::join_all(digests)
             })
             .and_then(|digests| {
-              store::Snapshot::merge_directories(context.core.store(), digests, workunit_store, store::MergeDirectoriesStrictness::NoDuplicates)
-                .map_err(|err| throw(&err))
-                .map(move |digest: hashing::Digest| {
-                  Snapshot::store_directory(&context.core, &digest)
-                })
+              store::Snapshot::merge_directories(
+                context.core.store(),
+                digests,
+                workunit_store,
+                store::MergeDirectoriesStrictness::NoDuplicates,
+              )
+              .map_err(|err| throw(&err))
+              .map(move |digest: hashing::Digest| Snapshot::store_directory(&context.core, &digest))
             })
             .to_boxed()
         }
@@ -236,21 +239,29 @@ impl WrappedNode for Select {
           request
             .and_then(move |request| {
               let strictness_python_enum = externs::project_ignoring_type(&request, "strictness");
-              let strictness = match externs::project_str(&strictness_python_enum, "value").as_str() {
+              let strictness = match externs::project_str(&strictness_python_enum, "value").as_str()
+              {
                 "no-duplicates" => store::MergeDirectoriesStrictness::NoDuplicates,
                 "allow-duplicates" => store::MergeDirectoriesStrictness::AllowDuplicates,
-                s => panic!("unrecognized strictness value {:?} for directories to merge {:?}", &s, &request),
+                s => panic!(
+                  "unrecognized strictness value {:?} for directories to merge {:?}",
+                  &s, &request
+                ),
               };
               let digests: Result<Vec<hashing::Digest>, Failure> =
                 externs::project_multi(&request, "directories")
                   .into_iter()
                   .map(|val| lift_digest(&val).map_err(|str| throw(&str)))
                   .collect();
-              store::Snapshot::merge_directories(core.store(), try_future!(digests), workunit_store,
-                                                 strictness)
-                .map_err(|err| throw(&err))
-                .map(move |digest| Snapshot::store_directory(&core, &digest))
-                .to_boxed()
+              store::Snapshot::merge_directories(
+                core.store(),
+                try_future!(digests),
+                workunit_store,
+                strictness,
+              )
+              .map_err(|err| throw(&err))
+              .map(move |digest| Snapshot::store_directory(&core, &digest))
+              .to_boxed()
             })
             .to_boxed()
         }
@@ -397,9 +408,12 @@ impl From<Select> for NodeKey {
 pub fn lift_digest(digest: &Value) -> Result<hashing::Digest, String> {
   let fingerprint = externs::project_str(&digest, "fingerprint");
   let digest_length = externs::project_str(&digest, "serialized_bytes_length");
-  let digest_length_as_usize = digest_length
-    .parse::<usize>()
-    .map_err(|err| format!("Length was not a usize: {:?}", err))?;
+  let digest_length_as_usize = digest_length.parse::<usize>().map_err(|err| {
+    format!(
+      "Length {:?} for digest {:?} was not a usize: {:?}",
+      digest_length, digest, err
+    )
+  })?;
   Ok(hashing::Digest(
     hashing::Fingerprint::from_hex_string(&fingerprint)?,
     digest_length_as_usize,

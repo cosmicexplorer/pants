@@ -293,9 +293,9 @@ class Scheduler:
     finally:
       self._native.lib.nodes_destroy(raw_roots)
 
-    if remaining_runtime_exceptions_to_capture:
-      raise ExecutionError('Internal logic error in scheduler: expected elements in '
-                           '`self._native._peek_cffi_extern_method_runtime_exceptions()`.')
+    for exc in remaining_runtime_exceptions_to_capture:
+      roots.append(Throw(exc))
+
     return roots
 
   def lease_files_in_graph(self):
