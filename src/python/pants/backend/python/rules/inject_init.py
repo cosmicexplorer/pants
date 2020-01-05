@@ -2,11 +2,12 @@
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 from dataclasses import dataclass
+from typing import Optional, Tuple
 
 from pants.backend.python.subsystems.pex_build_util import identify_missing_init_files
 from pants.engine.fs import EMPTY_DIRECTORY_DIGEST, Digest, Snapshot
 from pants.engine.isolated_process import ExecuteProcessRequest, ExecuteProcessResult
-from pants.engine.rules import rule
+from pants.engine.rules import RootRule, rule
 from pants.engine.selectors import Get
 
 
@@ -16,10 +17,18 @@ class InjectedInitDigest:
   directory_digest: Digest
 
 
+@dataclass(frozen=True)
+class InjectInitRequest:
+  snapshot: Snapshot
+  matching_source_file_regex: Optional[Tuple[str, ...]]
+
+
 @rule
-async def inject_init(snapshot: Snapshot) -> InjectedInitDigest:
+async def inject_init(req: InjectInitRequest) -> InjectedInitDigest:
   """Ensure that every package has an __init__.py file in it."""
-  missing_init_files = tuple(sorted(identify_missing_init_files(snapshot.files)))
+  snapshot = req.snapshot
+  missing_init_files = tuple(sorted(identify_missing_init_files(snapshot.files,
+                                                                req.matching_source_file_regex)))
   if not missing_init_files:
     new_init_files_digest = EMPTY_DIRECTORY_DIGEST
   else:
@@ -38,7 +47,17 @@ async def inject_init(snapshot: Snapshot) -> InjectedInitDigest:
   return InjectedInitDigest(directory_digest=new_init_files_digest)
 
 
+@rule
+async def inject_init_basic(snapshot: Snapshot) -> InjectedInitDigest:
+  return await Get[InjectedInitDigest](InjectInitRequest(
+    snapshot=snapshot,
+    matching_source_file_regex=None,
+  ))
+
+
 def rules():
   return [
-      inject_init,
-    ]
+    RootRule(InjectInitRequest),
+    inject_init,
+    inject_init_basic,
+  ]

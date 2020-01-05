@@ -4,6 +4,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from pants.backend.python.rules.inject_init import InjectedInitDigest, InjectInitRequest
 from pants.backend.python.rules.pex import (
   CreatePex,
   Pex,
@@ -55,7 +56,7 @@ async def create_pex_from_target_closure(request: CreatePexFromTargetClosure,
       python_targets.append(t)
 
   interpreter_constraints = PexInterpreterConstraints.create_from_adaptors(
-    adaptors=tuple(python_targets),
+    adaptors=tuple(t.adaptor for t in python_targets),
     python_setup=python_setup
   )
 
@@ -70,13 +71,16 @@ async def create_pex_from_target_closure(request: CreatePexFromTargetClosure,
       r.snapshot.directory_digest for r in all_resources
     ]
     sources_digest = await Get[Digest](DirectoriesToMerge(directories=tuple(stripped_sources_digests)))
-    inits_digest = await Get[InjectedInitDigest](Digest, sources_digest)
+    inits_digest = await Get[InjectedInitDigest](InjectInitRequest(
+      snapshot=(await Get[Snapshot](Digest, sources_digest)),
+      matching_source_file_regex=('.*',),
+    ))
     all_input_digests = [sources_digest, inits_digest.directory_digest]
     merged_input_files = await Get[Digest](DirectoriesToMerge,
                                           DirectoriesToMerge(directories=tuple(all_input_digests)))
 
   requirements = PexRequirements.create_from_adaptors(
-    adaptors=tuple(python_targets),
+    adaptors=tuple(t.adaptor for t in python_targets),
     additional_requirements=request.additional_requirements
   )
 

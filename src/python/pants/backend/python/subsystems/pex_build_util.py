@@ -3,9 +3,10 @@
 
 import logging
 import os
+import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Sequence, Set
+from typing import Callable, Optional, Sequence, Set, Tuple
 
 from pex.fetcher import Fetcher
 from pex.pex_builder import PEXBuilder
@@ -79,12 +80,19 @@ def targets_by_platform(targets, python_setup):
   return dict(explicit_platform_settings)
 
 
-def identify_missing_init_files(sources: Sequence[str]) -> Set[str]:
+def identify_missing_init_files(sources: Sequence[str], matching_regex: Optional[Tuple[str, ...]] = None) -> Set[str]:
   """Return the list of paths that would need to be added to ensure that every package has
   an __init__.py. """
   packages: Set[str] = set()
+
+  def match(filename: str) -> bool:
+    if matching_regex is None:
+      return source.endswith('.py')
+    else:
+      return any(re.search(rx, filename) for rx in matching_regex)
+
   for source in sources:
-    if source.endswith('.py'):
+    if match(source):
       pkg_dir = os.path.dirname(source)
       if pkg_dir and pkg_dir not in packages:
         package = ''
