@@ -33,7 +33,7 @@ def build_file_aliases():
       'java_thrift_library': JavaThriftLibrary,
       'java_wire_library': JavaWireLibrary,
       'python_antlr_library': PythonAntlrLibrary,
-      'python_thrift_library': PythonThriftLibrary,
+      PythonThriftLibrary.alias(): PythonThriftLibrary,
       'python_grpcio_library': PythonGrpcioLibrary,
       'jaxb_library': JaxbLibrary,
       }

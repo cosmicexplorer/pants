@@ -28,6 +28,7 @@ from pants.engine.legacy.address_mapper import LegacyAddressMapper
 from pants.engine.legacy.structs import (
   BundleAdaptor,
   BundlesField,
+  CargoFeaturesField,
   CargoPayloadField,
   CargoSubprojectsField,
   GeneratedResourcesPayloadField,
@@ -577,6 +578,13 @@ async def hydrate_cargo_subprojects_field(
 
 
 @rule
+def hydrate_cargo_features_field(
+    features_field: CargoFeaturesField,
+) -> HydratedField:
+  return HydratedField(features_field.arg, features_field.features)
+
+
+@rule
 async def hydrate_bundles(
   bundles_field: BundlesField, glob_match_error_behavior: GlobMatchErrorBehavior,
 ) -> HydratedField:
@@ -619,6 +627,7 @@ def create_legacy_graph_tasks():
     hydrate_cargo_payload_field,
     hydrate_generated_resources_payload_field,
     hydrate_cargo_subprojects_field,
+    hydrate_cargo_features_field,
     hydrate_bundles,
     RootRule(OwnersRequest),
   ]

@@ -282,7 +282,14 @@ class PythonTargetAdaptor(TargetAdaptor):
                                    base_globs,
                                    path_globs,
                                    lambda _: None)
-      return field_adaptors + (sources_field,)
+      return field_adaptors + (
+        sources_field,
+        CargoFeaturesField('cargo_features', tuple(getattr(self, 'cargo_features', []))),
+      )
+
+
+class PythonThriftLibraryAdaptor(PythonTargetAdaptor):
+  pass
 
 
 class PythonBinaryAdaptor(PythonTargetAdaptor):
@@ -325,6 +332,12 @@ class GeneratedResourcesPayloadField:
   globs: PathGlobs
 
 
+@dataclass(frozen=True)
+class CargoFeaturesField:
+  arg: str
+  features: Tuple[str, ...]
+
+
 class CargoTargetAdaptor(TargetAdaptor):
   """???/we hack around not having mutable eaccess to the symbol table by replacing our target.
 
@@ -350,6 +363,10 @@ class CargoTargetAdaptor(TargetAdaptor):
         GeneratedResourcesPayloadField(
           arg='generated_resources',
           globs=PathGlobs(getattr(self, 'generated_resources', [])),
+        ),
+        CargoFeaturesField(
+          arg='features',
+          features=tuple(getattr(self, 'features', [])),
         ),
       ])
       return tuple(field_adaptors)
@@ -499,4 +516,5 @@ def rules():
     UnionRule(HydrateableField, CargoPayloadField),
     UnionRule(HydrateableField, GeneratedResourcesPayloadField),
     UnionRule(HydrateableField, CargoSubprojectsField),
+    UnionRule(HydrateableField, CargoFeaturesField),
   ]

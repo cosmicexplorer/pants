@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional, cast
 
+from pants.backend.codegen.thrift.python.python_thrift_library import PythonThriftLibrary
 from pants.backend.docgen.targets.doc import Page
 from pants.backend.jvm.targets.jvm_app import JvmApp
 from pants.backend.jvm.targets.jvm_binary import JvmBinary
@@ -43,6 +44,7 @@ from pants.engine.legacy.structs import (
   PythonBinaryAdaptor,
   PythonTargetAdaptor,
   PythonTestsAdaptor,
+  PythonThriftLibraryAdaptor,
   RemoteSourcesAdaptor,
   TargetAdaptor,
 )
@@ -104,6 +106,7 @@ _apply_default_sources_globs(PageAdaptor, Page)
 _apply_default_sources_globs(PythonBinaryAdaptor, PythonBinary)
 _apply_default_sources_globs(PythonTargetAdaptor, PythonLibrary)
 _apply_default_sources_globs(PythonTestsAdaptor, PythonTests)
+_apply_default_sources_globs(PythonThriftLibraryAdaptor, PythonThriftLibrary)
 _apply_default_sources_globs(RemoteSourcesAdaptor, RemoteSources)
 
 
@@ -136,6 +139,7 @@ def _legacy_symbol_table(build_file_aliases: BuildFileAliases) -> SymbolTable:
   table['jvm_binary'] = JvmBinaryAdaptor
   table['python_app'] = PythonAppAdaptor
   table['python_tests'] = PythonTestsAdaptor
+  table['python_thrift_library'] = PythonThriftLibraryAdaptor
   table['python_binary'] = PythonBinaryAdaptor
   table['remote_sources'] = RemoteSourcesAdaptor
   table['page'] = PageAdaptor

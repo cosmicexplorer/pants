@@ -20,4 +20,4 @@ def flatten_shlexed_list(shlexed_args: Sequence[str]) -> List[str]:
 
    For example, ['arg1 arg2=foo', '--arg3'] would be converted to ['arg1', 'arg2=foo', '--arg3'].
    """
-  return [arg for shlexed_arg in shlexed_args for arg in shlex.split(shlexed_arg)]
+  return [arg for shlexed_arg in shlexed_args for arg in shlex.split(str(shlexed_arg))]

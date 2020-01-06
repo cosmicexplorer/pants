@@ -76,8 +76,9 @@ async def create_pex_from_target_closure(request: CreatePexFromTargetClosure,
       matching_source_file_regex=('.*',),
     ))
     all_input_digests = [sources_digest, inits_digest.directory_digest]
-    merged_input_files = await Get[Digest](DirectoriesToMerge,
-                                          DirectoriesToMerge(directories=tuple(all_input_digests)))
+    merged_input_files = await Get[Digest](DirectoriesToMerge(directories=tuple(all_input_digests)))
+  else:
+    merged_input_files = None
 
   requirements = PexRequirements.create_from_adaptors(
     adaptors=tuple(t.adaptor for t in python_targets),
@@ -89,7 +90,7 @@ async def create_pex_from_target_closure(request: CreatePexFromTargetClosure,
     requirements=requirements,
     interpreter_constraints=interpreter_constraints,
     entry_point=request.entry_point,
-    input_files_digest=chrooted_sources.digest if request.include_source_files else None,
+    input_files_digest=merged_input_files,
   )
 
   pex = await Get[Pex](CreatePex, create_pex_request)

@@ -830,21 +830,12 @@ impl Store {
       .load_file_bytes_with(
         digest,
         move |bytes| {
-          // TODO: Determine when this situation happens! If we materialize files into a
-          // newly-constructed temp dir (as we do with local hermetic process executions), we do
-          // *not* expect this file to exist. Should we error in that case?
-          if destination.exists() {
-            std::fs::remove_file(&destination)
-          } else {
-            Ok(())
-          }
-          .and_then(|_| {
-            OpenOptions::new()
-              .create(true)
-              .write(true)
-              .mode(if is_executable { 0o755 } else { 0o644 })
-              .open(&destination)
-          })
+          OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(if is_executable { 0o755 } else { 0o644 })
+            .open(&destination)
           .and_then(|mut f| {
             f.write_all(&bytes)?;
             // See `materialize_directory`, but we fundamentally materialize files for other
