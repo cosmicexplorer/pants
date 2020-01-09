@@ -2,6 +2,6 @@
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 python_library(
-  name='ptex_launcher',
-  sources=['_ptex_launcher.py'],
+  name='ipex_launcher',
+  sources=globs('*.py'),
 )

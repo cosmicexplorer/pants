@@ -7,6 +7,9 @@ from textwrap import dedent
 
 from colors import blue
 
+from pants.backend.python.subsystems.pex_bootstrap._ipex_launcher import (
+  HYDRATE_ONLY_NO_EXEC_ENV_VAR,
+)
 from pants.backend.python.tasks.gather_sources import GatherSources
 from pants.backend.python.tasks.python_binary_create import PythonBinaryCreate
 from pants.backend.python.tasks.select_interpreter import SelectInterpreter
@@ -127,14 +130,14 @@ class PythonBinaryCreateTest(PythonTaskTestBase):
                                          ':lib',
                                        ])
 
-    self.set_options(generate_ptex=True)
+    self.set_options(generate_ipex=True)
     dist_dir = os.path.join(self.build_root, 'dist')
 
-    ipex_output_file = os.path.join(dist_dir, 'bin.ipex')
-    with environment_as(PANTS_PTEX_HYDRATE_ONLY_TO_IPEX=ipex_output_file):
+    hydrated_pex_output_file = os.path.join(dist_dir, 'bin.pex')
+    with environment_as(**{HYDRATE_ONLY_NO_EXEC_ENV_VAR: hydrated_pex_output_file}):
       self._assert_pex(binary)
       self.assertEqual(
-        subprocess.check_output(ipex_output_file, stderr=subprocess.STDOUT).decode(),
+        subprocess.check_output(hydrated_pex_output_file, stderr=subprocess.STDOUT).decode(),
         blue('i just lazy-loaded the ansicolors dependency!') + '\n')
 
     self._assert_pex(binary, expected_output=blue('i just lazy-loaded the ansicolors dependency!') + '\n')

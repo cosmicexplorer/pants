@@ -2,12 +2,13 @@
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 import os
+from typing import cast
 
 from pex.interpreter import PythonInterpreter
 from pex.pex_builder import PEXBuilder
 from pex.pex_info import PexInfo
 
-from pants.backend.python.subsystems.pex_bootstrap._ptex_launcher import (
+from pants.backend.python.subsystems.pex_bootstrap._ipex_launcher import (
   HYDRATE_ONLY_NO_EXEC_ENV_VAR,
 )
 from pants.backend.python.subsystems.pex_build_util import (
@@ -41,16 +42,16 @@ class PythonBinaryCreate(Task):
                   "created and the command line used to create it. This information may be helpful to you, but means "
                   "that the generated PEX will not be reproducible; that is, future runs of `./pants binary` will not "
                   "create the same byte-for-byte identical .pex files.")
-    register('--generate-ptex', type=bool, default=False, fingerprint=True,
-             help='Whether to generate a .ptex file, which will "hydrate" its dependencies when '
+    register('--generate-ipex', type=bool, default=False, fingerprint=True,
+             help='Whether to generate a .ipex file, which will "hydrate" its dependencies when '
                   'it is executed, rather than at build time (the normal pex behavior). '
                   'This option can reduce the size of a shipped pex file by over 100x for common'
                   'deps such as tensorflow, but it does require access to a pypi-esque index '
                   'when executed. '
-                  'Note: When running a .ptex file, using the environment variable '
+                  'Note: When running a .ipex file, using the environment variable '
                   f'{HYDRATE_ONLY_NO_EXEC_ENV_VAR}=<filename> will cause an ipex file to be '
                   'generated at <filename>, *without* executing the python app at all. Without '
-                  'this environment variable, the .ptex will unconditionally generate a .ipex to '
+                  'this environment variable, the .ipex will unconditionally generate a .ipex to '
                   'a temporary directory before immediately executing it.')
 
   @classmethod
@@ -92,14 +93,14 @@ class PythonBinaryCreate(Task):
     self._distdir = self.get_options().pants_distdir
 
   @property
-  def _generate_ptex(self) -> bool:
-    return self.get_options().generate_ptex
+  def _generate_ipex(self) -> bool:
+    return cast(bool, self.get_options().generate_ipex)
 
   def _get_output_pex_filename(self, target_name):
-    # If generating a dehydrated "ptex" file, name it appropriately. Note that the the ptex will
+    # If generating a dehydrated "ipex" file, name it appropriately. Note that the the ipex will
     # fail with an exception when it is first run if it is named with the normal .pex extension.
-    if self._generate_ptex:
-      return f'{target_name}.ptex'
+    if self._generate_ipex:
+      return f'{target_name}.ipex'
     return f'{target_name}.pex'
 
   def execute(self):
@@ -155,7 +156,7 @@ class PythonBinaryCreate(Task):
       pex_builder = PexBuilderWrapper.Factory.create(
         builder=PEXBuilder(path=tmpdir, interpreter=interpreter, pex_info=pex_info, copy=True),
         log=self.context.log,
-        generate_ptex=self._generate_ptex,
+        generate_ipex=self._generate_ipex,
       )
 
       if binary_tgt.shebang:

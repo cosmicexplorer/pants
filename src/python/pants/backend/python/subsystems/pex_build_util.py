@@ -19,9 +19,9 @@ from pex.version import __version__ as pex_version
 from pkg_resources import Distribution, get_provider
 from twitter.common.collections import OrderedSet
 
-import pants.backend.python.subsystems.pex_bootstrap._ptex_launcher
+import pants.backend.python.subsystems.pex_bootstrap._ipex_launcher
 from pants.backend.python.python_requirement import PythonRequirement
-from pants.backend.python.subsystems.pex_bootstrap._ptex_launcher import APP_CODE_PREFIX
+from pants.backend.python.subsystems.pex_bootstrap._ipex_launcher import APP_CODE_PREFIX
 from pants.backend.python.subsystems.python_repos import PythonRepos
 from pants.backend.python.subsystems.python_setup import PythonSetup
 from pants.backend.python.targets.python_binary import PythonBinary
@@ -127,7 +127,7 @@ class PexBuilderWrapper:
       )
 
     @classmethod
-    def create(cls, builder, log=None, generate_ptex=False):
+    def create(cls, builder, log=None, generate_ipex=False):
       options = cls.global_instance().get_options()
       setuptools_requirement = f'setuptools=={options.setuptools_version}'
 
@@ -138,7 +138,7 @@ class PexBuilderWrapper:
                                python_setup_subsystem=PythonSetup.global_instance(),
                                setuptools_requirement=PythonRequirement(setuptools_requirement),
                                log=log,
-                               generate_ptex=generate_ptex)
+                               generate_ipex=generate_ipex)
 
   def __init__(self,
                builder: PEXBuilder,
@@ -146,7 +146,7 @@ class PexBuilderWrapper:
                python_setup_subsystem: PythonSetup,
                setuptools_requirement: PythonRequirement,
                log,
-               generate_ptex: bool = False):
+               generate_ipex: bool = False):
     assert log is not None
 
     self._builder = builder
@@ -158,11 +158,11 @@ class PexBuilderWrapper:
     self._distributions: Dict[str, Distribution] = {}
     self._frozen = False
 
-    self._generate_ptex = generate_ptex
-    # If we generate a .ptex, we need to ensure all the code we copy into the underlying PEXBuilder
-    # is also added to the new PEXBuilder created in `._shuffle_original_build_info_into_ptex()`.
+    self._generate_ipex = generate_ipex
+    # If we generate a .ipex, we need to ensure all the code we copy into the underlying PEXBuilder
+    # is also added to the new PEXBuilder created in `._shuffle_original_build_info_into_ipex()`.
     self._all_added_sources_resources: List[Path] = []
-    # If we generate a dehydrated "ptex" file, we need to make sure that it is aware of any special
+    # If we generate a dehydrated "ipex" file, we need to make sure that it is aware of any special
     # find_links repos attached to any single requirement, so it can later resolve those
     # requirements when it is first bootstrapped, using the same resolve options.
     self._all_find_links = OrderedSet()
@@ -229,7 +229,7 @@ class PexBuilderWrapper:
       self,
       reqs: List[PythonRequirement],
       platforms: Optional[List[Platform]] = None,
-      override_ptex_build_do_actually_add_distribution: bool = False,
+      override_ipex_build_do_actually_add_distribution: bool = False,
   ) -> None:
     """Multi-platform dependency resolution for PEX files.
 
@@ -239,10 +239,10 @@ class PexBuilderWrapper:
     :param log: Use this logger.
     :param platforms: A list of :class:`Platform`s to resolve requirements for.
                       Defaults to the platforms specified by PythonSetup.
-    :param bool override_ptex_build_do_actually_add_distribution: When this PexBuilderWrapper is configured with
-                                    generate_ptex=True, this method won't add any distributions to
+    :param bool override_ipex_build_do_actually_add_distribution: When this PexBuilderWrapper is configured with
+                                    generate_ipex=True, this method won't add any distributions to
                                     the output pex. The internal implementation of this class adds a
-                                    pex dependency to the output ptex file, and therefore needs to
+                                    pex dependency to the output ipex file, and therefore needs to
                                     override the default behavior of this method.
     """
     distributions, transitive_requirements = self._resolve_distributions_by_platform(reqs, platforms=platforms)
@@ -250,16 +250,16 @@ class PexBuilderWrapper:
     for platform, dists in distributions.items():
       for dist in dists:
         if dist.location not in locations:
-          if self._generate_ptex and not override_ptex_build_do_actually_add_distribution:
-            self._log.debug(f'  *AVOIDING* dumping distribution into ptex: .../{os.path.basename(dist.location)}')
+          if self._generate_ipex and not override_ipex_build_do_actually_add_distribution:
+            self._log.debug(f'  *AVOIDING* dumping distribution into ipex: .../{os.path.basename(dist.location)}')
           else:
             self._log.debug(f'  Dumping distribution: .../{os.path.basename(dist.location)}')
             self.add_distribution(dist)
         locations.add(dist.location)
     # In addition to the top-level requirements, we add all the requirements matching the resolved
-    # distributions to the resulting pex. If `generate_ptex=True` is set, we need to have all the
-    # transitive requirements resolved in order to hydrate the .ptex with an intransitive resolve.
-    if self._generate_ptex and not override_ptex_build_do_actually_add_distribution:
+    # distributions to the resulting pex. If `generate_ipex=True` is set, we need to have all the
+    # transitive requirements resolved in order to hydrate the .ipex with an intransitive resolve.
+    if self._generate_ipex and not override_ipex_build_do_actually_add_distribution:
       self.add_direct_requirements(transitive_requirements)
 
   def _resolve_multi(
@@ -290,9 +290,9 @@ class PexBuilderWrapper:
     find_links.extend(python_repos.repos)
 
     # Individual requirements from pants may have a `repository` link attached to them, which is
-    # extracted in `self._resolve_distributions_by_platform()`. When generating a .ptex file with
-    # `generate_ptex=True`, we want to ensure these repos are known to the ptex launcher when it
-    # tries to resolve all the requirements from IPEX-INFO.
+    # extracted in `self._resolve_distributions_by_platform()`. When generating a .ipex file with
+    # `generate_ipex=True`, we want to ensure these repos are known to the ipex launcher when it
+    # tries to resolve all the requirements from BOOTSTRAP-PEX-INFO.
     self._all_find_links |= OrderedSet(find_links)
 
     distributions: Dict[str, List[Distribution]] = defaultdict(list)
@@ -380,27 +380,28 @@ class PexBuilderWrapper:
   def set_emit_warnings(self, emit_warnings):
     self._builder.info.emit_warnings = emit_warnings
 
-  def _shuffle_underlying_pex_builder(self, new_builder: PEXBuilder) -> Tuple[PexInfo, Path]:
+  def _shuffle_underlying_pex_builder(self) -> Tuple[PexInfo, Path]:
+    """Replace the original builder with a new one, and just pull files from the old chroot."""
+    new_builder = PEXBuilder(interpreter=self._builder.interpreter)
+
     orig_info = self._builder.info.copy()
     orig_chroot = self._builder.chroot()
 
     self._builder = new_builder
 
+    for constraint in orig_info.interpreter_constraints:
+      self.add_interpreter_constraint(constraint)
+
     return (orig_info, Path(orig_chroot.path()))
 
-  def _shuffle_original_build_info_into_ptex(self):
-    """Create a "dehydrated" ptex file without any of its requirements, and specify that in two *-INFO files.
+  def _shuffle_original_build_info_into_ipex(self):
+    """Create a "dehydrated" ipex file without any of its requirements, and specify that in two *-INFO files.
 
-    See pex_bootstrap/_ptex_launcher.py for details of how these files are used.
+    See pex_bootstrap/_ipex_launcher.py for details of how these files are used.
     """
-    # Replace the original builder with a new one, and just pull files from the old chroot.
-    ipex_info, orig_chroot = self._shuffle_underlying_pex_builder(
-      PEXBuilder(interpreter=self._builder.interpreter))
-    # Ensure that the runtime resolve in the .ptex file will use the same interpreter.
-    ipex_info.add_interpreter_constraint(str(self._builder.interpreter.identity.requirement))
+    orig_pex_info, orig_chroot = self._shuffle_underlying_pex_builder()
 
-    # PTEX-INFO: Contains resolver settings and source files to copy over into the dehydrated .ipex
-    #            file.
+    # Gather information needed to create IPEX-INFO.
     all_code = [str(src) for src in self._all_added_sources_resources]
     prefixed_code_paths = [os.path.join(APP_CODE_PREFIX, src) for src in all_code]
     for src, prefixed in zip(all_code, prefixed_code_paths):
@@ -416,40 +417,46 @@ class PexBuilderWrapper:
       find_links=list(self._all_find_links),
     )
 
-    ptex_info = dict(
+    # IPEX-INFO: A json mapping interpreted in _ipex_launcher.py:
+    # {
+    #   "code": [<which source files to add to the "hydrated" pex when bootstrapped>],
+    #   "resolver_settings": {<which indices to search for requirements from when bootstrapping>},
+    # }
+    ipex_info = dict(
       code=prefixed_code_paths,
       resolver_settings=resolver_settings,
     )
-    with temporary_file(permissions=0o644) as ptex_info_file:
-      ptex_info_file.write(json.dumps(ptex_info).encode())
-      ptex_info_file.flush()
-      self._builder.add_resource(filename=ptex_info_file.name, env_filename='PTEX-INFO')
-
-    # IPEX-INFO: The original PEX-INFO, which should be the PEX-INFO in the hydrated .pex file that
-    #            is generated when the .ipex is first executed.
     with temporary_file(permissions=0o644) as ipex_info_file:
-      ipex_info_file.write(ipex_info.dump().encode())
+      ipex_info_file.write(json.dumps(ipex_info).encode())
       ipex_info_file.flush()
       self._builder.add_resource(filename=ipex_info_file.name, env_filename='IPEX-INFO')
 
-    # ptex.py: The special bootstrap script to hydrate the .ipex with the fully resolved
+    # BOOTSTRAP-PEX-INFO: The original PEX-INFO, which should be the PEX-INFO in the hydrated .pex
+    #                     file that is generated when the .ipex is first executed.
+    with temporary_file(permissions=0o644) as bootstrap_pex_info_file:
+      bootstrap_pex_info_file.write(orig_pex_info.dump().encode())
+      bootstrap_pex_info_file.flush()
+      self._builder.add_resource(filename=bootstrap_pex_info_file.name,
+                                 env_filename='BOOTSTRAP-PEX-INFO')
+
+    # ipex.py: The special bootstrap script to hydrate the .ipex with the fully resolved
     #          requirements when it is first executed.
     # Extract the file contents of our custom app launcher script from the pants package.
-    parent_module = module_dirname(pants.backend.python.subsystems.pex_bootstrap._ptex_launcher.__name__)
-    ptex_provider = get_provider(parent_module)
-    ptex_launcher = ptex_provider.get_resource_string(parent_module, '_ptex_launcher.py')
-    with temporary_file(permissions=0o644) as ptex_launcher_file:
-      ptex_launcher_file.write(ptex_launcher)
-      ptex_launcher_file.flush()
-      # Our .ptex file will use our custom app launcher!
-      self._builder.set_executable(ptex_launcher_file.name, env_filename='ptex.py')
+    parent_module = module_dirname(pants.backend.python.subsystems.pex_bootstrap._ipex_launcher.__name__)
+    ipex_launcher_provider = get_provider(parent_module)
+    ipex_launcher = ipex_launcher_provider.get_resource_string(parent_module, '_ipex_launcher.py')
+    with temporary_file(permissions=0o644) as ipex_launcher_file:
+      ipex_launcher_file.write(ipex_launcher)
+      ipex_launcher_file.flush()
+      # Our .ipex file will use our custom app launcher!
+      self._builder.set_executable(ipex_launcher_file.name, env_filename='ipex.py')
 
     # The PEX-INFO we generate shouldn't have any requirements (except pex itself), or they will
     # fail to bootstrap because they were unable to find those distributions. Instead, the .pex file
-    # produced when the .ptex is first executed will read and resolve all those requirements from
-    # the IPEX-INFO.
+    # produced when the .ipex is first executed will read and resolve all those requirements from
+    # the BOOTSTRAP-PEX-INFO.
     self.add_resolved_requirements([PythonRequirement(f'pex=={pex_version}')],
-                                   override_ptex_build_do_actually_add_distribution=True)
+                                   override_ipex_build_do_actually_add_distribution=True)
 
   def freeze(self) -> None:
     if self._frozen:
@@ -460,8 +467,8 @@ class PexBuilderWrapper:
       if not dist:
         self.add_resolved_requirements([self._setuptools_requirement])
 
-    if self._generate_ptex:
-      self._shuffle_original_build_info_into_ptex()
+    if self._generate_ipex:
+      self._shuffle_original_build_info_into_ipex()
 
     self._builder.freeze(bytecode_compile=False)
     self._frozen = True

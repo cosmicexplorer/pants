@@ -201,24 +201,24 @@ class PythonBinaryIntegrationTest(PantsRunIntegrationTest):
     """), result.stderr_data)
     self.assertNotIn('testprojects/src/python/python_distribution/ctypes:bin', result.stderr_data)
 
-  def test_generate_ptex_tensorflow(self):
+  def test_generate_ipex_tensorflow(self):
     with temporary_dir() as tmp_distdir:
       with self.pants_results([
           f'--pants-distdir={tmp_distdir}',
-          # tensorflow==1.14.0 has a setuptools>=41.0.0 requirement, so the .ptex resolve fails
+          # tensorflow==1.14.0 has a setuptools>=41.0.0 requirement, so the .ipex resolve fails
           # without this override.
           f'--pex-builder-wrapper-setuptools-version=41.0.0',
-          '--binary-py-generate-ptex',
+          '--binary-py-generate-ipex',
           'binary',
           'examples/src/python/example/tensorflow_custom_op:show-tf-version']) as pants_run:
         self.assert_success(pants_run)
-        output_ptex = assert_single_element(glob.glob(os.path.join(tmp_distdir, '*')))
-        ptex_basename = os.path.basename(output_ptex)
-        self.assertEqual(ptex_basename, 'show-tf-version.ptex')
+        output_ipex = assert_single_element(glob.glob(os.path.join(tmp_distdir, '*')))
+        ipex_basename = os.path.basename(output_ipex)
+        self.assertEqual(ipex_basename, 'show-tf-version.ipex')
 
         pex_execution_output = subprocess.check_output(
-          [output_ptex],
+          [output_ipex],
           stderr=subprocess.STDOUT,
         ).decode('utf-8')
-        self.assertIn(f'Hydrating {output_ptex} to', pex_execution_output)
+        self.assertIn(f'Hydrating {output_ipex} to', pex_execution_output)
         self.assertIn('tf version: 1.14.0', pex_execution_output)
