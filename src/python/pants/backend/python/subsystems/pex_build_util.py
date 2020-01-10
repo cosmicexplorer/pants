@@ -382,12 +382,10 @@ class PexBuilderWrapper:
 
   def _shuffle_underlying_pex_builder(self) -> Tuple[PexInfo, Path]:
     """Replace the original builder with a new one, and just pull files from the old chroot."""
-    new_builder = PEXBuilder(interpreter=self._builder.interpreter)
-
     orig_info = self._builder.info.copy()
     orig_chroot = self._builder.chroot()
 
-    self._builder = new_builder
+    self._builder = PEXBuilder(interpreter=self._builder.interpreter)
 
     for constraint in orig_info.interpreter_constraints:
       self.add_interpreter_constraint(constraint)

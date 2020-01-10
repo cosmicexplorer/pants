@@ -27,7 +27,8 @@ APP_CODE_PREFIX = 'user_files/'
 
 def _strip_app_code_prefix(path):
   if not path.startswith(APP_CODE_PREFIX):
-    raise ValueError(f"Path {path} in IPEX-INFO did not begin with '{APP_CODE_PREFIX}'.")
+    raise ValueError("Path {path} in IPEX-INFO did not begin with '{APP_CODE_PREFIX}'."
+                     .format(path=path, APP_CODE_PREFIX=APP_CODE_PREFIX))
   return path[len(APP_CODE_PREFIX):]
 
 
@@ -55,8 +56,10 @@ def main(self):
       bootstrap_builder = PEXBuilder(pex_info=bootstrap_info, interpreter=interpreter)
       break
     else:
-      raise ValueError(f'Could not resolve interpreter for constraints {bootstrap_info.interpreter_constraints}. '
-                       f'The BOOTSTRAP-PEX-INFO for this .ipex was was:\n{bootstrap_info.dump(indent=4)}')
+      raise ValueError('Could not resolve interpreter for constraints {constraints}. '
+                       'The BOOTSTRAP-PEX-INFO for this .ipex was was:\n{info}'
+                       .format(constraints=bootstrap_info.interpreter_constraints,
+                               info=bootstrap_info.dump(indent=4)))
 
     # Populate the pex with the needed code.
     try:
@@ -65,9 +68,8 @@ def main(self):
         unzipped_source = zf.extract(path, td)
         bootstrap_builder.add_source(unzipped_source, env_filename=_strip_app_code_prefix(path))
     except Exception as e:
-      raise ValueError(
-        f"Error: {e}. The IPEX-INFO for this .ipex file was:\n{json.dumps(ipex_info, indent=4)}"
-      ) from e
+      raise ValueError("Error: {e}. The IPEX-INFO for this .ipex file was:\n{info}"
+                       .format(e=e, info=json.dumps(ipex_info, indent=4)))
 
   # Perform a fully pinned intransitive resolve to hydrate the install cache.
   resolver_settings = ipex_info['resolver_settings']
