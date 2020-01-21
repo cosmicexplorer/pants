@@ -1,12 +1,14 @@
 # Copyright 2019 Pants project contributors (see CONTRIBUTORS.md).
 # Licensed under the Apache License, Version 2.0 (see LICENSE).
 
+HYDRATE_ONLY_NO_EXEC_ENV_VAR = 'PANTS_IPEX_HYDRATE_ONLY'
+
 """Entrypoint script for a .ipex file generated with --generate-ipex.
 
 This script will build a normal fat pex file into a temporary directory, then execute it. If
-HYDRATE_ONLY_NO_EXEC_ENV_VAR=<filename> is set, however, the script will generate the ipex at
+{HYDRATE_ONLY_NO_EXEC_ENV_VAR}=<filename> is set, however, the script will generate the ipex at
 <filename>, then exit without executing the .ipex file.
-"""
+""".format(HYDRATE_ONLY_NO_EXEC_ENV_VAR=HYDRATE_ONLY_NO_EXEC_ENV_VAR)
 
 import json
 import os
@@ -30,9 +32,6 @@ def _strip_app_code_prefix(path):
     raise ValueError("Path {path} in IPEX-INFO did not begin with '{APP_CODE_PREFIX}'."
                      .format(path=path, APP_CODE_PREFIX=APP_CODE_PREFIX))
   return path[len(APP_CODE_PREFIX):]
-
-
-HYDRATE_ONLY_NO_EXEC_ENV_VAR = 'PANTS_IPEX_HYDRATE_ONLY'
 
 
 def main(self):
@@ -73,7 +72,9 @@ def main(self):
 
   # Perform a fully pinned intransitive resolve to hydrate the install cache.
   resolver_settings = ipex_info['resolver_settings']
-  # TODO: Convert .indexes and .find_links into the old .fetchers until pants upgrades to pex 2.0!
+  # TODO: Here we convert .indexes and .find_links into the old .fetchers until pants upgrades to
+  # pex 2.0. At that time, we can remove anything relating to fetchers from `resolver_settings`, and
+  # avoid removing the 'indexes' and 'find_links' keys, which are correct for pex 2.0.
   fetchers = [PyPIFetcher(url) for url in resolver_settings.pop('indexes')]
   fetchers.extend(Fetcher([url]) for url in resolver_settings.pop('find_links'))
   resolver_settings['fetchers'] = fetchers
