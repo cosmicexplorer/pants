@@ -382,13 +382,18 @@ class PexBuilderWrapper:
 
   def _shuffle_underlying_pex_builder(self) -> Tuple[PexInfo, Path]:
     """Replace the original builder with a new one, and just pull files from the old chroot."""
+    # Ensure that (the interpreter selected to resolve requirements when the ipex is first run) is
+    # (the exact same interpreter we used to resolve those requirements here). This is the only (?)
+    # way to ensure that the ipex bootstrap uses the *exact* same interpreter version.
     orig_info = self._builder.info.copy()
+    orig_info_json = json.loads(orig_info.dump())
+    orig_info_json['interpreter_constraints'] = [str(self._builder.interpreter.identity.requirement)]
+    orig_info = PexInfo.from_json(json.dumps(orig_info_json))
+
     orig_chroot = self._builder.chroot()
 
+    # Mutate the PexBuilder object which is manipulated by this subsystem.
     self._builder = PEXBuilder(interpreter=self._builder.interpreter)
-
-    for constraint in orig_info.interpreter_constraints:
-      self.add_interpreter_constraint(constraint)
 
     return (orig_info, Path(orig_chroot.path()))
 
