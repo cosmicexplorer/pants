@@ -14,14 +14,14 @@ import json
 import os
 import sys
 import tempfile
+from collections import defaultdict
 
 from pex import resolver
 from pex.common import open_zip
-from pex.fetcher import Fetcher, PyPIFetcher
 from pex.interpreter import PythonInterpreter
-from pex.interpreter_constraints import matched_interpreters
 from pex.pex_builder import PEXBuilder
 from pex.pex_info import PexInfo
+from pkg_resources import Requirement
 
 
 APP_CODE_PREFIX = 'user_files/'
@@ -50,10 +50,10 @@ def main(self):
   with open_zip(self) as zf:
     # Populate the pex with the pinned requirements and distribution names & hashes.
     bootstrap_info = PexInfo.from_json(zf.read('BOOTSTRAP-PEX-INFO'))
-    for interpreter in matched_interpreters(PythonInterpreter.all(),
-                                            bootstrap_info.interpreter_constraints):
-      bootstrap_builder = PEXBuilder(pex_info=bootstrap_info, interpreter=interpreter)
-      break
+    for interpreter in PythonInterpreter.all():
+      if any(interpreter.identity.matches(r) for r in bootstrap_info.interpreter_constraints):
+        bootstrap_builder = PEXBuilder(pex_info=bootstrap_info, interpreter=interpreter)
+        break
     else:
       raise ValueError('Could not resolve interpreter for constraints {constraints}. '
                        'The BOOTSTRAP-PEX-INFO for this .ipex was was:\n{info}'
@@ -72,15 +72,20 @@ def main(self):
 
   # Perform a fully pinned intransitive resolve to hydrate the install cache.
   resolver_settings = ipex_info['resolver_settings']
-  # TODO: Here we convert .indexes and .find_links into the old .fetchers until pants upgrades to
-  # pex 2.0. At that time, we can remove anything relating to fetchers from `resolver_settings`, and
-  # avoid removing the 'indexes' and 'find_links' keys, which are correct for pex 2.0.
-  fetchers = [PyPIFetcher(url) for url in resolver_settings.pop('indexes')]
-  fetchers.extend(Fetcher([url]) for url in resolver_settings.pop('find_links'))
-  resolver_settings['fetchers'] = fetchers
+
+  # Remove duplicate keys such as setuptools or pex which may be injected multiple times into the
+  # resulting ipex when first executed.
+  project_names = []
+  new_requirements = {}
+  for r in bootstrap_info.requirements:
+    r = Requirement(r)
+    if r.name not in new_requirements:
+      project_names.append(r.name)
+    new_requirements[r.name] = str(r)
+  sanitized_requirements = [new_requirements[n] for n in project_names]
 
   resolved_distributions = resolver.resolve(
-    requirements=bootstrap_info.requirements,
+    requirements=sanitized_requirements,
     cache=bootstrap_info.pex_root,
     platform='current',
     transitive=False,

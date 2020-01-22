@@ -458,8 +458,10 @@ class PexBuilderWrapper:
     # fail to bootstrap because they were unable to find those distributions. Instead, the .pex file
     # produced when the .ipex is first executed will read and resolve all those requirements from
     # the BOOTSTRAP-PEX-INFO.
-    self.add_resolved_requirements([PythonRequirement(f'pex=={pex_version}')],
-                                   override_ipex_build_do_actually_add_distribution=True)
+    self.add_resolved_requirements(
+      # [PythonRequirement(f'pex=={pex_version}')],
+      [PythonRequirement(f'pex==2.1.0'), self._setuptools_requirement],
+      override_ipex_build_do_actually_add_distribution=True)
 
   def freeze(self) -> None:
     if self._frozen:

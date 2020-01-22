@@ -53,6 +53,9 @@ class PythonBinaryCreate(Task):
                   'generated at <filename>, *without* executing the python app at all. Without '
                   'this environment variable, the .ipex will unconditionally generate a .ipex to '
                   'a temporary directory before immediately executing it.')
+    register('--output-file-extension', type=str, default=None, fingerprint=True,
+             help='What extension to output the file with. This can be used to differentiate '
+                  'ipex files from others.')
 
   @classmethod
   def subsystem_dependencies(cls):
@@ -97,11 +100,11 @@ class PythonBinaryCreate(Task):
     return cast(bool, self.get_options().generate_ipex)
 
   def _get_output_pex_filename(self, target_name):
-    # If generating a dehydrated "ipex" file, name it appropriately. Note that the the ipex will
-    # fail with an exception when it is first run if it is named with the normal .pex extension.
-    if self._generate_ipex:
-      return f'{target_name}.ipex'
-    return f'{target_name}.pex'
+    file_ext = self.get_options().output_file_extension
+    if file_ext is None:
+      file_ext = '.ipex' if self._generate_ipex else '.pex'
+
+    return f'{target_name}{file_ext}'
 
   def execute(self):
     binaries = self.context.targets(self.is_binary)
