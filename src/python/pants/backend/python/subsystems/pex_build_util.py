@@ -314,8 +314,9 @@ class PexBuilderWrapper:
         allow_prereleases=python_setup.resolver_allow_prereleases,
         use_manylinux=python_setup.use_manylinux)
       for resolved_dist in resolved_dists:
-        transitive_requirements.append(resolved_dist.requirement)
-        distributions[platform].append(resolved_dist.distribution)
+        dist = resolved_dist.distribution
+        transitive_requirements.append(dist.as_requirement())
+        distributions[platform].append(dist)
 
     return (distributions, transitive_requirements)
 
