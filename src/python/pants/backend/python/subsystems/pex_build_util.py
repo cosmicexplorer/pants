@@ -21,7 +21,10 @@ from twitter.common.collections import OrderedSet
 
 import pants.backend.python.subsystems.pex_bootstrap._ipex_launcher
 from pants.backend.python.python_requirement import PythonRequirement
-from pants.backend.python.subsystems.pex_bootstrap._ipex_launcher import APP_CODE_PREFIX
+from pants.backend.python.subsystems.pex_bootstrap._ipex_launcher import (
+  APP_CODE_PREFIX,
+  modify_pex_info,
+)
 from pants.backend.python.subsystems.python_repos import PythonRepos
 from pants.backend.python.subsystems.python_setup import PythonSetup
 from pants.backend.python.targets.python_binary import PythonBinary
@@ -386,10 +389,11 @@ class PexBuilderWrapper:
     # Ensure that (the interpreter selected to resolve requirements when the ipex is first run) is
     # (the exact same interpreter we used to resolve those requirements here). This is the only (?)
     # way to ensure that the ipex bootstrap uses the *exact* same interpreter version.
+    self._builder.info = modify_pex_info(
+      self._builder.info,
+      interpreter_constraints=[str(self._builder.interpreter.identity.requirement)])
+
     orig_info = self._builder.info.copy()
-    orig_info_json = json.loads(orig_info.dump())
-    orig_info_json['interpreter_constraints'] = [str(self._builder.interpreter.identity.requirement)]
-    orig_info = PexInfo.from_json(json.dumps(orig_info_json))
 
     orig_chroot = self._builder.chroot()
 

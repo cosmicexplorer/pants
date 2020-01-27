@@ -14,7 +14,6 @@ import json
 import os
 import sys
 import tempfile
-from collections import defaultdict
 
 from pex import resolver
 from pex.common import open_zip
@@ -32,6 +31,32 @@ def _strip_app_code_prefix(path):
     raise ValueError("Path {path} in IPEX-INFO did not begin with '{APP_CODE_PREFIX}'."
                      .format(path=path, APP_CODE_PREFIX=APP_CODE_PREFIX))
   return path[len(APP_CODE_PREFIX):]
+
+
+def _sanitize_requirements(requirements):
+  """
+  Remove duplicate keys such as setuptools or pex which may be injected multiple times into the
+  resulting ipex when first executed.
+  """
+  project_names = []
+  new_requirements = {}
+
+  for r in requirements:
+    r = Requirement(r)
+    if r.marker and not r.marker.evaluate():
+      continue
+    if r.name not in new_requirements:
+      project_names.append(r.name)
+      new_requirements[r.name] = str(r)
+  sanitized_requirements = [new_requirements[n] for n in project_names]
+
+  return sanitized_requirements
+
+
+def modify_pex_info(pex_info, **kwargs):
+  new_info = json.loads(pex_info.dump())
+  new_info.update(kwargs)
+  return PexInfo.from_json(json.dumps(new_info))
 
 
 def main(self):
@@ -73,20 +98,12 @@ def main(self):
   # Perform a fully pinned intransitive resolve to hydrate the install cache.
   resolver_settings = ipex_info['resolver_settings']
 
-  # Remove duplicate keys such as setuptools or pex which may be injected multiple times into the
-  # resulting ipex when first executed.
-  project_names = []
-  new_requirements = {}
-  for r in bootstrap_info.requirements:
-    r = Requirement(r)
-    if r.name not in new_requirements:
-      project_names.append(r.name)
-      new_requirements[r.name] = str(r)
-  sanitized_requirements = [new_requirements[n] for n in project_names]
+  sanitized_requirements = _sanitize_requirements(bootstrap_info.requirements)
+  bootstrap_info = modify_pex_info(bootstrap_info, requirements=sanitized_requirements)
+  bootstrap_builder.info = bootstrap_info
 
   resolved_distributions = resolver.resolve(
-    requirements=sanitized_requirements,
-    # requirements=bootstrap_info.requirements,
+    requirements=bootstrap_info.requirements,
     cache=bootstrap_info.pex_root,
     platform='current',
     transitive=False,
