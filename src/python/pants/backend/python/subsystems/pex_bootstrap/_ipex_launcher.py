@@ -73,8 +73,20 @@ def main(self):
   # Perform a fully pinned intransitive resolve to hydrate the install cache.
   resolver_settings = ipex_info['resolver_settings']
 
+  # Remove duplicate keys such as setuptools or pex which may be injected multiple times into the
+  # resulting ipex when first executed.
+  project_names = []
+  new_requirements = {}
+  for r in bootstrap_info.requirements:
+    r = Requirement(r)
+    if r.name not in new_requirements:
+      project_names.append(r.name)
+      new_requirements[r.name] = str(r)
+  sanitized_requirements = [new_requirements[n] for n in project_names]
+
   resolved_distributions = resolver.resolve(
-    requirements=bootstrap_info.requirements,
+    requirements=sanitized_requirements,
+    # requirements=bootstrap_info.requirements,
     cache=bootstrap_info.pex_root,
     platform='current',
     transitive=False,
@@ -85,8 +97,7 @@ def main(self):
   # BOOTSTRAP-PEX-INFO. When the .ipex is executed, the normal pex bootstrap fails to see these
   # requirements or recognize that they should be pulled from the cache for some reason.
   for resolved_dist in resolved_distributions:
-    pass
-    # bootstrap_builder.add_distribution(resolved_dist.distribution)
+    bootstrap_builder.add_distribution(resolved_dist.distribution)
 
   bootstrap_builder.build(hydrated_pex_file, bytecode_compile=False)
 
