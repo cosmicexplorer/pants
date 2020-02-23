@@ -555,8 +555,9 @@ pub extern "C" fn tasks_task_begin(
 
 #[no_mangle]
 pub extern "C" fn tasks_add_get(tasks_ptr: *mut Tasks, product: TypeId, param_types: TypeIdBuffer) {
+  let param_types = param_types.to_vec();
+  dbg!(&param_types);
   with_tasks(tasks_ptr, |tasks| {
-    let param_types = param_types.to_vec();
     tasks.add_get(product, param_types.into_iter().collect());
   })
 }

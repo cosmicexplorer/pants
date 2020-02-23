@@ -19,7 +19,7 @@ impl fmt::Display for Get {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
     write!(
       f,
-      "Get[{}]({})",
+      "Get[{}, [...]]({})",
       self.product,
       self.params.iter().join(", ")
     )

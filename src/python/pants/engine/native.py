@@ -258,7 +258,7 @@ class _FFISpecification(object):
       if self._params_lengths is not None:
         self._ffi.release(self._params_lengths)
 
-      self._params_lengths = self._ffi.new('*uint64_t', num_params)
+      self._params_lengths = self._ffi.new('uint64_t[]', num_params)
 
     @memoized_classproperty
     def _extern_fields(cls):

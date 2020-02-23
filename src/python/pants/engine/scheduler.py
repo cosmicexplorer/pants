@@ -214,10 +214,13 @@ class Scheduler:
             self._native.lib.tasks_add_display_info(self._tasks, rule.name.encode())
 
         def add_get_edge(product: Type, param_types: List[Type]):
+            # param_types = [self._to_type(p) for p in param_types]
+            param_types_buf = self._to_ids_buf(list(param_types))
+            import sys; print(f'{product=}, {param_types=}, {param_types_buf=}', file=sys.stderr)
             self._native.lib.tasks_add_get(
                 self._tasks,
                 self._to_type(product),
-                self._native.context.type_ids_buf([self._to_type(p) for p in param_types]),
+                param_types_buf,
             )
 
         for the_get in rule.input_gets:

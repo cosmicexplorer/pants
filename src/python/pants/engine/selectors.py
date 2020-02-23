@@ -149,7 +149,7 @@ class Get(Generic[_Product, _Params]):
             return (product_type.id, ())
         elif len(subscript_args) == 2:
             product_type, param_types = subscript_args
-            if not isinstance(param_types, tuple):
+            if not isinstance(param_types, (list, tuple)):
                 param_types = (param_types,)
             return (product_type.id, tuple(t.id for t in param_types))
         else:
@@ -171,7 +171,6 @@ class Get(Generic[_Product, _Params]):
 class MultiGet(Generic[_Product, _Params]):
     """Can be constructed with an iterable of `Get()`s and `await`ed to evaluate them in
     parallel."""
-
     gets: Tuple[Get[_Product, _Params], ...]
 
     def __await__(self) -> Generator[Tuple[Get[_Product, _Params], ...], None, Tuple[_Product, ...]]:
