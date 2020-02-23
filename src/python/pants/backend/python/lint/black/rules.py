@@ -144,8 +144,8 @@ async def setup(
 async def fmt(black_target: BlackTarget, black: Black) -> FmtResult:
     if black.options.skip:
         return FmtResult.noop()
-    setup = await Get[Setup](SetupRequest(black_target, check_only=False))
-    result = await Get[ExecuteProcessResult](ExecuteProcessRequest, setup.process_request)
+    setup = await Get[Setup, SetupRequest](SetupRequest(black_target, check_only=False))
+    result = await Get[ExecuteProcessResult, ExecuteProcessRequest](setup.process_request)
     return FmtResult.from_execute_process_result(result)
 
 
@@ -153,8 +153,8 @@ async def fmt(black_target: BlackTarget, black: Black) -> FmtResult:
 async def lint(black_target: BlackTarget, black: Black) -> LintResult:
     if black.options.skip:
         return LintResult.noop()
-    setup = await Get[Setup](SetupRequest(black_target, check_only=True))
-    result = await Get[FallibleExecuteProcessResult](ExecuteProcessRequest, setup.process_request)
+    setup = await Get[Setup, SetupRequest](SetupRequest(black_target, check_only=True))
+    result = await Get[FallibleExecuteProcessResult, ExecuteProcessRequest](setup.process_request)
     return LintResult.from_fallible_execute_process_result(result)
 
 

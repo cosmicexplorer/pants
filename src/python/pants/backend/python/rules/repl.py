@@ -23,7 +23,7 @@ class PythonRepl:
 
 @rule
 async def run_python_repl(repl: PythonRepl) -> ReplBinary:
-    targets = await Get[TransitiveHydratedTargets](Addresses, repl.addresses)
+    targets = await Get[TransitiveHydratedTargets, Addresses](repl.addresses)
     python_addresses = Addresses(
         ht.address for ht in targets.closure if isinstance(ht.adaptor, PythonTargetAdaptor)
     )
@@ -31,7 +31,7 @@ async def run_python_repl(repl: PythonRepl) -> ReplBinary:
         addresses=python_addresses, output_filename="python-repl.pex",
     )
 
-    repl_pex = await Get[Pex](CreatePexFromTargetClosure, create_pex)
+    repl_pex = await Get[Pex, CreatePexFromTargetClosure](create_pex)
     return ReplBinary(digest=repl_pex.directory_digest, binary_name=repl_pex.output_filename,)
 
 

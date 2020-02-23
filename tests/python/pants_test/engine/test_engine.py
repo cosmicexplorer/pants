@@ -53,7 +53,7 @@ class Fib:
 async def fib(n: int) -> Fib:
     if n < 2:
         return Fib(n)
-    x, y = tuple(await MultiGet([Get[Fib](int(n - 2)), Get[Fib](int(n - 1))]))
+    x, y = tuple(await MultiGet([Get[Fib](int(n - 2)), Get[Fib, int](int(n - 1))]))
     return Fib(x.val + y.val)
 
 
@@ -100,8 +100,8 @@ class Omega:
 async def rule_one(i: Input) -> Beta:
     """This rule should be the first one executed by the engine, and thus have no parent."""
     a = Alpha()
-    o = await Get[Omega](Alpha, a)
-    b = await Get[Beta](Omega, o)
+    o = await Get[Omega, Alpha](a)
+    b = await Get[Beta, Omega](o)
     return b
 
 
@@ -109,7 +109,7 @@ async def rule_one(i: Input) -> Beta:
 async def rule_two(a: Alpha) -> Omega:
     """This rule should be invoked in the body of `rule_one` and therefore its workunit should be a
     child of `rule_one`'s workunit."""
-    await Get[Gamma](Alpha, a)
+    await Get[Gamma, Alpha](a)
     return Omega()
 
 

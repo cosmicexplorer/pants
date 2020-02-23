@@ -118,8 +118,8 @@ async def setup(
 async def fmt(docformatter_target: DocformatterTarget, docformatter: Docformatter) -> FmtResult:
     if docformatter.options.skip:
         return FmtResult.noop()
-    setup = await Get[Setup](SetupRequest(docformatter_target, check_only=False))
-    result = await Get[ExecuteProcessResult](ExecuteProcessRequest, setup.process_request)
+    setup = await Get[Setup, SetupRequest](SetupRequest(docformatter_target, check_only=False))
+    result = await Get[ExecuteProcessResult, ExecuteProcessRequest](setup.process_request)
     return FmtResult.from_execute_process_result(result)
 
 
@@ -127,8 +127,8 @@ async def fmt(docformatter_target: DocformatterTarget, docformatter: Docformatte
 async def lint(docformatter_target: DocformatterTarget, docformatter: Docformatter) -> LintResult:
     if docformatter.options.skip:
         return LintResult.noop()
-    setup = await Get[Setup](SetupRequest(docformatter_target, check_only=True))
-    result = await Get[FallibleExecuteProcessResult](ExecuteProcessRequest, setup.process_request)
+    setup = await Get[Setup, SetupRequest](SetupRequest(docformatter_target, check_only=True))
+    result = await Get[FallibleExecuteProcessResult, ExecuteProcessRequest](setup.process_request)
     return LintResult.from_fallible_execute_process_result(result)
 
 

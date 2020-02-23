@@ -62,9 +62,9 @@ async def lint(
 
     # Pylint needs direct dependencies in the chroot to ensure that imports are valid. However, it
     # doesn't lint those direct dependencies nor does it care about transitive dependencies.
-    hydrated_target = await Get[HydratedTarget](Address, adaptor.address)
+    hydrated_target = await Get[HydratedTarget, Address](adaptor.address)
     dependencies = await MultiGet(
-        Get[HydratedTarget](Address, dependency) for dependency in hydrated_target.dependencies
+        Get[HydratedTarget, Address](dependency) for dependency in hydrated_target.dependencies
     )
     sources_digest = await Get[ChrootedPythonSources](
         HydratedTargets([hydrated_target, *dependencies])
@@ -117,7 +117,7 @@ async def lint(
         input_files=merged_input_files,
         description=f"Run Pylint for {adaptor.address.reference()}",
     )
-    result = await Get[FallibleExecuteProcessResult](ExecuteProcessRequest, request)
+    result = await Get[FallibleExecuteProcessResult, ExecuteProcessRequest](request)
     return LintResult.from_fallible_execute_process_result(result)
 
 

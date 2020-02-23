@@ -126,7 +126,7 @@ async def setup_pytest_for_target(
         )
     )
 
-    chrooted_sources = await Get[ChrootedPythonSources](HydratedTargets(all_targets))
+    chrooted_sources = await Get[ChrootedPythonSources, HydratedTargets](HydratedTargets(all_targets))
     directories_to_merge = [
         chrooted_sources.snapshot.directory_digest,
         resolved_requirements_pex.directory_digest,
@@ -199,7 +199,7 @@ async def run_python_test(
         else 9999,
         env=env,
     )
-    result = await Get[FallibleExecuteProcessResult](ExecuteProcessRequest, request)
+    result = await Get[FallibleExecuteProcessResult, ExecuteProcessRequest](request)
     return TestResult.from_fallible_execute_process_result(result)
 
 

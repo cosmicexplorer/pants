@@ -49,7 +49,7 @@ async def create_binary(
 ) -> Binary:
     with options.line_oriented(console) as print_stdout:
         print_stdout(f"Generating binaries in `./{distdir.relpath}`")
-        binaries = await MultiGet(Get[CreatedBinary](Address, address) for address in addresses)
+        binaries = await MultiGet(Get[CreatedBinary, Address](address) for address in addresses)
         merged_digest = await Get[Digest](
             DirectoriesToMerge(tuple(binary.digest for binary in binaries))
         )
@@ -63,7 +63,7 @@ async def create_binary(
 
 @rule
 async def coordinator_of_binaries(target: HydratedTarget) -> CreatedBinary:
-    binary = await Get[CreatedBinary](BinaryTarget, target.adaptor)
+    binary = await Get[CreatedBinary, BinaryTarget](target.adaptor)
     return binary
 
 

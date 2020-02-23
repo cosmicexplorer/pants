@@ -52,7 +52,7 @@ async def run(
     options: RunOptions,
 ) -> Run:
     address = addresses.expect_single()
-    binary = await Get[CreatedBinary](Address, address)
+    binary = await Get[CreatedBinary, Address](address)
 
     with temporary_dir(
         root_dir=PurePath(build_root.path, ".pants.d").as_posix(), cleanup=True

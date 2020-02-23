@@ -40,7 +40,7 @@ class DownloadedClocScript:
 
 @rule
 async def download_cloc_script(cloc_binary_tool: ClocBinary) -> DownloadedClocScript:
-    snapshot = await Get[Snapshot](BinaryToolFetchRequest(cloc_binary_tool))
+    snapshot = await Get[Snapshot, BinaryToolFetchRequest](BinaryToolFetchRequest(cloc_binary_tool))
     return DownloadedClocScript(SingleFileExecutable(snapshot))
 
 
@@ -113,8 +113,8 @@ async def run_cloc(
         description="cloc",
     )
 
-    exec_result = await Get[ExecuteProcessResult](ExecuteProcessRequest, req)
-    files_content = await Get[FilesContent](Digest, exec_result.output_directory_digest)
+    exec_result = await Get[ExecuteProcessResult, ExecuteProcessRequest](req)
+    files_content = await Get[FilesContent, Digest](exec_result.output_directory_digest)
 
     file_outputs = {fc.path: fc.content.decode() for fc in files_content}
 

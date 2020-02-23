@@ -67,7 +67,7 @@ async def strip_source_roots_from_snapshot(
                 prefix=determine_source_root(request.representative_path),
             )
         )
-        resulting_snapshot = await Get[Snapshot](Digest, resulting_digest)
+        resulting_snapshot = await Get[Snapshot, Digest](resulting_digest)
         return SourceRootStrippedSources(snapshot=resulting_snapshot)
 
     files_grouped_by_source_root = {
@@ -93,8 +93,8 @@ async def strip_source_roots_from_snapshot(
         for snapshot, source_root in zip(snapshot_subsets, files_grouped_by_source_root.keys())
     )
 
-    merged_result = await Get[Digest](DirectoriesToMerge(resulting_digests))
-    resulting_snapshot = await Get[Snapshot](Digest, merged_result)
+    merged_result = await Get[Digest, DirectoriesToMerge](DirectoriesToMerge(resulting_digests))
+    resulting_snapshot = await Get[Snapshot, Digest](merged_result)
     return SourceRootStrippedSources(resulting_snapshot)
 
 

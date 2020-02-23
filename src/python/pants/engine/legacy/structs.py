@@ -324,7 +324,7 @@ class PantsPluginAdaptor(PythonTargetAdaptor):
 
 
 # TODO(#7490): Remove this once we have multiple params support so that rules can do something
-# like `await Get[TestResult](Params(Address(..), Origin(..)))`.
+# like `await Get[TestResult, Params](Params(Address(..), Origin(..)))`.
 @dataclass(frozen=True)
 class TargetAdaptorWithOrigin:
     adaptor: TargetAdaptor

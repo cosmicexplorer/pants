@@ -57,7 +57,7 @@ async def run_repl(
     # of the `ReplImplementation` union because `LegacyGraphSession.run_goal_rules()` will not
     # execute this rule's body if there are no implementations registered.
     repl_impl = next(iter(union_membership.union_rules[ReplImplementation]))
-    repl_binary = await Get[ReplBinary](ReplImplementation, repl_impl(addresses))
+    repl_binary = await Get[ReplBinary, ReplImplementation](repl_impl(addresses))
 
     with temporary_dir(root_dir=global_options.pants_workdir, cleanup=False) as tmpdir:
         path_relative_to_build_root = PurePath(tmpdir).relative_to(build_root.path).as_posix()

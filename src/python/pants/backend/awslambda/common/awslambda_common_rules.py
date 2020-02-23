@@ -51,7 +51,7 @@ async def create_awslambda(
     with options.line_oriented(console) as print_stdout:
         print_stdout(f"Generating AWS lambdas in `./{distdir.relpath}`")
         awslambdas = await MultiGet(
-            Get[CreatedAWSLambda](Address, address) for address in addresses
+            Get[CreatedAWSLambda, Address](address) for address in addresses
         )
         merged_digest = await Get[Digest](
             DirectoriesToMerge(tuple(awslambda.digest for awslambda in awslambdas))
@@ -66,7 +66,7 @@ async def create_awslambda(
 
 @rule
 async def coordinator_of_lambdas(target: HydratedTarget) -> CreatedAWSLambda:
-    awslambda = await Get[CreatedAWSLambda](AWSLambdaTarget, target.adaptor)
+    awslambda = await Get[CreatedAWSLambda, AWSLambdaTarget](target.adaptor)
     return awslambda
 
 

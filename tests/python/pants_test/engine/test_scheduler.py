@@ -63,7 +63,7 @@ class D:
 
 @rule
 async def transitive_coroutine_rule(c: C) -> D:
-    b = await Get[B](C, c)
+    b = await Get[B, C](c)
     return D(b)
 
 
@@ -107,7 +107,7 @@ def select_union_b(union_b: UnionB) -> A:
 # TODO: add GetMulti testing for unions!
 @rule
 async def a_union_test(union_wrapper: UnionWrapper) -> A:
-    union_a = await Get[A](UnionBase, union_wrapper.inner)
+    union_a = await Get[A, UnionBase](union_wrapper.inner)
     return union_a
 
 
@@ -117,7 +117,7 @@ class UnionX:
 
 @rule
 async def error_msg_test_rule(union_wrapper: UnionWrapper) -> UnionX:
-    union_x = await Get[UnionX](UnionWithNonMemberErrorMsg, union_wrapper.inner)
+    union_x = await Get[UnionX, UnionWithNonMemberErrorMsg](union_wrapper.inner)
     return union_x
 
 

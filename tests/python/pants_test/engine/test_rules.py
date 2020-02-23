@@ -240,7 +240,7 @@ class Example(Goal):
 
 @goal_rule
 async def a_goal_rule_generator(console: Console) -> Example:
-    a = await Get[A](str("a str!"))
+    a = await Get[A, str](str("a str!"))
     console.print_stdout(str(a))
     return Example(exit_code=0)
 
@@ -541,7 +541,7 @@ class RuleGraphTest(TestBase):
 
         @rule
         async def d_from_a_and_suba(a: A, suba: SubA) -> D:  # type: ignore[return]
-            _ = await Get[A](C, C())  # noqa: F841
+            _ = await Get[A, C](C())  # noqa: F841
 
         rules = _suba_root_rules + [
             a_from_c,
@@ -768,7 +768,7 @@ class RuleGraphTest(TestBase):
         # be surprising.
         @rule
         async def a(sub_a: SubA) -> A:  # type: ignore[return]
-            _ = await Get[B](C())  # noqa: F841
+            _ = await Get[B, C](C())  # noqa: F841
 
         @rule
         def b_from_suba(suba: SubA) -> B:
@@ -1104,7 +1104,7 @@ class RuleGraphTest(TestBase):
     def test_get_simple(self):
         @rule
         async def a() -> A:  # type: ignore[return]
-            _ = await Get[B](D, D())  # noqa: F841
+            _ = await Get[B, D](D())  # noqa: F841
 
         @rule
         async def b_from_d(d: D) -> B:
@@ -1147,7 +1147,7 @@ class RuleGraphTest(TestBase):
 
             @rule
             async def f() -> A:
-                return await Get[A](XXX, 3)
+                return await Get[A, XXX](3)
 
         # This fails because the argument is defined in this file's module, but it is not a type.
         with self.assertRaisesWithMessage(

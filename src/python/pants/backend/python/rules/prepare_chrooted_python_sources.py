@@ -35,7 +35,7 @@ async def prepare_chrooted_python_sources(
     stripping source roots.
     """
     source_root_stripped_sources = await MultiGet(
-        Get[SourceRootStrippedSources](HydratedTarget, hydrated_target)
+        Get[SourceRootStrippedSources, HydratedTarget](hydrated_target)
         for hydrated_target in hydrated_targets
     )
     sources_snapshot = await Get[Snapshot](

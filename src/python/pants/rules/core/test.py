@@ -152,7 +152,7 @@ async def run_tests(
         return Test(result.process_exit_code)
 
     results = await MultiGet(
-        Get[AddressAndTestResult](AddressWithOrigin, address_with_origin)
+        Get[AddressAndTestResult, AddressWithOrigin](address_with_origin)
         for address_with_origin in addresses_with_origins
     )
     did_any_fail = False
@@ -201,7 +201,7 @@ async def coordinator_of_tests(
     # NB: This has the effect of "casting" a TargetAdaptorWithOrigin to a member of the TestTarget
     # union. If the adaptor is not a member of the union, the engine will fail at runtime with a
     # useful error message.
-    result = await Get[TestResult](TestTarget, adaptor_with_origin)
+    result = await Get[TestResult, TestTarget](adaptor_with_origin)
     logger.info(
         f"Tests {'succeeded' if result.status == Status.SUCCESS else 'failed'}: "
         f"{target.address.reference()}"
@@ -218,7 +218,7 @@ async def coordinator_of_debug_tests(
         adaptor=target.adaptor, origin=target_with_origin.origin
     )
     logger.info(f"Starting tests in debug mode: {target.address.reference()}")
-    request = await Get[TestDebugRequest](TestTarget, adaptor_with_origin)
+    request = await Get[TestDebugRequest, TestTarget](adaptor_with_origin)
     return AddressAndDebugRequest(target.address, request)
 
 

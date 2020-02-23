@@ -50,7 +50,7 @@ async def create_python_awslambda(
         output_filename=pex_filename,
     )
 
-    pex = await Get[Pex](CreatePexFromTargetClosure, pex_request)
+    pex = await Get[Pex, CreatePexFromTargetClosure](pex_request)
     merged_input_files = await Get[Digest](
         DirectoriesToMerge(
             directories=(pex.directory_digest, lambdex_setup.requirements_pex.directory_digest)
@@ -68,7 +68,7 @@ async def create_python_awslambda(
         output_files=(pex_filename,),
         description=f"Run Lambdex for {lambda_tgt_adaptor.address.reference()}",
     )
-    result = await Get[ExecuteProcessResult](ExecuteProcessRequest, process_request)
+    result = await Get[ExecuteProcessResult, ExecuteProcessRequest](process_request)
     return CreatedAWSLambda(digest=result.output_directory_digest, name=pex_filename)
 
 

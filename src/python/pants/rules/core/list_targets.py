@@ -50,7 +50,7 @@ async def list_targets(console: Console, list_options: ListOptions, addresses: A
     collection: Union[HydratedTargets, Addresses]
     if provides or documented:
         # To get provides clauses or documentation, we need hydrated targets.
-        collection = await Get[HydratedTargets](Addresses, addresses)
+        collection = await Get[HydratedTargets, Addresses](addresses)
         if provides:
             extractors = dict(
                 address=lambda target: target.address.spec,

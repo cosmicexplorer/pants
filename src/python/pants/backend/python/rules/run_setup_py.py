@@ -289,7 +289,7 @@ async def run_setup_pys(
             Addresses(et.hydrated_target.address for et in exported_targets)
         )
         owners = await MultiGet(
-            Get[ExportedTarget](OwnedDependency(ht)) for ht in tht.closure if is_ownable_target(ht)
+            Get[ExportedTarget, OwnedDependency](OwnedDependency(ht)) for ht in tht.closure if is_ownable_target(ht)
         )
         exported_targets = list(set(owners))
 
@@ -301,13 +301,13 @@ async def run_setup_pys(
         python_setup,
     )
     chroots = await MultiGet(
-        Get[SetupPyChroot](SetupPyChrootRequest(target, py2)) for target in exported_targets
+        Get[SetupPyChroot, SetupPyChrootRequest](SetupPyChrootRequest(target, py2)) for target in exported_targets
     )
 
     # If args were provided, run setup.py with them; Otherwise just dump chroots.
     if args:
         setup_py_results = await MultiGet(
-            Get[RunSetupPyResult](RunSetupPyRequest(exported_target, chroot, tuple(args)))
+            Get[RunSetupPyResult, RunSetupPyRequest](RunSetupPyRequest(exported_target, chroot, tuple(args)))
             for exported_target, chroot in zip(exported_targets, chroots)
         )
 
@@ -372,7 +372,7 @@ async def run_setup_py(
         output_directories=(dist_dir,),
         description=f"Run setuptools for {req.exported_target.hydrated_target.address.reference()}",
     )
-    result = await Get[ExecuteProcessResult](ExecuteProcessRequest, request)
+    result = await Get[ExecuteProcessResult, ExecuteProcessRequest](request)
     output_digest = await Get[Digest](
         DirectoryWithPrefixToStrip(result.output_directory_digest, dist_dir)
     )
@@ -381,13 +381,13 @@ async def run_setup_py(
 
 @rule
 async def generate_chroot(request: SetupPyChrootRequest) -> SetupPyChroot:
-    owned_deps = await Get[OwnedDependencies](DependencyOwner(request.exported_target))
+    owned_deps = await Get[OwnedDependencies, DependencyOwner](DependencyOwner(request.exported_target))
     targets = HydratedTargets(od.hydrated_target for od in owned_deps)
-    sources = await Get[SetupPySources](SetupPySourcesRequest(targets, py2=request.py2))
-    requirements = await Get[ExportedTargetRequirements](DependencyOwner(request.exported_target))
+    sources = await Get[SetupPySources, SetupPySourcesRequest](SetupPySourcesRequest(targets, py2=request.py2))
+    requirements = await Get[ExportedTargetRequirements, DependencyOwner](DependencyOwner(request.exported_target))
 
     # Nest the sources under the src/ prefix.
-    src_digest = await Get[Digest](DirectoryWithPrefixToAdd(sources.digest, CHROOT_SOURCE_ROOT))
+    src_digest = await Get[Digest, DirectoryWithPrefixToAdd](DirectoryWithPrefixToAdd(sources.digest, CHROOT_SOURCE_ROOT))
 
     # Generate the kwargs to the setup() call.
     setup_kwargs = request.exported_target.hydrated_target.adaptor.provides.setup_py_keywords.copy()
@@ -436,7 +436,7 @@ async def generate_chroot(request: SetupPyChrootRequest) -> SetupPyChroot:
         )
     )
 
-    chroot_digest = await Get[Digest](DirectoriesToMerge((src_digest, extra_files_digest)))
+    chroot_digest = await Get[Digest, DirectoriesToMerge](DirectoriesToMerge((src_digest, extra_files_digest)))
     return SetupPyChroot(chroot_digest, json.dumps(setup_kwargs, sort_keys=True))
 
 
@@ -446,7 +446,7 @@ async def get_sources(
 ) -> SetupPySources:
     targets = request.hydrated_targets
     stripped_srcs_list = await MultiGet(
-        Get[SourceRootStrippedSources](HydratedTarget, target) for target in targets
+        Get[SourceRootStrippedSources, HydratedTarget](target) for target in targets
     )
 
     # Create a chroot with all the sources, and any ancestor __init__.py files that might be needed
@@ -458,14 +458,14 @@ async def get_sources(
     stripped_srcs_digests = [
         stripped_sources.snapshot.directory_digest for stripped_sources in stripped_srcs_list
     ]
-    ancestor_init_pys = await Get[AncestorInitPyFiles](HydratedTargets, targets)
+    ancestor_init_pys = await Get[AncestorInitPyFiles, HydratedTargets](targets)
     sources_digest = await Get[Digest](
         DirectoriesToMerge(directories=tuple([*stripped_srcs_digests, *ancestor_init_pys.digests]))
     )
     init_pys_snapshot = await Get[Snapshot](
         SnapshotSubset(sources_digest, PathGlobs(["**/__init__.py"]))
     )
-    init_py_contents = await Get[FilesContent](Digest, init_pys_snapshot.directory_digest)
+    init_py_contents = await Get[FilesContent, Digest](init_pys_snapshot.directory_digest)
 
     packages, namespace_packages, package_data = find_packages(
         source_roots=source_root_config.get_source_roots(),
@@ -507,7 +507,7 @@ async def get_ancestor_init_py(
     # Note that we must MultiGet single globs instead of a a single Get for all the globs, because
     # we match each result to its originating glob (see use of zip below).
     ancestor_init_py_snapshots = await MultiGet[Snapshot](
-        Get[Snapshot](PathGlobs, PathGlobs([os.path.join(source_dir_ancestor[1], "__init__.py")]))
+        Get[Snapshot, PathGlobs](PathGlobs([os.path.join(source_dir_ancestor[1], "__init__.py")]))
         for source_dir_ancestor in source_dir_ancestors_list
     )
 
@@ -536,7 +536,7 @@ async def get_requirements(dep_owner: DependencyOwner) -> ExportedTargetRequirem
     )
 
     ownable_tgts = [tgt for tgt in tht.closure if is_ownable_target(tgt)]
-    owners = await MultiGet(Get[ExportedTarget](OwnedDependency(ht)) for ht in ownable_tgts)
+    owners = await MultiGet(Get[ExportedTarget, OwnedDependency](OwnedDependency(ht)) for ht in ownable_tgts)
     owned_by_us: Set[HydratedTarget] = set()
     owned_by_others: Set[HydratedTarget] = set()
     for tgt, owner in zip(ownable_tgts, owners):
@@ -557,13 +557,13 @@ async def get_requirements(dep_owner: DependencyOwner) -> ExportedTargetRequirem
     #  deps across exported target boundaries, it's not a big stretch to just insist that
     #  requirements must be direct deps.
     direct_deps_addrs = tuple({dep for ht in owned_by_us for dep in ht.dependencies})
-    direct_deps_tgts = await MultiGet(Get[HydratedTarget](Address, a) for a in direct_deps_addrs)
+    direct_deps_tgts = await MultiGet(Get[HydratedTarget, Address](a) for a in direct_deps_addrs)
     reqs = PexRequirements.create_from_adaptors(tgt.adaptor for tgt in direct_deps_tgts)
     req_strs = list(reqs.requirements)
 
     # Add the requirements on any exported targets on which we depend.
     exported_targets_we_depend_on = await MultiGet(
-        Get[ExportedTarget](OwnedDependency(ht)) for ht in owned_by_others
+        Get[ExportedTarget, OwnedDependency](OwnedDependency(ht)) for ht in owned_by_others
     )
     req_strs.extend(
         sorted(
@@ -589,7 +589,7 @@ async def get_owned_dependencies(dependency_owner: DependencyOwner) -> OwnedDepe
         for tgt in tht.closure
         if isinstance(tgt.adaptor, (PythonTargetAdaptor, ResourcesAdaptor))
     ]
-    owners = await MultiGet(Get[ExportedTarget](OwnedDependency(ht)) for ht in ownable_targets)
+    owners = await MultiGet(Get[ExportedTarget, OwnedDependency](OwnedDependency(ht)) for ht in ownable_targets)
     owned_dependencies = [
         tgt
         for owner, tgt in zip(owners, ownable_targets)
@@ -613,7 +613,7 @@ async def get_exporting_owner(owned_dependency: OwnedDependency) -> ExportedTarg
     """
     hydrated_target = owned_dependency.hydrated_target
     ancestor_addrs = AscendantAddresses(hydrated_target.address.spec_path)
-    ancestor_tgts = await Get[HydratedTargets](AddressSpecs((ancestor_addrs,)))
+    ancestor_tgts = await Get[HydratedTargets, AddressSpecs](AddressSpecs((ancestor_addrs,)))
     # Note that addresses sort by (spec_path, target_name), and all these targets are
     # ancestors of the given target, i.e., their spec_paths are all prefixes. So sorting by
     # address will effectively sort by closeness of ancestry to the given target.
@@ -622,7 +622,7 @@ async def get_exporting_owner(owned_dependency: OwnedDependency) -> ExportedTarg
     )
     exported_ancestor_iter = iter(exported_ancestor_tgts)
     for exported_ancestor in exported_ancestor_iter:
-        tht = await Get[TransitiveHydratedTargets](Addresses([exported_ancestor.address]))
+        tht = await Get[TransitiveHydratedTargets, Addresses](Addresses([exported_ancestor.address]))
         if hydrated_target in tht.closure:
             owner = exported_ancestor
             # Find any exported siblings of owner that also depend on hydrated_target. They have the
@@ -630,7 +630,7 @@ async def get_exporting_owner(owned_dependency: OwnedDependency) -> ExportedTarg
             sibling_owners = []
             sibling = next(exported_ancestor_iter, None)
             while sibling and sibling.address.spec_path == owner.address.spec_path:
-                tht = await Get[TransitiveHydratedTargets](Addresses([sibling.address]))
+                tht = await Get[TransitiveHydratedTargets, Addresses](Addresses([sibling.address]))
                 if hydrated_target in tht.closure:
                     sibling_owners.append(sibling)
                 sibling = next(exported_ancestor_iter, None)

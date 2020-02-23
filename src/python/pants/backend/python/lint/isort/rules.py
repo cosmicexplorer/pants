@@ -137,8 +137,8 @@ async def setup(
 async def fmt(isort_target: IsortTarget, isort: Isort) -> FmtResult:
     if isort.options.skip:
         return FmtResult.noop()
-    setup = await Get[Setup](SetupRequest(isort_target, check_only=False))
-    result = await Get[ExecuteProcessResult](ExecuteProcessRequest, setup.process_request)
+    setup = await Get[Setup, SetupRequest](SetupRequest(isort_target, check_only=False))
+    result = await Get[ExecuteProcessResult, ExecuteProcessRequest](setup.process_request)
     return FmtResult.from_execute_process_result(result)
 
 
@@ -146,8 +146,8 @@ async def fmt(isort_target: IsortTarget, isort: Isort) -> FmtResult:
 async def lint(isort_target: IsortTarget, isort: Isort) -> LintResult:
     if isort.options.skip:
         return LintResult.noop()
-    setup = await Get[Setup](SetupRequest(isort_target, check_only=True))
-    result = await Get[FallibleExecuteProcessResult](ExecuteProcessRequest, setup.process_request)
+    setup = await Get[Setup, SetupRequest](SetupRequest(isort_target, check_only=True))
+    result = await Get[FallibleExecuteProcessResult, ExecuteProcessRequest](setup.process_request)
     return LintResult.from_fallible_execute_process_result(result)
 
 

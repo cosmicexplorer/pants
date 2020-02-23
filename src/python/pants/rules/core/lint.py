@@ -82,7 +82,7 @@ async def lint(
         for target_with_origin in targets_with_origins
     ]
     nested_results = await MultiGet(
-        Get[LintResults](LintTarget, adaptor_with_origin)
+        Get[LintResults, LintTarget](adaptor_with_origin)
         for adaptor_with_origin in adaptors_with_origins
         if LintTarget.is_lintable(adaptor_with_origin, union_membership=union_membership)
     )

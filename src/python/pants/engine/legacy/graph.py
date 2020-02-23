@@ -424,7 +424,7 @@ class LegacyTransitiveHydratedTargets:
 
 
 # TODO(#7490): Remove this once we have multiple params support so that rules can do something
-# like `await Get[TestResult](Params(Address(..), Origin(..)))`.
+# like `await Get[TestResult, Params](Params(Address(..), Origin(..)))`.
 @dataclass(frozen=True)
 class HydratedTargetWithOrigin:
     """A wrapper around HydratedTarget that preserves the original spec used to resolve the target.
@@ -522,7 +522,7 @@ async def find_owners(owners_request: OwnersRequest) -> Owners:
 
     # Walk up the buildroot looking for targets that would conceivably claim changed sources.
     candidate_specs = tuple(AscendantAddresses(directory=d) for d in dirs_set)
-    candidate_targets = await Get[HydratedTargets](AddressSpecs(candidate_specs))
+    candidate_targets = await Get[HydratedTargets, AddressSpecs](AddressSpecs(candidate_specs))
 
     # Match the source globs against the expanded candidate targets.
     def owns_any_source(legacy_target: HydratedTarget) -> bool:
@@ -541,7 +541,7 @@ async def find_owners(owners_request: OwnersRequest) -> Owners:
         )
 
     build_file_addresses = await MultiGet(
-        Get[BuildFileAddress](Address, ht.adaptor.address) for ht in candidate_targets
+        Get[BuildFileAddress, Address](ht.adaptor.address) for ht in candidate_targets
     )
     owners = Addresses(
         ht.adaptor.address
@@ -562,7 +562,7 @@ async def transitive_hydrated_targets(addresses: Addresses) -> TransitiveHydrate
     """
 
     transitive_hydrated_targets = await MultiGet(
-        Get[TransitiveHydratedTarget](Address, a) for a in addresses
+        Get[TransitiveHydratedTarget, Address](a) for a in addresses
     )
 
     closure = OrderedSet()
@@ -584,12 +584,12 @@ async def transitive_hydrated_targets(addresses: Addresses) -> TransitiveHydrate
 async def legacy_transitive_hydrated_targets(
     addresses: Addresses,
 ) -> LegacyTransitiveHydratedTargets:
-    thts = await Get[TransitiveHydratedTargets](Addresses, addresses)
+    thts = await Get[TransitiveHydratedTargets, Addresses](addresses)
     roots_bfas = await MultiGet(
-        Get[BuildFileAddress](Address, hydrated_target.address) for hydrated_target in thts.roots
+        Get[BuildFileAddress, Address](hydrated_target.address) for hydrated_target in thts.roots
     )
     closure_bfas = await MultiGet(
-        Get[BuildFileAddress](Address, hydrated_target.address) for hydrated_target in thts.closure
+        Get[BuildFileAddress, Address](hydrated_target.address) for hydrated_target in thts.closure
     )
     return LegacyTransitiveHydratedTargets(
         roots=tuple(
@@ -606,7 +606,7 @@ async def legacy_transitive_hydrated_targets(
 @rule
 async def transitive_hydrated_target(root: HydratedTarget) -> TransitiveHydratedTarget:
     dependencies = await MultiGet(
-        Get[TransitiveHydratedTarget](Address, d) for d in root.dependencies
+        Get[TransitiveHydratedTarget, Address](d) for d in root.dependencies
     )
     return TransitiveHydratedTarget(root, dependencies)
 
@@ -653,7 +653,7 @@ async def hydrate_target(hydrated_struct: HydratedStruct) -> HydratedTarget:
     target_adaptor = cast(TargetAdaptor, hydrated_struct.value)
     # Hydrate the fields of the adaptor and re-construct it.
     hydrated_fields = await MultiGet(
-        Get[HydratedField](HydrateableField, fa) for fa in target_adaptor.field_adaptors
+        Get[HydratedField, HydrateableField](fa) for fa in target_adaptor.field_adaptors
     )
     kwargs = target_adaptor.kwargs()
     for field in hydrated_fields:
@@ -669,13 +669,13 @@ async def hydrate_target(hydrated_struct: HydratedStruct) -> HydratedTarget:
 async def hydrate_target_with_origin(
     address_with_origin: AddressWithOrigin,
 ) -> HydratedTargetWithOrigin:
-    ht = await Get[HydratedTarget](Address, address_with_origin.address)
+    ht = await Get[HydratedTarget, Address](address_with_origin.address)
     return HydratedTargetWithOrigin(target=ht, origin=address_with_origin.origin)
 
 
 @rule
 async def hydrated_targets(addresses: Addresses) -> HydratedTargets:
-    targets = await MultiGet(Get[HydratedTarget](Address, a) for a in addresses)
+    targets = await MultiGet(Get[HydratedTarget, Address](a) for a in addresses)
     return HydratedTargets(targets)
 
 
@@ -684,7 +684,7 @@ async def hydrated_targets_with_origins(
     addresses_with_origins: AddressesWithOrigins,
 ) -> HydratedTargetsWithOrigins:
     targets_with_origins = await MultiGet(
-        Get[HydratedTargetWithOrigin](AddressWithOrigin, address_with_origin)
+        Get[HydratedTargetWithOrigin, AddressWithOrigin](address_with_origin)
         for address_with_origin in addresses_with_origins
     )
     return HydratedTargetsWithOrigins(targets_with_origins)
@@ -717,10 +717,10 @@ async def hydrate_sources(
         sources_field.path_globs,
         glob_match_error_behavior=glob_match_error_behavior,
         # TODO(#9012): add line number referring to the sources field. When doing this, we'll likely
-        # need to `await Get[BuildFileAddress](Address)`.
+        # need to `await Get[BuildFileAddress, Address](Address)`.
         description_of_origin=f"{address}'s `{sources_field.arg}` field",
     )
-    snapshot = await Get[Snapshot](PathGlobs, path_globs)
+    snapshot = await Get[Snapshot, PathGlobs](path_globs)
     fileset_with_spec = _eager_fileset_with_spec(
         spec_path=address.spec_path, filespec=sources_field.filespecs, snapshot=snapshot,
     )
@@ -740,13 +740,13 @@ async def hydrate_bundles(
             pg,
             glob_match_error_behavior=glob_match_error_behavior,
             # TODO(#9012): add line number referring to the bundles field. When doing this, we'll likely
-            # need to `await Get[BuildFileAddress](Address)`.
+            # need to `await Get[BuildFileAddress, Address](Address)`.
             description_of_origin=f"{address}'s `bundles` field",
         )
         for pg in bundles_field.path_globs_list
     ]
     snapshot_list = await MultiGet(
-        Get[Snapshot](PathGlobs, pg) for pg in path_globs_with_match_errors
+        Get[Snapshot, PathGlobs](pg) for pg in path_globs_with_match_errors
     )
 
     bundles = []
@@ -773,7 +773,7 @@ async def hydrate_sources_snapshot(hydrated_struct: HydratedStruct) -> SourcesSn
     )
     if sources_field is None:
         return SourcesSnapshot(EMPTY_SNAPSHOT)
-    hydrated_sources_field = await Get[HydratedField](HydrateableField, sources_field)
+    hydrated_sources_field = await Get[HydratedField, HydrateableField](sources_field)
     efws = cast(EagerFilesetWithSpec, hydrated_sources_field.value)
     return SourcesSnapshot(efws.snapshot)
 
@@ -785,8 +785,8 @@ async def sources_snapshots_from_address_specs(address_specs: AddressSpecs) -> S
     Each address will map to a corresponding SourcesSnapshot. This rule avoids hydrating any other
     fields.
     """
-    addresses = await Get[Addresses](AddressSpecs, address_specs)
-    snapshots = await MultiGet(Get[SourcesSnapshot](Address, a) for a in addresses)
+    addresses = await Get[Addresses, AddressSpecs](address_specs)
+    snapshots = await MultiGet(Get[SourcesSnapshot, Address](a) for a in addresses)
     return SourcesSnapshots(snapshots)
 
 
@@ -795,7 +795,7 @@ async def sources_snapshots_from_filesystem_specs(
     filesystem_specs: FilesystemSpecs,
 ) -> SourcesSnapshots:
     """Resolve the snapshot associated with the provided filesystem specs."""
-    snapshot = await Get[Snapshot](PathGlobs, filesystem_specs.to_path_globs())
+    snapshot = await Get[Snapshot, PathGlobs](filesystem_specs.to_path_globs())
     return SourcesSnapshots([SourcesSnapshot(snapshot)])
 
 
@@ -809,10 +809,10 @@ async def addresses_with_origins_from_filesystem_specs(
         filesystem_specs.path_globs_for_spec(spec) for spec in filesystem_specs.includes
     )
     snapshot_per_include = await MultiGet(
-        Get[Snapshot](PathGlobs, pg) for pg in pathglobs_per_include
+        Get[Snapshot, PathGlobs](pg) for pg in pathglobs_per_include
     )
     owners_per_include = await MultiGet(
-        Get[Owners](OwnersRequest(sources=snapshot.files)) for snapshot in snapshot_per_include
+        Get[Owners, OwnersRequest](OwnersRequest(sources=snapshot.files)) for snapshot in snapshot_per_include
     )
     result: List[AddressWithOrigin] = []
     for spec, snapshot, owners in zip(

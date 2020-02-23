@@ -53,13 +53,13 @@ async def dependencies(
 ) -> Dependencies:
     address_strings: Set[str] = set()
     if options.values.transitive:
-        transitive_targets = await Get[TransitiveHydratedTargets](Addresses, addresses)
+        transitive_targets = await Get[TransitiveHydratedTargets, Addresses](addresses)
         transitive_dependencies = transitive_targets.closure - set(transitive_targets.roots)
         address_strings.update(
             hydrated_target.address.spec for hydrated_target in transitive_dependencies
         )
     else:
-        hydrated_targets = await Get[HydratedTargets](Addresses, addresses)
+        hydrated_targets = await Get[HydratedTargets, Addresses](addresses)
         address_strings.update(
             dep.spec for hydrated_target in hydrated_targets for dep in hydrated_target.dependencies
         )

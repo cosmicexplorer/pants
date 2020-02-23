@@ -92,7 +92,7 @@ async def lint(
         ),
     )
 
-    source_files = await Get[TargetSourceFiles](FindTargetSourceFilesRequest(adaptor_with_origin))
+    source_files = await Get[TargetSourceFiles, FindTargetSourceFilesRequest](FindTargetSourceFilesRequest(adaptor_with_origin))
 
     request = requirements_pex.create_execute_request(
         python_setup=python_setup,
@@ -102,7 +102,7 @@ async def lint(
         input_files=merged_input_files,
         description=f"Run Bandit for {adaptor.address.reference()}",
     )
-    result = await Get[FallibleExecuteProcessResult](ExecuteProcessRequest, request)
+    result = await Get[FallibleExecuteProcessResult, ExecuteProcessRequest](request)
     return LintResult.from_fallible_execute_process_result(result)
 
 

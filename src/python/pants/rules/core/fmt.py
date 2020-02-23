@@ -99,7 +99,7 @@ async def fmt(
         for target_with_origin in targets_with_origins
     ]
     aggregated_results = await MultiGet(
-        Get[AggregatedFmtResults](FormatTarget, adaptor_with_origin)
+        Get[AggregatedFmtResults, FormatTarget](adaptor_with_origin)
         for adaptor_with_origin in adaptors_with_origins
         if FormatTarget.is_formattable(adaptor_with_origin, union_membership=union_membership)
     )

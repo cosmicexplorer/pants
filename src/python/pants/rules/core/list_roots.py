@@ -33,7 +33,7 @@ async def all_roots(source_root_config: SourceRootConfig) -> AllSourceRoots:
         else:
             all_paths.add(f"**/{path}/")
 
-    snapshot = await Get[Snapshot](PathGlobs(globs=sorted(all_paths)))
+    snapshot = await Get[Snapshot, PathGlobs](PathGlobs(globs=sorted(all_paths)))
 
     all_source_roots: Set[SourceRoot] = set()
 

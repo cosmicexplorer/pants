@@ -23,8 +23,8 @@ class Get(Generic[_Product, _Params]):
     """Experimental synchronous generator API.
 
     May be called equivalently as either:
-    # verbose form: Get[product, subject_declared_type](subject)
-    # shorthand form: Get[product, subject_declared_type](subject_declared_type(<constructor args for subject>))
+    # verbose form: Get[product, subject_declared_type, subject](subject)
+    # shorthand form: Get[product, subject_declared_type, subject_declared_type](subject_declared_type(<constructor args for subject>))
     """
 
     product_ype: Type[_Product]

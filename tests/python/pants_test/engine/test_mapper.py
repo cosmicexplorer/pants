@@ -149,7 +149,7 @@ HydratedStructs = Collection[HydratedStruct]
 
 @rule
 async def unhydrated_structs(addresses: Addresses) -> HydratedStructs:
-    tacs = await MultiGet(Get[HydratedStruct](Address, a) for a in addresses)
+    tacs = await MultiGet(Get[HydratedStruct, Address](a) for a in addresses)
     return HydratedStructs(tacs)
 
 

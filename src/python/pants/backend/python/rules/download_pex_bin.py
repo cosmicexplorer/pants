@@ -93,7 +93,7 @@ class DownloadedPexBin(HermeticPex):
 
 @rule
 async def download_pex_bin(pex_binary_tool: DownloadedPexBin.Factory) -> DownloadedPexBin:
-    snapshot = await Get[Snapshot](BinaryToolFetchRequest(pex_binary_tool))
+    snapshot = await Get[Snapshot, BinaryToolFetchRequest](BinaryToolFetchRequest(pex_binary_tool))
     return DownloadedPexBin(SingleFileExecutable(snapshot))
 
 

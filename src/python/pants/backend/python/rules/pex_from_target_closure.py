@@ -34,7 +34,7 @@ class CreatePexFromTargetClosure:
 async def create_pex_from_target_closure(
     request: CreatePexFromTargetClosure, python_setup: PythonSetup
 ) -> Pex:
-    transitive_hydrated_targets = await Get[TransitiveHydratedTargets](Addresses, request.addresses)
+    transitive_hydrated_targets = await Get[TransitiveHydratedTargets, Addresses](request.addresses)
     all_targets = transitive_hydrated_targets.closure
     all_target_adaptors = [t.adaptor for t in all_targets]
 
@@ -44,7 +44,7 @@ async def create_pex_from_target_closure(
 
     chrooted_sources: Optional[ChrootedPythonSources] = None
     if request.include_source_files:
-        chrooted_sources = await Get[ChrootedPythonSources](HydratedTargets(all_targets))
+        chrooted_sources = await Get[ChrootedPythonSources, HydratedTargets](HydratedTargets(all_targets))
 
     requirements = PexRequirements.create_from_adaptors(
         adaptors=all_target_adaptors, additional_requirements=request.additional_requirements
@@ -61,7 +61,7 @@ async def create_pex_from_target_closure(
         additional_args=request.additional_args,
     )
 
-    pex = await Get[Pex](CreatePex, create_pex_request)
+    pex = await Get[Pex, CreatePex](create_pex_request)
     return pex
 
 

@@ -128,7 +128,7 @@ async def create_pex(
         pex_bin.directory_digest,
         sources_digest_as_subdir,
     )
-    merged_digest = await Get[Digest](DirectoriesToMerge(directories=all_inputs))
+    merged_digest = await Get[Digest, DirectoriesToMerge](DirectoriesToMerge(directories=all_inputs))
 
     # NB: PEX outputs are platform dependent so in order to get a PEX that we can use locally, without
     # cross-building, we specify that our PEX command be run on the current local platform. When we
