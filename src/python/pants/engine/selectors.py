@@ -27,9 +27,14 @@ class Get(Generic[_Product, _Params]):
     # shorthand form: Get[product, subject_declared_type, subject_declared_type](subject_declared_type(<constructor args for subject>))
     """
 
-    product_ype: Type[_Product]
+    product_type: Type[_Product]
     param_types: Tuple[Type[Any], ...]
     params: 'Params'
+
+    def __repr__(self):
+        joined_param_types = ', '.join(t.__name__ for t in self.param_types)
+        joined_params = ', '.join(repr(p) for p in self.params)
+        return f'Get[{self.product_type.__name__}, [{joined_param_types}]]({joined_params})'
 
     def __await__(self) -> "Generator[Get[_Product, _Params], None, _Product]":
         """Allow a Get to be `await`ed within an `async` method, returning a strongly-typed result.

@@ -266,31 +266,51 @@ pub fn generator_send(generator: &Value, arg: &Value) -> Result<GeneratorRespons
   match response {
     PyGeneratorResponse::Broke(h) => Ok(GeneratorResponse::Break(Value::new(h))),
     PyGeneratorResponse::Throw(h) => Err(PyResult::failure_from(Value::new(h))),
-    PyGeneratorResponse::Get(product, handle, ident, declared_subject) => {
+    PyGeneratorResponse::Get(product, handles, idents, param_types) => {
       let mut interns = INTERNS.write();
+      let identities = idents.to_vec();
+      let values = handles.to_vec();
       let g = Get {
         product,
-        subject: interns.insert_with(Value::new(handle), ident),
-        declared_subject: Some(declared_subject),
+        params: values
+          .into_iter()
+          .zip(identities.into_iter())
+          .map(|(handle, ident)| interns.insert_with(handle, ident))
+          .collect(),
+        param_types: param_types.to_vec(),
       };
       Ok(GeneratorResponse::Get(g))
     }
-    PyGeneratorResponse::GetMulti(products, handles, identities) => {
+    PyGeneratorResponse::GetMulti(products, lengths_ptr, handles, identities) => {
       let mut interns = INTERNS.write();
       let products = products.to_vec();
       let identities = identities.to_vec();
       let values = handles.to_vec();
       assert_eq!(products.len(), values.len());
-      let gets: Vec<Get> = products
-        .into_iter()
-        .zip(values.into_iter())
-        .zip(identities.into_iter())
-        .map(|((p, v), i)| Get {
-          product: p,
-          subject: interns.insert_with(v, i),
-          declared_subject: None,
-        })
-        .collect();
+      assert_eq!(values.len(), identities.len());
+
+      let gets: Vec<Get> = unsafe {
+        let lengths = std::slice::from_raw_parts(lengths_ptr, products.len());
+        let mut handles_pos: usize = 0;
+        let mut gets: Vec<Get> = vec![];
+        for (p, l) in products.into_iter().zip(lengths.into_iter()) {
+          let l = *l as usize;
+          let cur_handles = &values[handles_pos..(handles_pos + l)];
+          let cur_idents = &identities[handles_pos..(handles_pos + l)];
+          gets.push(Get {
+            product: p,
+            params: cur_handles
+              .iter()
+              .zip(cur_idents.iter())
+              .map(|(handle, ident)| interns.insert_with(handle.clone(), *ident))
+              .collect(),
+            param_types: vec![],
+          });
+          handles_pos += l;
+        }
+        gets
+      };
+
       Ok(GeneratorResponse::GetMulti(gets))
     }
   }
@@ -511,8 +531,8 @@ impl From<Result<(), String>> for PyResult {
 ///
 #[repr(C)]
 pub enum PyGeneratorResponse {
-  Get(TypeId, Handle, Ident, TypeId),
-  GetMulti(TypeIdBuffer, HandleBuffer, IdentBuffer),
+  Get(TypeId, HandleBuffer, IdentBuffer, TypeIdBuffer),
+  GetMulti(TypeIdBuffer, *mut u64, HandleBuffer, IdentBuffer),
   // NB: Broke not Break because C keyword.
   Broke(Handle),
   Throw(Handle),
@@ -521,17 +541,17 @@ pub enum PyGeneratorResponse {
 #[derive(Debug)]
 pub struct Get {
   pub product: TypeId,
-  pub subject: Key,
-  pub declared_subject: Option<TypeId>,
+  pub params: Vec<Key>,
+  pub param_types: Vec<TypeId>,
 }
 
 impl fmt::Display for Get {
   fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
     write!(
       f,
-      "Get({}, {})",
+      "Get({}, [{}])",
       type_to_str(self.product),
-      key_to_str(&self.subject)
+      self.params.iter().map(key_to_str).join(", "),
     )
   }
 }

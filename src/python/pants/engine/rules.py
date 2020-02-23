@@ -34,10 +34,10 @@ class _RuleVisitor(ast.NodeVisitor):
 
     def __init__(self):
         super().__init__()
-        self._gets: List[Get] = []
+        self._gets: List[Tuple[str, Tuple[str, ...]]] = []
 
     @property
-    def gets(self) -> List[Get]:
+    def gets(self) -> List[Tuple[str, Tuple[str, ...]]]:
         return self._gets
 
     def _matches_get_name(self, node: ast.AST) -> bool:
@@ -45,13 +45,10 @@ class _RuleVisitor(ast.NodeVisitor):
         return isinstance(node, ast.Name) and node.id == Get.__name__
 
     def _is_get(self, node: ast.AST) -> bool:
-        """Check if the node looks like a Get(...) or Get[X](...) call."""
+        """Check if the node looks like a Get[X](...) call."""
         if isinstance(node, ast.Call):
-            if self._matches_get_name(node.func):
-                return True
             if isinstance(node.func, ast.Subscript) and self._matches_get_name(node.func.value):
                 return True
-            return False
         return False
 
     def visit_Call(self, node: ast.Call) -> None:
@@ -152,7 +149,9 @@ def _make_rule(
         rule_visitor = _RuleVisitor()
         rule_visitor.visit(rule_func_node)
         gets.update(
-            Get.create_statically_for_rule_graph(resolve_type(p), resolve_type(s))
+            Get.create_statically_for_rule_graph(
+                product_type=resolve_type(p),
+                param_types=(s if isinstance(s, tuple) else [resolve_type(s)]))
             for p, s in rule_visitor.gets
         )
 

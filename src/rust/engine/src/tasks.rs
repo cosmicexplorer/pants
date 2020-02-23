@@ -62,7 +62,7 @@ impl rule_graph::Rule for Rule {
       }) => clause
         .iter()
         .map(|s| DependencyKey::JustSelect(*s))
-        .chain(gets.iter().map(|g| DependencyKey::JustGet(*g)))
+        .chain(gets.iter().map(|g| DependencyKey::JustGet(g.clone())))
         .collect(),
       &Rule::Intrinsic(Intrinsic { ref input, .. }) => {
         vec![DependencyKey::JustSelect(Select::new(*input))]
@@ -307,16 +307,13 @@ impl Tasks {
     });
   }
 
-  pub fn add_get(&mut self, product: TypeId, subject: TypeId) {
+  pub fn add_get(&mut self, product: TypeId, params: Vec<TypeId>) {
     self
       .preparing
       .as_mut()
       .expect("Must `begin()` a task creation before adding gets!")
       .gets
-      .push(Get {
-        product: product,
-        subject: subject,
-      });
+      .push(Get { product, params });
   }
 
   pub fn add_select(&mut self, product: TypeId) {

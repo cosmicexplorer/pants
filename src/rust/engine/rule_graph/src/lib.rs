@@ -84,7 +84,7 @@ impl<R: Rule> EntryWithDeps<R> {
       EntryWithDeps::Inner(InnerEntry { ref rule, .. }) => rule.dependency_keys(),
       EntryWithDeps::Root(RootEntry {
         ref dependency_key, ..
-      }) => vec![*dependency_key],
+      }) => vec![dependency_key.clone()],
     }
   }
 
@@ -374,21 +374,21 @@ impl<'t, R: Rule> GraphMaker<'t, R> {
 
     for dependency_key in dependency_keys {
       let product = dependency_key.product();
-      let provided_param = dependency_key.provided_param();
-      let params = if let Some(provided_param) = provided_param {
-        // The dependency key provides a parameter: include it in the Params that are already in
-        // the context.
+      let provided_params = dependency_key.provided_params();
+      let params = {
         let mut params = entry.params().clone();
-        params.insert(provided_param);
+        for p in provided_params.iter() {
+          // The dependency key provides a parameter: include it in the Params that are already in
+          // the context.
+          params.insert(*p);
+        }
         params
-      } else {
-        entry.params().clone()
       };
 
       // Collect fulfillable candidates, used parameters, and cyclic deps.
       let mut cycled = false;
       let fulfillable_candidates = fulfillable_candidates_by_key
-        .entry(dependency_key)
+        .entry(dependency_key.clone())
         .or_insert_with(Vec::new);
       for candidate in self.rhs(&params, product) {
         match candidate {
@@ -406,11 +406,7 @@ impl<'t, R: Rule> GraphMaker<'t, R> {
                   .filter(|e| {
                     // Only entries that actually consume a provided (Get) parameter are eligible
                     // for consideration.
-                    if let Some(pp) = provided_param {
-                      e.params().contains(&pp)
-                    } else {
-                      true
-                    }
+                    provided_params.iter().any(|pp| e.params().contains(&pp))
                   })
                   .map(Entry::WithDeps)
                   .collect::<Vec<_>>(),
@@ -449,12 +445,13 @@ impl<'t, R: Rule> GraphMaker<'t, R> {
           reason: if params.is_empty() {
             format!(
               "No rule was available to compute {}. Maybe declare RootRule({})?",
-              dependency_key, product,
+              dependency_key.clone(),
+              product,
             )
           } else {
             format!(
               "No rule was available to compute {} with parameter type{} {}",
-              dependency_key,
+              dependency_key.clone(),
               if params.len() > 1 { "s" } else { "" },
               params_str(&params),
             )
@@ -549,13 +546,13 @@ impl<'t, R: Rule> GraphMaker<'t, R> {
     let params_powerset: Vec<Vec<R::TypeId>> = {
       let mut all_used_params = BTreeSet::new();
       for (key, inputs) in deps {
-        let provided_param = key.provided_param();
+        let provided_params = key.provided_params();
         for input in inputs {
           all_used_params.extend(
             input
               .params()
               .into_iter()
-              .filter(|p| Some(*p) != provided_param),
+              .filter(|p| !provided_params.iter().any(|pp| pp == p)),
           );
         }
       }
@@ -617,14 +614,14 @@ impl<'t, R: Rule> GraphMaker<'t, R> {
   ) -> Result<Option<Vec<ChosenDependency<'a, R>>>, Diagnostic<R::TypeId>> {
     let mut combination = Vec::new();
     for (key, input_entries) in deps {
-      let provided_param = key.provided_param();
+      let provided_params = key.provided_params();
       let satisfiable_entries = input_entries
         .iter()
         .filter(|input_entry| {
           input_entry
             .params()
             .iter()
-            .all(|p| available_params.contains(p) || Some(*p) == provided_param)
+            .all(|p| available_params.contains(p) || provided_params.iter().any(|pp| pp == p))
         })
         .collect::<Vec<_>>();
 
@@ -895,7 +892,7 @@ impl<R: Rule> RuleGraph<R> {
     let dependency_key = R::DependencyKey::new_root(product);
     let root = RootEntry {
       params: params.clone(),
-      dependency_key,
+      dependency_key: dependency_key.clone(),
     };
 
     // Attempt to find an exact match.

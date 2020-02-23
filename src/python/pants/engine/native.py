@@ -10,7 +10,7 @@ import sysconfig
 import traceback
 from contextlib import closing
 from types import CoroutineType
-from typing import Any, Iterable, NamedTuple, Tuple, Type, cast
+from typing import Any, Iterable, NamedTuple, Optional, Tuple, Type, cast
 
 import cffi
 import pkg_resources
@@ -247,6 +247,18 @@ class _FFISpecification(object):
     def __init__(self, ffi, lib):
         self._ffi = ffi
         self._lib = lib
+
+        self._max_num_params: int = 0
+        self._params_lengths: Optional = None
+
+    def _ensure_expand_params_lengths(self, num_params: int) -> None:
+      if self._max_num_params >= num_params:
+        return
+
+      if self._params_lengths is not None:
+        self._ffi.release(self._params_lengths)
+
+      self._params_lengths = self._ffi.new('*uint64_t', num_params)
 
     @memoized_classproperty
     def _extern_fields(cls):
@@ -485,6 +497,7 @@ class _FFISpecification(object):
         """Given a generator, send it the given value and return a response."""
         c = self._ffi.from_handle(context_handle)
         response = self._ffi.new("PyGeneratorResponse*")
+
         try:
             res = c.from_value(func[0]).send(c.from_value(arg[0]))
 
@@ -493,17 +506,21 @@ class _FFISpecification(object):
                 response.tag = self._lib.Get
                 response.get = (
                     TypeId(c.to_id(res.product)),
-                    c.to_value(res.subject),
-                    c.identify(res.subject),
-                    TypeId(c.to_id(res.subject_declared_type)),
+                    c.vals_buf([c.to_value(g) for g in res.params]),
+                    c.identities_buf([c.identify(g) for g in res.params]),
+                    c.type_ids_buf([TypeId(c.to_id(p)) for p in res.param_types]),
                 )
             elif type(res) in (tuple, list):
                 # GetMulti.
+
+                self._ensure_expand_params_lengths(len(res))
+
                 response.tag = self._lib.GetMulti
                 response.get_multi = (
                     c.type_ids_buf([TypeId(c.to_id(g.product)) for g in res]),
-                    c.vals_buf([c.to_value(g.subject) for g in res]),
-                    c.identities_buf([c.identify(g.subject) for g in res]),
+                    self._params_lengths,
+                    c.vals_buf([c.to_value(g.subject) for g in res for p in g.params]),
+                    c.identities_buf([c.identify(g.subject) for g in res for p in g.params]),
                 )
             else:
                 raise ValueError(f"internal engine error: unrecognized coroutine result {res}")

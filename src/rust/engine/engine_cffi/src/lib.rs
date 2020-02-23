@@ -554,9 +554,10 @@ pub extern "C" fn tasks_task_begin(
 }
 
 #[no_mangle]
-pub extern "C" fn tasks_add_get(tasks_ptr: *mut Tasks, product: TypeId, subject: TypeId) {
+pub extern "C" fn tasks_add_get(tasks_ptr: *mut Tasks, product: TypeId, param_types: TypeIdBuffer) {
   with_tasks(tasks_ptr, |tasks| {
-    tasks.add_get(product, subject);
+    let param_types = param_types.to_vec();
+    tasks.add_get(product, param_types.into_iter().collect());
   })
 }
 

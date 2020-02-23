@@ -9,7 +9,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from textwrap import dedent
-from typing import TYPE_CHECKING, Any, Dict, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Tuple, Type
 
 from pants.base.exception_sink import ExceptionSink
 from pants.base.exiter import PANTS_FAILED_EXIT_CODE
@@ -23,7 +23,7 @@ from pants.engine.fs import (
 from pants.engine.native import Function, TypeId
 from pants.engine.nodes import Return, Throw
 from pants.engine.objects import Collection, union
-from pants.engine.rules import RuleIndex, TaskRule
+from pants.engine.rules import RuleIndex, TaskRule, UnionMembership
 from pants.engine.selectors import Params
 from pants.util.contextutil import temporary_file_path
 from pants.util.dirutil import check_no_overlapping_paths
@@ -175,6 +175,32 @@ class Scheduler:
                 else:
                     raise ValueError("Unexpected Rule type: {}".format(rule))
 
+    def _all_polymorphic_types(
+        self,
+        param_types: List[Type],
+        union_rules: UnionMembership,
+    ) -> Iterable[List[Type]]:
+        if not param_types:
+            return []
+
+        head, tail = param_types[0], param_types[1:]
+
+        if union.is_instance(head):
+            # If the registered subject type is a union, add Get edges to all registered union
+            # members.
+            all_heads = union_rules.get(head, [])
+        else:
+            all_heads = [head]
+
+        assert len(all_heads) > 0
+        for h in all_heads:
+            all_tails = self._all_polymorphic_types(tail, union_rules)
+            for ts in all_tails:
+                full = [h] + ts
+                yield full
+            else:
+                yield [h]
+
     def _register_task(self, output_type, rule: TaskRule, union_rules):
         """Register the given TaskRule with the native scheduler."""
         func = Function(self._to_key(rule.func))
@@ -187,19 +213,18 @@ class Scheduler:
         if rule.name:
             self._native.lib.tasks_add_display_info(self._tasks, rule.name.encode())
 
-        def add_get_edge(product, subject):
+        def add_get_edge(product: Type, param_types: List[Type]):
             self._native.lib.tasks_add_get(
-                self._tasks, self._to_type(product), self._to_type(subject)
+                self._tasks,
+                self._to_type(product),
+                self._native.context.type_ids_buf([self._to_type(p) for p in param_types]),
             )
 
         for the_get in rule.input_gets:
-            if union.is_instance(the_get.subject_declared_type):
-                # If the registered subject type is a union, add Get edges to all registered union members.
-                for union_member in union_rules.get(the_get.subject_declared_type, []):
-                    add_get_edge(the_get.product, union_member)
-            else:
-                # Otherwise, the Get subject is a "concrete" type, so add a single Get edge.
-                add_get_edge(the_get.product, the_get.subject_declared_type)
+            for single_set_of_param_types in self._all_polymorphic_types(
+                    param_types=list(the_get.param_types),
+                    union_rules=union_rules):
+                add_get_edge(the_get.product_type, single_set_of_param_types)
 
         self._native.lib.tasks_task_end(self._tasks)
 

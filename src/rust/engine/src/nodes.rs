@@ -776,7 +776,7 @@ impl Task {
         let entry = entry.clone();
         let dependency_key = selectors::DependencyKey::JustGet(selectors::Get {
           product: get.product,
-          subject: *get.subject.type_id(),
+          params: get.params.iter().map(|p| p.type_id()).cloned().collect(),
         });
         let entry = context
           .core
@@ -787,33 +787,42 @@ impl Task {
             edges
               .entry_for(&dependency_key)
               .cloned()
-              .ok_or_else(|| match get.declared_subject {
-                Some(ty) if externs::is_union(ty) => {
-                  let value = externs::get_value_from_type_id(ty);
-                  match externs::call_method(
-                    &value,
-                    "non_member_error_message",
-                    &[externs::val_for(&get.subject)],
-                  ) {
-                    Ok(err_msg) => throw(&externs::val_to_str(&err_msg)),
-                    // If the non_member_error_message() call failed for any reason,
-                    // fall back to a generic message.
-                    Err(_e) => throw(&format!(
-                      "Type {} is not a member of the {} @union",
-                      get.subject.type_id(),
-                      ty
-                    )),
-                  }
-                }
-                _ => throw(&format!(
+              .ok_or_else(|| {
+                /* match get.declared_subject { */
+                /*   // Display a nice specialized error message if a @union type fails to be resolved. */
+                /*   Some(ty) if externs::is_union(ty) => { */
+                /*     let value = externs::get_value_from_type_id(ty); */
+                /*     match externs::call_method( */
+                /*       &value, */
+                /*       "non_member_error_message", */
+                /*       &[externs::val_for(&get.subject)], */
+                /*     ) { */
+                /*       Ok(err_msg) => throw(&externs::val_to_str(&err_msg)), */
+                /*       // If the non_member_error_message() call failed for any reason, */
+                /*       // fall back to a generic message. */
+                /*       Err(_e) => throw(&format!( */
+                /*         "Type {} is not a member of the {} @union", */
+                /*         get.subject.type_id(), */
+                /*         ty */
+                /*       )), */
+                /*     } */
+                /*   } */
+                /*   _ => throw(&format!( */
+                /*     "{:?} did not declare a dependency on {:?}", */
+                /*     entry, dependency_key */
+                /*   )), */
+                /* } */
+                throw(&format!(
                   "{:?} did not declare a dependency on {:?}",
                   entry, dependency_key
-                )),
+                ))
               })
           });
         // The subject of the get is a new parameter that replaces an existing param of the same
         // type.
-        params.put(get.subject);
+        for p in get.params.iter() {
+          params.put(*p);
+        }
         future::result(entry)
           .and_then(move |entry| Select::new(params, get.product, entry).run(context.clone()))
       })

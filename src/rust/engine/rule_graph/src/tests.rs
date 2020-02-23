@@ -70,8 +70,8 @@ impl fmt::Display for Rule {
 }
 
 // A product and a param. Abbreviated for simpler construction and matching.
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
-struct DependencyKey(&'static str, Option<&'static str>);
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct DependencyKey(&'static str, Vec<&'static str>);
 
 impl super::DependencyKey for DependencyKey {
   type TypeId = &'static str;
@@ -84,7 +84,7 @@ impl super::DependencyKey for DependencyKey {
     self.0
   }
 
-  fn provided_param(&self) -> Option<Self::TypeId> {
+  fn provided_params(&self) -> Vec<Self::TypeId> {
     self.1
   }
 }

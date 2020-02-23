@@ -15,7 +15,7 @@ pub trait TypeId: Clone + Copy + Debug + Display + Hash + Eq + Ord + Sized + 'st
     I: Iterator<Item = Self>;
 }
 
-pub trait DependencyKey: Clone + Copy + Debug + Display + Hash + Eq + Sized + 'static {
+pub trait DependencyKey: Clone + Debug + Display + Hash + Eq + Sized + 'static {
   type TypeId: TypeId;
 
   ///
@@ -32,7 +32,7 @@ pub trait DependencyKey: Clone + Copy + Debug + Display + Hash + Eq + Sized + 's
   ///
   /// Returns the Param (input) type for this dependency, if it provides one.
   ///
-  fn provided_param(&self) -> Option<Self::TypeId>;
+  fn provided_params(&self) -> Vec<Self::TypeId>;
 }
 
 pub trait DisplayForGraph {

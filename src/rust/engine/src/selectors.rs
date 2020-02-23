@@ -3,19 +3,26 @@
 
 use std::fmt;
 
+use itertools::Itertools;
+
 use crate::core::TypeId;
 
 use rule_graph;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Get {
   pub product: TypeId,
-  pub subject: TypeId,
+  pub params: Vec<TypeId>,
 }
 
 impl fmt::Display for Get {
   fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-    write!(f, "Get[{}]({})", self.product, self.subject)
+    write!(
+      f,
+      "Get[{}]({})",
+      self.product,
+      self.params.iter().join(", ")
+    )
   }
 }
 
@@ -39,7 +46,7 @@ impl fmt::Debug for Select {
 ///
 /// A key for the dependencies used from a rule.
 ///
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq)]
 pub enum DependencyKey {
   // A Get for a particular product/subject pair.
   JustGet(Get),
@@ -67,10 +74,10 @@ impl rule_graph::DependencyKey for DependencyKey {
     }
   }
 
-  fn provided_param(&self) -> Option<TypeId> {
+  fn provided_params(&self) -> Vec<TypeId> {
     match self {
-      DependencyKey::JustGet(ref g) => Some(g.subject),
-      DependencyKey::JustSelect(_) => None,
+      DependencyKey::JustGet(ref g) => g.params.clone(),
+      DependencyKey::JustSelect(_) => vec![],
     }
   }
 }
