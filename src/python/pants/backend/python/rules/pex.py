@@ -30,6 +30,7 @@ from pants.engine.legacy.structs import PythonTargetAdaptor, TargetAdaptor
 from pants.engine.platform import Platform, PlatformConstraint
 from pants.engine.rules import rule, subsystem_rule
 from pants.engine.selectors import Get
+from pants.python.python_repos import PythonRepos
 from pants.python.python_setup import PythonSetup
 from pants.util.logging import LogLevel
 from pants.util.memo import memoized_property
@@ -222,6 +223,7 @@ class PexDebug:
 async def create_pex(
     request: CreatePex,
     pex_bin: DownloadedPexBin,
+    python_repos: PythonRepos,
     python_setup: PythonSetup,
     subprocess_encoding_environment: SubprocessEncodingEnvironment,
     pex_build_environment: PexBuildEnvironment,
@@ -240,6 +242,9 @@ async def create_pex(
 
     pex_debug = PexDebug(log_level)
     argv.extend(pex_debug.iter_pex_args())
+
+    for repo in python_repos.repos:
+        argv.extend(["-f", repo])
 
     if python_setup.resolver_jobs:
         argv.extend(["--jobs", python_setup.resolver_jobs])
@@ -335,4 +340,5 @@ def rules():
     return [
         create_pex,
         subsystem_rule(PythonSetup),
+        subsystem_rule(PythonRepos),
     ]

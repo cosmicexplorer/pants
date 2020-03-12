@@ -6,9 +6,11 @@ import typing
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from collections.abc import Iterable
-from typing import Generic, Iterator, TypeVar
+from dataclasses import dataclass
+from typing import Dict, Generic, Iterator, Tuple, TypeVar
 
-from pants.util.meta import decorated_type_checkable
+from pants.util.memo import memoized_property
+from pants.util.meta import decorated_type_checkable, frozen_after_init
 
 
 class SerializationError(Exception):
@@ -34,6 +36,17 @@ def _unpickle_serializable(serializable_class, kwargs):
     return serializable_class(**kwargs)
 
 
+# NB: instagram's libCST solves the below!!!
+
+# NB: if we want 100% reproducibly-generated BUILD files (and I think that we do), we likely have to
+# enforce some kind of stable ordering for entities to be written out to a BUILD file.
+# As mentioned below, not all objects will have a `name` (and therefore not an Address). This goes
+# not just for variables and functions within BUILD files, but also sub-expressions of named objects
+# (e.g. the individual python_requirement() calls within the `requirements` kwarg of a
+# python_requirement_library()).
+
+# (does buildozer not do the above? if not, how does it respond to targets generated via loop or
+# function? does it just...not? then what's the point of starlark anyway???)
 class Locatable(ABC):
     """Marks a class whose constructor should receive its spec_path relative to the build root.
 
@@ -213,3 +226,29 @@ def union(cls):
     return union.define_instance_of(
         cls, non_member_error_message=staticmethod(non_member_error_message)
     )
+
+
+_K = TypeVar("_K")
+_V = TypeVar("_V")
+
+
+@frozen_after_init
+@dataclass(unsafe_hash=True)
+class HashableDict(Generic[_K, _V]):
+    _tuple_mapping: Tuple[Tuple[_K, _V], ...]
+
+    def __init__(self, mapping: Dict[_K, _V]) -> None:
+        self._tuple_mapping = tuple(mapping.items())
+
+    def keys(self) -> Iterable:
+        return tuple(entry[0] for entry in self._tuple_mapping)
+
+    def values(self) -> Iterable:
+        return tuple(entry[1] for entry in self._tuple_mapping)
+
+    def items(self) -> Tuple[Tuple[_K, _V], ...]:
+        return self._tuple_mapping
+
+    @memoized_property
+    def as_dict(self) -> Dict[_K, _V]:
+        return dict(self._tuple_mapping)
