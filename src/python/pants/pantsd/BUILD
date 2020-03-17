@@ -25,6 +25,18 @@ python_library(
 )
 
 python_library(
+  name = 'vcfs',
+  sources = ['vcfs.py'],
+  dependencies = [
+    'src/python/pants/util:dirutil',
+    'src/python/pants/util:retry',
+    ':process_manager',
+    ':watchman_client'
+  ],
+  tags = {"partially_type_checked"},
+)
+
+python_library(
   name = 'watchman',
   sources = ['watchman.py'],
   dependencies = [

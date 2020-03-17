@@ -674,6 +674,6 @@ fn print_upload_summary(mode: Option<&str>, report: &SummaryWithDigest) {
     Some("json") => println!("{}", serde_json::to_string_pretty(&report).unwrap()),
     Some("simple") => println!("{} {}", report.digest.0, report.digest.1),
     // This should never be reached, as clap should error with unknown formats.
-    _ => eprintln!("Unknown summary format."),
+    _ => unreachable!("Unknown summary format."),
   };
 }

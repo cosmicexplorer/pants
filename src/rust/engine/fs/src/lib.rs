@@ -153,7 +153,7 @@ impl GitignoreStyleExcludes {
     ignore_builder.build()
   }
 
-  fn exclude_patterns(&self) -> &[String] {
+  pub fn exclude_patterns(&self) -> &[String] {
     self.patterns.as_slice()
   }
 
@@ -455,11 +455,11 @@ impl GlobExpansionConjunction {
 
 #[derive(Debug)]
 pub struct PathGlobs {
-  include: Vec<PathGlobIncludeEntry>,
-  exclude: Arc<GitignoreStyleExcludes>,
-  strict_match_behavior: StrictGlobMatching,
-  conjunction: GlobExpansionConjunction,
-  patterns: Vec<glob::Pattern>,
+  pub include: Vec<PathGlobIncludeEntry>,
+  pub exclude: Arc<GitignoreStyleExcludes>,
+  pub strict_match_behavior: StrictGlobMatching,
+  pub conjunction: GlobExpansionConjunction,
+  pub patterns: Vec<glob::Pattern>,
 }
 
 impl PathGlobs {

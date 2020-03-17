@@ -23,8 +23,8 @@ use crate::tasks::{self, Intrinsic, Rule};
 use boxfuture::{try_future, BoxFuture, Boxable};
 use bytes::{self, BufMut};
 use fs::{
-  self, Dir, DirectoryListing, File, FileContent, GlobExpansionConjunction, GlobMatching, Link,
-  PathGlobs, PathStat, StrictGlobMatching, VFS,
+  self, Dir, DirectoryListing, File, FileContent, GlobExpansionConjunction, Link, PathGlobs,
+  PathStat, StrictGlobMatching, VFS,
 };
 use hashing;
 use process_execution::{
@@ -49,12 +49,12 @@ fn err<O: Send + 'static>(failure: Failure) -> NodeFuture<O> {
 }
 
 impl VFS<Failure> for Context {
-  fn read_link(&self, link: &Link) -> NodeFuture<PathBuf> {
-    self.get(ReadLink(link.clone())).map(|res| res.0).to_boxed()
+  fn read_link(&self, _link: &Link) -> NodeFuture<PathBuf> {
+    unimplemented!();
   }
 
-  fn scandir(&self, dir: Dir) -> NodeFuture<Arc<DirectoryListing>> {
-    self.get(Scandir(dir))
+  fn scandir(&self, _dir: Dir) -> NodeFuture<Arc<DirectoryListing>> {
+    unimplemented!();
   }
 
   fn is_ignored(&self, stat: &fs::Stat) -> bool {
@@ -367,35 +367,6 @@ impl WrappedNode for MultiPlatformExecuteProcess {
 pub struct ProcessResult(pub process_execution::FallibleExecuteProcessResultWithPlatform);
 
 ///
-/// A Node that represents reading the destination of a symlink (non-recursively).
-///
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct ReadLink(Link);
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LinkDest(PathBuf);
-
-impl WrappedNode for ReadLink {
-  type Item = LinkDest;
-
-  fn run(self, context: Context) -> NodeFuture<LinkDest> {
-    context
-      .core
-      .vfs
-      .read_link(&self.0)
-      .map(LinkDest)
-      .map_err(|e| throw(&format!("{}", e)))
-      .to_boxed()
-  }
-}
-
-impl From<ReadLink> for NodeKey {
-  fn from(n: ReadLink) -> Self {
-    NodeKey::ReadLink(n)
-  }
-}
-
-///
 /// A Node that represents reading a file and fingerprinting its contents.
 ///
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -409,7 +380,7 @@ impl WrappedNode for DigestFile {
       .core
       .vfs
       .read_file(&self.0)
-      .map_err(|e| throw(&format!("{}", e)))
+      .map_err(|e| throw(&format!("{:?}", e)))
       .and_then(move |c| {
         context
           .core
@@ -428,47 +399,20 @@ impl From<DigestFile> for NodeKey {
 }
 
 ///
-/// A Node that represents executing a directory listing that returns a Stat per directory
-/// entry (generally in one syscall). No symlinks are expanded.
-///
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct Scandir(Dir);
-
-impl WrappedNode for Scandir {
-  type Item = Arc<DirectoryListing>;
-
-  fn run(self, context: Context) -> NodeFuture<Arc<DirectoryListing>> {
-    context
-      .core
-      .vfs
-      .scandir(self.0)
-      .map(Arc::new)
-      .map_err(|e| throw(&format!("{}", e)))
-      .to_boxed()
-  }
-}
-
-impl From<Scandir> for NodeKey {
-  fn from(n: Scandir) -> Self {
-    NodeKey::Scandir(n)
-  }
-}
-
-///
 /// A Node that captures an store::Snapshot for a PathGlobs subject.
 ///
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Snapshot(pub Key);
 
 impl Snapshot {
+  #[allow(unreachable_code)]
   fn create(context: Context, path_globs: PathGlobs) -> NodeFuture<store::Snapshot> {
     // Recursively expand PathGlobs into PathStats.
-    // We rely on Context::expand tracking dependencies for scandirs,
-    // and store::Snapshot::from_path_stats tracking dependencies for file digests.
     context
-      .expand(path_globs)
-      .map_err(|e| format!("{}", e))
+      .expand_globs(path_globs)
+      .map_err(|e| format!("{:?}", e))
       .and_then(move |path_stats| {
+        eprintln!("path_stats: {:?}", path_stats);
         store::Snapshot::from_path_stats(
           context.core.store(),
           &context,
@@ -986,8 +930,6 @@ pub enum NodeKey {
   DigestFile(DigestFile),
   DownloadedFile(DownloadedFile),
   MultiPlatformExecuteProcess(Box<MultiPlatformExecuteProcess>),
-  ReadLink(ReadLink),
-  Scandir(Scandir),
   Select(Box<Select>),
   Snapshot(Snapshot),
   Task(Box<Task>),
@@ -1002,16 +944,12 @@ impl NodeKey {
       &NodeKey::Task(ref s) => format!("{}", s.product),
       &NodeKey::Snapshot(..) => "Snapshot".to_string(),
       &NodeKey::DigestFile(..) => "DigestFile".to_string(),
-      &NodeKey::ReadLink(..) => "LinkDest".to_string(),
-      &NodeKey::Scandir(..) => "DirectoryListing".to_string(),
     }
   }
 
   pub fn fs_subject(&self) -> Option<&Path> {
     match self {
       &NodeKey::DigestFile(ref s) => Some(s.0.path.as_path()),
-      &NodeKey::ReadLink(ref s) => Some((s.0).0.as_path()),
-      &NodeKey::Scandir(ref s) => Some((s.0).0.as_path()),
 
       // Not FS operations:
       // Explicitly listed so that if people add new NodeKeys they need to consider whether their
@@ -1062,8 +1000,6 @@ impl Node for NodeKey {
         NodeKey::DigestFile(n) => n.run(context).map(NodeResult::from).to_boxed(),
         NodeKey::DownloadedFile(n) => n.run(context).map(NodeResult::from).to_boxed(),
         NodeKey::MultiPlatformExecuteProcess(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::ReadLink(n) => n.run(context).map(NodeResult::from).to_boxed(),
-        NodeKey::Scandir(n) => n.run(context).map(NodeResult::from).to_boxed(),
         NodeKey::Select(n) => n.run(context).map(NodeResult::from).to_boxed(),
         NodeKey::Snapshot(n) => n.run(context).map(NodeResult::from).to_boxed(),
         NodeKey::Task(n) => n.run(context).map(NodeResult::from).to_boxed(),
@@ -1081,11 +1017,7 @@ impl Node for NodeKey {
   fn digest(res: NodeResult) -> Option<hashing::Digest> {
     match res {
       NodeResult::Digest(d) => Some(d),
-      NodeResult::DirectoryListing(_)
-      | NodeResult::LinkDest(_)
-      | NodeResult::ProcessResult(_)
-      | NodeResult::Snapshot(_)
-      | NodeResult::Value(_) => None,
+      NodeResult::ProcessResult(_) | NodeResult::Snapshot(_) | NodeResult::Value(_) => None,
     }
   }
 
@@ -1103,8 +1035,6 @@ impl Node for NodeKey {
       NodeKey::MultiPlatformExecuteProcess(mp_epr) => mp_epr.0.user_facing_name(),
       NodeKey::DigestFile(..) => None,
       NodeKey::DownloadedFile(..) => None,
-      NodeKey::ReadLink(..) => None,
-      NodeKey::Scandir(..) => None,
       NodeKey::Select(..) => None,
     }
   }
@@ -1118,8 +1048,6 @@ impl Display for NodeKey {
       &NodeKey::MultiPlatformExecuteProcess(ref s) => {
         write!(f, "MultiPlatformExecuteProcess({:?}", s.0)
       }
-      &NodeKey::ReadLink(ref s) => write!(f, "ReadLink({:?})", s.0),
-      &NodeKey::Scandir(ref s) => write!(f, "Scandir({:?})", s.0),
       &NodeKey::Select(ref s) => write!(f, "Select({}, {})", s.params, s.product,),
       &NodeKey::Task(ref s) => write!(f, "{:?}", s),
       &NodeKey::Snapshot(ref s) => write!(f, "Snapshot({})", format!("{}", &s.0)),
@@ -1148,8 +1076,6 @@ impl NodeError for Failure {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NodeResult {
   Digest(hashing::Digest),
-  DirectoryListing(Arc<DirectoryListing>),
-  LinkDest(LinkDest),
   ProcessResult(ProcessResult),
   Snapshot(Arc<store::Snapshot>),
   Value(Value),
@@ -1176,18 +1102,6 @@ impl From<hashing::Digest> for NodeResult {
 impl From<ProcessResult> for NodeResult {
   fn from(v: ProcessResult) -> Self {
     NodeResult::ProcessResult(v)
-  }
-}
-
-impl From<LinkDest> for NodeResult {
-  fn from(v: LinkDest) -> Self {
-    NodeResult::LinkDest(v)
-  }
-}
-
-impl From<Arc<DirectoryListing>> for NodeResult {
-  fn from(v: Arc<DirectoryListing>) -> Self {
-    NodeResult::DirectoryListing(v)
   }
 }
 
@@ -1230,28 +1144,6 @@ impl TryFrom<NodeResult> for ProcessResult {
   fn try_from(nr: NodeResult) -> Result<Self, ()> {
     match nr {
       NodeResult::ProcessResult(v) => Ok(v),
-      _ => Err(()),
-    }
-  }
-}
-
-impl TryFrom<NodeResult> for LinkDest {
-  type Error = ();
-
-  fn try_from(nr: NodeResult) -> Result<Self, ()> {
-    match nr {
-      NodeResult::LinkDest(v) => Ok(v),
-      _ => Err(()),
-    }
-  }
-}
-
-impl TryFrom<NodeResult> for Arc<DirectoryListing> {
-  type Error = ();
-
-  fn try_from(nr: NodeResult) -> Result<Self, ()> {
-    match nr {
-      NodeResult::DirectoryListing(v) => Ok(v),
       _ => Err(()),
     }
   }

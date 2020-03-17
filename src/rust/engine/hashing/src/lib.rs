@@ -32,11 +32,14 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde::{Deserialize, Deserializer};
 use sha2::Sha256;
 
-use serde::de::{MapAccess, Visitor};
+use serde::de::Visitor;
 use serde::export::fmt::Error;
 use serde::export::Formatter;
 use std::fmt;
 use std::io::{self, Write};
+
+#[cfg(not(feature = "native-repr"))]
+use serde::de::MapAccess;
 
 pub const EMPTY_FINGERPRINT: Fingerprint = Fingerprint([
   0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
@@ -46,6 +49,11 @@ pub const EMPTY_DIGEST: Digest = Digest(EMPTY_FINGERPRINT, 0);
 
 pub const FINGERPRINT_SIZE: usize = 32;
 
+#[cfg(feature = "native-repr")]
+#[repr(C)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd)]
+pub struct Fingerprint(pub [u8; FINGERPRINT_SIZE]);
+#[cfg(not(feature = "native-repr"))]
 #[derive(Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct Fingerprint(pub [u8; FINGERPRINT_SIZE]);
 
@@ -147,6 +155,11 @@ impl<'de> Deserialize<'de> for Fingerprint {
 /// It is equivalent to a Bazel Remote Execution Digest, but without the overhead (and awkward API)
 /// of needing to create an entire protobuf to pass around the two fields.
 ///
+#[cfg(feature = "native-repr")]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Digest(pub Fingerprint, pub usize);
+#[cfg(not(feature = "native-repr"))]
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Digest(pub Fingerprint, pub usize);
 
@@ -162,6 +175,7 @@ impl Serialize for Digest {
   }
 }
 
+#[cfg(not(feature = "native-repr"))]
 #[derive(Deserialize)]
 #[serde(field_identifier, rename_all = "snake_case")]
 enum Field {
@@ -169,6 +183,7 @@ enum Field {
   SizeBytes,
 }
 
+#[cfg(not(feature = "native-repr"))]
 impl<'de> Deserialize<'de> for Digest {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
   where
@@ -284,3 +299,6 @@ mod digest_tests;
 
 #[cfg(test)]
 mod hasher_tests;
+
+#[no_mangle]
+pub unsafe extern "C" fn _throwaway_for_cbindgen_debug_info(_fp: Fingerprint, _d: Digest) {}

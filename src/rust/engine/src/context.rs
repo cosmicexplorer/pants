@@ -2,7 +2,10 @@
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 
 use std;
+use std::collections::BTreeMap;
 use std::convert::{Into, TryInto};
+use std::env;
+use std::io;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,7 +20,10 @@ use crate::tasks::{Rule, Tasks};
 use crate::types::Types;
 use boxfuture::{BoxFuture, Boxable};
 use core::clone::Clone;
-use fs::{safe_create_dir_all_ioerror, PosixFS};
+use fs::{
+  safe_create_dir_all_ioerror, Dir, DirectoryListing, File, FileContent, GlobMatching, Link,
+  PathGlobs, PathStat, PosixFS, Stat, VFS,
+};
 use graph::{EntryId, Graph, NodeContext};
 use process_execution::{
   self, speculate::SpeculatingCommandRunner, BoundedCommandRunner, ExecuteProcessRequestMetadata,
@@ -27,10 +33,81 @@ use rand::seq::SliceRandom;
 use reqwest;
 use rule_graph::RuleGraph;
 use sharded_lmdb::ShardedLmdb;
-use std::collections::BTreeMap;
 use store::Store;
+use vcfs::{self, VcfsInstance};
 
 const GIGABYTES: usize = 1024 * 1024 * 1024;
+
+#[derive(Debug)]
+pub enum VFSError {
+  Io(io::Error),
+  Vcfs(vcfs::Error),
+}
+
+impl From<io::Error> for VFSError {
+  fn from(err: io::Error) -> Self {
+    VFSError::Io(err)
+  }
+}
+
+impl From<vcfs::Error> for VFSError {
+  fn from(err: vcfs::Error) -> Self {
+    VFSError::Vcfs(err)
+  }
+}
+
+#[derive(Clone)]
+pub enum VFSWrapper {
+  Real(Arc<PosixFS>),
+  Vcfs(Arc<VcfsInstance>),
+}
+
+impl VFSWrapper {
+  pub fn read_file(&self, file: &File) -> BoxFuture<FileContent, VFSError> {
+    match self {
+      Self::Real(posix_fs) => posix_fs.read_file(file).map_err(|e| e.into()).to_boxed(),
+      Self::Vcfs(_) => unimplemented!(),
+    }
+  }
+
+  pub fn expand_globs(
+    &self,
+    path_globs: PathGlobs,
+  ) -> impl Future<Item = Vec<PathStat>, Error = vcfs::Error> {
+    match self {
+      Self::Real(posix_fs) => posix_fs.expand(path_globs).map_err(|e| e.into()).to_boxed(),
+      Self::Vcfs(vcfs) => vcfs.expand_globs(path_globs).to_boxed(),
+    }
+  }
+}
+
+impl VFS<VFSError> for VFSWrapper {
+  fn read_link(&self, link: &Link) -> BoxFuture<PathBuf, VFSError> {
+    match self {
+      Self::Real(posix_fs) => posix_fs.read_link(link).map_err(|e| e.into()).to_boxed(),
+      Self::Vcfs(_) => unimplemented!(),
+    }
+  }
+
+  fn scandir(&self, dir: Dir) -> BoxFuture<Arc<DirectoryListing>, VFSError> {
+    match self {
+      Self::Real(posix_fs) => posix_fs.scandir(dir).map_err(|e| e.into()).to_boxed(),
+      Self::Vcfs(_) => unimplemented!(),
+    }
+  }
+
+  fn is_ignored(&self, stat: &Stat) -> bool {
+    match self {
+      Self::Real(posix_fs) => posix_fs.is_ignored(stat),
+      Self::Vcfs(_) => false,
+    }
+  }
+
+  fn mk_error(msg: &str) -> VFSError {
+    /* FIXME: branch on identity here too somehow? */
+    Arc::<PosixFS>::mk_error(msg).into()
+  }
+}
 
 ///
 /// The core context shared (via Arc) between the Scheduler and the Context objects of
@@ -49,7 +126,7 @@ pub struct Core {
   store: Store,
   pub command_runner: Box<dyn process_execution::CommandRunner>,
   pub http_client: reqwest::r#async::Client,
-  pub vfs: PosixFS,
+  pub vfs: VFSWrapper,
   pub build_root: PathBuf,
 }
 
@@ -222,19 +299,32 @@ impl Core {
     let http_client = reqwest::r#async::Client::new();
     let rule_graph = RuleGraph::new(tasks.as_map(), root_subject_types);
 
+    let vfs = if let Ok(_) = env::var("VCFS") {
+      let vcfs = VcfsInstance::new(executor.clone(), build_root.clone());
+      vcfs
+        .map(Arc::new)
+        .map(VFSWrapper::Vcfs)
+        .map_err(|e| format!("Could not initialize VFS: {:?}", e))
+    } else {
+      let posix_fs = PosixFS::new(&build_root, &ignore_patterns, executor.clone());
+      posix_fs
+        .map(Arc::new)
+        .map(VFSWrapper::Real)
+        .map_err(|e| format!("Could not initialize VFS: {:?}", e))
+    };
+
     Ok(Core {
       graph: Graph::new(),
       tasks: tasks,
       rule_graph: rule_graph,
       types: types,
-      executor: executor.clone(),
+      executor,
       store,
       command_runner,
       http_client,
       // TODO: Errors in initialization should definitely be exposed as python
       // exceptions, rather than as panics.
-      vfs: PosixFS::new(&build_root, &ignore_patterns, executor)
-        .map_err(|e| format!("Could not initialize VFS: {:?}", e))?,
+      vfs: vfs?,
       build_root: build_root,
     })
   }
@@ -278,6 +368,13 @@ impl Context {
           .unwrap_or_else(|_| panic!("A Node implementation was ambiguous."))
       })
       .to_boxed()
+  }
+
+  pub fn expand_globs(
+    &self,
+    path_globs: PathGlobs,
+  ) -> impl Future<Item = Vec<PathStat>, Error = vcfs::Error> {
+    self.core.vfs.expand_globs(path_globs)
   }
 }
 

@@ -5,6 +5,10 @@ edition = "2018"
 authors = [ "Pants Build <pantsbuild@gmail.com>" ]
 publish = false
 
+[features]
+default = []
+native-repr = []
+
 [dependencies]
 digest = "0.8"
 hex = "0.3.1"
@@ -12,3 +16,7 @@ sha2 = "0.8"
 serde = "1.0"
 serde_derive = "1.0"
 serde_test = "1.0"
+
+[build-dependencies]
+cbindgen = "0.8.6"
+walkdir = "2"

@@ -16,7 +16,8 @@ python_library(
   sources = ['fs_event_service.py'],
   dependencies = [
     ':pants_service',
-    'src/python/pants/pantsd:watchman'
+    'src/python/pants/pantsd:vcfs',
+    'src/python/pants/pantsd:watchman',
   ],
   tags = {"partially_type_checked"},
 )

@@ -27,6 +27,7 @@ members = [
   "fs/brfs",
   "fs/fs_util",
   "fs/store",
+  "fs/vcfs",
   "graph",
   "hashing",
   "logging",
@@ -109,6 +110,7 @@ ui = { path = "ui" }
 url = "1.7.1"
 uuid = { version = "0.7", features = ["v4"] }
 task_executor = { path = "task_executor" }
+vcfs = { path = "fs/vcfs" }
 workunit_store = { path = "workunit_store" }
 
 [patch.crates-io]

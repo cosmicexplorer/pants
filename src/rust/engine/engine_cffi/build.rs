@@ -103,7 +103,7 @@ fn main() -> Result<(), CffiBuildError> {
 
   let scheduler_file_path = Path::new("src/cffi/scheduler.h");
   let crate_dir = env::var("CARGO_MANIFEST_DIR")?;
-  cbindgen::generate(crate_dir)?.write_to_file(scheduler_file_path);
+  cbindgen::generate(&crate_dir)?.write_to_file(scheduler_file_path);
 
   // Generate the cffi c sources.
   let build_root = BuildRoot::find()?;

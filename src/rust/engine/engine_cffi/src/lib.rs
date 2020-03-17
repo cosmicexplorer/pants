@@ -343,6 +343,7 @@ fn make_core(
     })?;
 
   let remote_execution_headers = remote_execution_headers_buf.to_map("remote-execution-headers")?;
+
   Core::new(
     root_type_ids,
     tasks,

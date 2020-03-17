@@ -218,7 +218,7 @@ class JvmToolMixin:
         classpath = cls.tool_classpath_entries_from_products(products, key, scope)
         if len(classpath) != 1:
             params = dict(
-                tool=key, scope=scope, count=len(classpath), classpath="\n\t".join(classpath)
+                tool=key, scope=scope, count=len(classpath), classpath="\n\t".join(str(cp) for cp in classpath)
             )
             raise cls.InvalidToolClasspath(
                 "Expected tool {tool} in scope {scope} to resolve to one "

@@ -56,6 +56,15 @@ def global_subsystems():
     }
 
 
+def globs(*globs, **kwargs):
+    positive = list(globs)
+    exclude = kwargs.get('exclude', [])
+    negative = [
+        f'!{pat}' for pat in exclude
+    ]
+    return positive + negative
+
+
 def build_file_aliases():
     return BuildFileAliases(
         targets={
@@ -72,6 +81,7 @@ def build_file_aliases():
             "python_requirement": PythonRequirement,
             "python_artifact": PythonArtifact,
             "setup_py": PythonArtifact,
+            'globs': globs,
         },
         context_aware_object_factories={
             "python_requirements": PythonRequirements,

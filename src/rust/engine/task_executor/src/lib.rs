@@ -26,6 +26,7 @@
 #![allow(clippy::mutex_atomic)]
 
 use futures01::{future, Future};
+use parking_lot::RwLock;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -36,16 +37,16 @@ use tokio::runtime::Runtime;
 
 #[derive(Clone)]
 pub struct Executor {
-  runtime: Arc<Runtime>,
+  runtime: Arc<RwLock<Runtime>>,
   io_pool: futures_cpupool::CpuPool,
 }
 
 impl Executor {
   pub fn new() -> Executor {
     Executor {
-      runtime: Arc::new(
+      runtime: Arc::new(RwLock::new(
         Runtime::new().unwrap_or_else(|e| panic!("Could not initialize Runtime: {:?}", e)),
-      ),
+      )),
       io_pool: futures_cpupool::CpuPool::new_num_cpus(),
     }
   }
@@ -61,6 +62,7 @@ impl Executor {
   pub fn spawn_and_ignore<F: Future<Item = (), Error = ()> + Send + 'static>(&self, future: F) {
     self
       .runtime
+      .read_recursive()
       .executor()
       .spawn(Self::future_with_correct_context(future))
   }
@@ -95,8 +97,22 @@ impl Executor {
   ) -> impl Future<Item = Item, Error = Error> {
     futures01::sync::oneshot::spawn(
       Self::future_with_correct_context(future),
-      &self.runtime.executor(),
+      &self.runtime.read_recursive().executor(),
     )
+  }
+
+  pub fn block_on_with_persistent_runtime<
+    Item: Send + 'static,
+    Error: Send + 'static,
+    F: Future<Item = Item, Error = Error> + Send + 'static,
+  >(
+    &self,
+    future: F,
+  ) -> Result<Item, Error> {
+    self
+      .runtime
+      .write()
+      .block_on(Self::future_with_correct_context(future))
   }
 
   ///
