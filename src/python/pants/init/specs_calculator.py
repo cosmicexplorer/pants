@@ -109,7 +109,7 @@ class SpecsCalculator:
         logger.debug("query exprs are: %s (%s)", exprs, bool(exprs))
         targets_specified = sum(
             1
-            for item in (changed_options.is_actionable(), specs.provided_specs.dependencies, exprs)
+            for item in (changed_options.is_actionable(), specs.provided_specs.dependencies)
             if item
         )
 
