@@ -93,14 +93,14 @@ def _print_documented_target(target):
 def _print_fingerprinted_target(fingerprinted_target):
     was_root = fingerprinted_target.was_root
     address = fingerprinted_target.address.spec
-    target_type = fingerprinted_target.type_alias
+    type_alias = fingerprinted_target.type_alias
     intransitive_fingerprint = fingerprinted_target.intransitive_fingerprint_arg
     transitive_fingerprint = fingerprinted_target.transitive_fingerprint_arg
     return json.dumps(
         {
             "was_root": was_root,
             "address": address,
-            "target_type": target_type,
+            "type_alias": type_alias,
             "intransitive_fingerprint": intransitive_fingerprint,
             "transitive_fingerprint": transitive_fingerprint,
         }

@@ -198,13 +198,13 @@ class ListTargetsTest(GoalRuleTestBase):
         f_alias, c3, d = tuple(self._list_json(["f:alias"]))
 
         assert f_alias["address"] == "f:alias"
-        assert f_alias["target_type"] == "target"
+        assert f_alias["type_alias"] == "target"
 
         assert c3["address"] == "a/b/c:c3"
-        assert c3["target_type"] == "java_library"
+        assert c3["type_alias"] == "java_library"
 
         assert d["address"] == "a/b/d:d"
-        assert d["target_type"] == "java_library"
+        assert d["type_alias"] == "java_library"
 
     def test_list_json_distinct(self):
         """Test that modifying sources will change the recorded fingerprints."""
