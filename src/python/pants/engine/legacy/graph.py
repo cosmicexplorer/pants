@@ -8,7 +8,7 @@ from collections import defaultdict, deque
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import PurePath
-from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Set, Tuple, Type, Union, cast
+from typing import Any, DefaultDict, Dict, Iterable, Iterator, List, Optional, Set, Tuple, Type, Union, cast
 
 from pants.base.exceptions import ResolveError, TargetDefinitionException
 from pants.base.hash_utils import stable_json_sha1
@@ -513,10 +513,28 @@ class TransitiveFingerprintedTarget:
     """A dataclass containing memoized fingerprint information for some TransitiveHydratedTarget."""
 
     was_root: bool
-    address: Address
-    type_alias: str
+    adaptor: TargetAdaptor
     intransitive_fingerprint_arg: str
     transitive_fingerprint_arg: str
+
+    @property
+    def address(self) -> Address:
+        return self.adaptor.address
+
+    @property
+    def type_alias(self) -> str:
+        return self.adaptor.type_alias
+
+    @property
+    def dependencies(self) -> List[TargetAdaptor]:
+        return list(self.adaptor.dependencies)
+
+    @property
+    def snapshot(self) -> Optional[Snapshot]:
+        sources = getattr(self.adaptor, 'sources', None)
+        if sources is None:
+            return None
+        return sources.snapshot
 
     @memoized_classmethod
     def calculate_intransitive_fingerprint_for_target_adaptor(cls, adaptor):
@@ -720,8 +738,7 @@ async def transitive_fingerprinted_targets(addresses: Addresses) -> Fingerprinte
     fingerprinted_targets = [
         TransitiveFingerprintedTarget(
             was_root=was_root,
-            address=tht.root.adaptor.address,
-            type_alias=tht.root.adaptor.type_alias,
+            adaptor=tht.root.adaptor,
             intransitive_fingerprint_arg=lookup_fingerprint(tht),
             transitive_fingerprint_arg=stable_json_sha1(
                 (lookup_fingerprint(tht),)

@@ -94,17 +94,29 @@ def _print_fingerprinted_target(fingerprinted_target):
     was_root = fingerprinted_target.was_root
     address = fingerprinted_target.address.spec
     type_alias = fingerprinted_target.type_alias
+    dependencies = [dep_address.spec for dep_address in fingerprinted_target.dependencies]
+
+    maybe_snapshot = fingerprinted_target.snapshot
+    if maybe_snapshot:
+        digest = maybe_snapshot.directory_digest
+        sources_digest = dict(
+            fingerprint=digest.fingerprint,
+            serialized_bytes_length=digest.serialized_bytes_length,
+        )
+    else:
+        sources_digest = None
+
     intransitive_fingerprint = fingerprinted_target.intransitive_fingerprint_arg
     transitive_fingerprint = fingerprinted_target.transitive_fingerprint_arg
-    return json.dumps(
-        {
-            "was_root": was_root,
-            "address": address,
-            "type_alias": type_alias,
-            "intransitive_fingerprint": intransitive_fingerprint,
-            "transitive_fingerprint": transitive_fingerprint,
-        }
-    )
+    return json.dumps(dict(
+        was_root=was_root,
+        address=address,
+        dependencies=dependencies,
+        sources_digest=sources_digest,
+        type_alias=type_alias,
+        intransitive_fingerprint=intransitive_fingerprint,
+        transitive_fingerprint=transitive_fingerprint,
+    ))
 
 
 class List(Goal):
