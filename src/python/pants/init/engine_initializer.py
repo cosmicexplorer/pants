@@ -172,6 +172,11 @@ def _make_target_adaptor(base_class, target_type):
         default_sources_globs = globs
         default_sources_exclude_globs = excludes
 
+        def _coerce_key_values(self, key, value):
+            if key in ['excludes', 'deploy_excludes']:
+                return (key, (repr(exclude) for exclude in value))
+            return super()._coerce_key_values(key, value)
+
     return GlobsHandlingTargetAdaptor
 
 

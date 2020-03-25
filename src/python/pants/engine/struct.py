@@ -340,5 +340,5 @@ class StructWithDeps(Struct):
             return stable_json_sha1(key)
         except ValueError as e:
             raise ValueError(
-                f"Failed json hash -- object type was: {type(self)}, key was: {key}."
+                f"Failed json hash -- object type was: {type(self)}, key was: {key}, error was {e}."
             ) from e

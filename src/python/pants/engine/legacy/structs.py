@@ -196,6 +196,11 @@ class SourcesField:
 
 
 class JvmBinaryAdaptor(TargetAdaptor):
+    def _coerce_key_values(self, key, value):
+        if key in ['excludes', 'deploy_excludes']:
+            return (key, (repr(exclude) for exclude in value))
+        return super()._coerce_key_values(key, value)
+
     def validate_sources(self, sources):
         if len(sources.files) > 1:
             raise Target.IllegalArgument(
@@ -254,6 +259,11 @@ class AppAdaptor(TargetAdaptor):
     def bundles(self):
         """The BundleAdaptors for this JvmApp."""
         return self.bundles
+
+    def _coerce_key_values(self, key, value):
+        if key == 'bundles':
+            return (key, (repr(bundle) for bundle in value))
+        return super()._coerce_key_values(key, value)
 
     @property
     def field_adaptors(self) -> Tuple:

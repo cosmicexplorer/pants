@@ -85,15 +85,19 @@ class AddValuesToList(NamedAttributeModifier, BuildozerCommand):
     def parse_from_args(cls, attr, *values):
         return cls(attr=attr, values=tuple(values))
 
+    _known_collection_types = (cst.List, cst.Set)
+
     def modify_attribute(
         self,
         bfom: BuildFileObjectMatcher,
         updated_node: cst.Call,
         matching_arg: cst.Arg,
     ) -> Optional[cst.Call]:
-        if not isinstance(matching_arg.value, cst.List):
+        collection_type = type(matching_arg.value)
+
+        if collection_type not in self._known_collection_types:
             raise TypeError(
-                f"add-values-to-list operator {self} used on non-list argument {matching_arg.value}!")
+                f"add-values-to-list operator {self} used on non-list (or set) argument {matching_arg.value}!")
 
         all_new_elements = [
             *matching_arg.value.elements,
@@ -101,7 +105,8 @@ class AddValuesToList(NamedAttributeModifier, BuildozerCommand):
             # literal.
             *(cst.Element(cst.SimpleString(f'"{val}"')) for val in self.values),
         ]
-        updated_arg = matching_arg.with_changes(value=cst.List(all_new_elements))
+        updated_arg = matching_arg.with_changes(
+            value=collection_type(all_new_elements))
 
         # The above mutations of `matching_arg` should have correctly "updated" this parent node.
         return updated_node.deep_replace(matching_arg, updated_arg)
@@ -449,8 +454,8 @@ async def do_buildozer(
             lines = t.lines_to_print()
             console.print_stdout('\n'.join(lines))
 
-    py_console = InteractiveConsole()
-    py_console.interact(locals=locals())
+    # py_console = InteractiveConsole()
+    # py_console.interact(locals=locals())
 
     transformed_build_files = table.mapping.keys()
     modified_files_digest = await Get[Digest](InputFilesContent(tuple([
