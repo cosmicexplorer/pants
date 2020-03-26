@@ -295,6 +295,17 @@ async def create_pex(
         )
     )
 
+    pex_execution_request = pex_bin.create_execute_request(
+        python_setup=python_setup,
+        subprocess_encoding_environment=subprocess_encoding_environment,
+        pex_build_environment=pex_build_environment,
+        pex_args=argv,
+        input_files=merged_digest,
+        description=f"Resolving {', '.join(request.requirements.requirements)}",
+        output_files=(request.output_filename,),
+    )
+    logger.debug(f'pex_execution_request: {pex_execution_request}')
+
     # NB: PEX outputs are platform dependent so in order to get a PEX that we can use locally, without
     # cross-building, we specify that our PEX command be run on the current local platform. When we
     # support cross-building through CLI flags we can configure requests that build a PEX for our
@@ -309,15 +320,7 @@ async def create_pex(
             (
                 PlatformConstraint(platform.value),
                 PlatformConstraint(platform.value),
-            ): pex_bin.create_execute_request(
-                python_setup=python_setup,
-                subprocess_encoding_environment=subprocess_encoding_environment,
-                pex_build_environment=pex_build_environment,
-                pex_args=argv,
-                input_files=merged_digest,
-                description=f"Resolving {', '.join(request.requirements.requirements)}",
-                output_files=(request.output_filename,),
-            )
+            ): pex_execution_request
         }
     )
 
@@ -340,5 +343,6 @@ async def create_pex(
 def rules():
     return [
         create_pex,
+        subsystem_rule(PythonRepos),
         subsystem_rule(PythonSetup),
     ]

@@ -21,7 +21,7 @@ python_library(
     'src/python/pants/rules/core',
     'src/python/pants/source:source',
     'src/python/pants/util:logging',
-    'src/python/pants/util:pkg_util',
+    'src/python/pants/util:pkgutil',
   ],
   tags = {"partially_type_checked"},
 )

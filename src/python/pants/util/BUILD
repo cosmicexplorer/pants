@@ -135,6 +135,15 @@ python_library(
 )
 
 python_library(
+  name = 'pkgutil',
+  sources = ['pkgutil.py'],
+  dependencies = [
+    '3rdparty/python:setuptools',
+  ],
+  tags = {'type_checked'},
+)
+
+python_library(
   name = 'process_handler',
   sources = ['process_handler.py'],
   tags = {'partially_type_checked'},

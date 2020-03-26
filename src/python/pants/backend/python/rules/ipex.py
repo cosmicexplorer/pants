@@ -3,6 +3,7 @@
 
 import dataclasses
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,10 +11,8 @@ from pathlib import Path
 from pex.pex_info import PexInfo
 from pex.version import __version__ as pex_version
 
-import pants.backend.python.subsystems.pex_bootstrap
 from pants.backend.python.rules.pex import CreatePex, Pex, PexRequirements
-from pants.backend.python.subsystems.pex_bootstrap._ipex_launcher import APP_CODE_PREFIX
-from pants.backend.python.subsystems.python_repos import PythonRepos
+from pants.backend.python.subsystems.ipex import ipex_launcher
 from pants.engine.fs import (
     EMPTY_DIRECTORY_DIGEST,
     Digest,
@@ -26,7 +25,12 @@ from pants.engine.fs import (
 from pants.engine.isolated_process import ExecuteProcessRequest, ExecuteProcessResult
 from pants.engine.rules import RootRule, rule, subsystem_rule
 from pants.engine.selectors import Get
-from pants.util.pkg_util import get_resource_bytes
+from pants.util.pkgutil import get_own_python_source_file_bytes
+from pants.python.pex_build_util import PexBuilderWrapper
+from pants.python.python_repos import PythonRepos
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -40,7 +44,13 @@ class IpexResult:
 
 
 @rule
-async def create_ipex(request: IpexRequest, python_repos: PythonRepos) -> IpexResult:
+async def create_ipex(
+    request: IpexRequest,
+    python_repos: PythonRepos,
+    pex_builder_wrapper: PexBuilderWrapper.Factory,
+) -> IpexResult:
+    logger.debug(f'ipex request: {request}')
+
     # 1. Create the original pex as-is *without* input files, in order to get the
     #    transitively-resolved requirements from its PEX-INFO.
     orig_request = request.underlying_request
@@ -53,6 +63,7 @@ async def create_ipex(request: IpexRequest, python_repos: PythonRepos) -> IpexRe
         entry_point=None,
         input_files_digest=None,
     )
+    logger.debug(f'requirements-only request: {requirements_only_request}')
     requirements_only_pex = await Get[Pex](CreatePex, requirements_only_request)
 
     # 2. Extract its requirements.
@@ -68,11 +79,11 @@ async def create_ipex(request: IpexRequest, python_repos: PythonRepos) -> IpexRe
     # 3. Add the original source files in a subdirectory.
     subdir_sources = await Get[Snapshot](DirectoryWithPrefixToAdd(
         directory_digest=(orig_request.input_files_digest or EMPTY_DIRECTORY_DIGEST),
-        prefix=APP_CODE_PREFIX))
+        prefix=ipex_launcher.APP_CODE_PREFIX))
 
     # 4. Create IPEX-INFO, BOOTSTRAP-PEX-INFO, and ipex.py.
 
-    # IPEX-INFO: A json mapping interpreted in _ipex_launcher.py:
+    # IPEX-INFO: A json mapping interpreted in ipex_launcher.py:
     # {
     #   "code": [<which source files to add to the "hydrated" pex when bootstrapped>],
     #   "resolver_settings": {<which indices to search for requirements from when bootstrapping>},
@@ -105,8 +116,7 @@ async def create_ipex(request: IpexRequest, python_repos: PythonRepos) -> IpexRe
     #          requirements when it is first executed.
     ipex_launcher_file = FileContent(
         path='ipex.py',
-        content=get_resource_bytes(pants.backend.python.subsystems.pex_bootstrap,
-                                                             Path('_ipex_launcher.py')),
+        content=get_own_python_source_file_bytes(ipex_launcher.__name__),
     )
 
     # 5. Merge all the new injected files, along with the subdirectory of source files, into the new
@@ -125,12 +135,15 @@ async def create_ipex(request: IpexRequest, python_repos: PythonRepos) -> IpexRe
     # fail to bootstrap because they were unable to find those distributions. Instead, the .pex file
     # produced when the .ipex is first executed will read and resolve all those requirements from
     # the BOOTSTRAP-PEX-INFO.
+    pex_requirement = f'pex=={pex_builder_wrapper.get_options().pex_version}'
+    setuptools_requirement = f'setuptools=={pex_builder_wrapper.get_options().setuptools_version}'
     modified_request = dataclasses.replace(
         orig_request,
-        requirements=PexRequirements((f'pex=={pex_version}',)),
+        requirements=PexRequirements((pex_requirement, setuptools_requirement)),
         entry_point='ipex',
         input_files_digest=merged_input_files,
     )
+    logger.debug(f'modified pex creation request: {modified_request}')
 
     return IpexResult(modified_request)
 
@@ -138,6 +151,6 @@ async def create_ipex(request: IpexRequest, python_repos: PythonRepos) -> IpexRe
 def rules():
     return [
         RootRule(IpexRequest),
-        subsystem_rule(PythonRepos),
         create_ipex,
+        subsystem_rule(PexBuilderWrapper.Factory),
     ]

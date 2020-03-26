@@ -83,7 +83,7 @@ class DownloadedPexBin(HermeticPex):
             python_setup=python_setup,
             subprocess_encoding_environment=subprocess_encoding_environment,
             pex_path=self.executable,
-            pex_args=["--disable-cache"] + list(pex_args),
+            pex_args=list(pex_args),
             description=description,
             input_files=input_files or self.directory_digest,
             env=pex_build_environment.invocation_environment_dict,

@@ -35,7 +35,7 @@ from pants.subsystem.subsystem import Subsystem
 from pants.util.collections import assert_single_element
 from pants.util.contextutil import temporary_file
 from pants.util.ordered_set import OrderedSet
-from pants.util.strutil import module_dirname
+from pants.util.pkgutil import get_own_python_source_file_bytes
 
 
 def is_python_target(tgt: Target) -> bool:
@@ -515,11 +515,7 @@ class PexBuilderWrapper:
         # ipex.py: The special bootstrap script to hydrate the .ipex with the fully resolved
         #          requirements when it is first executed.
         # Extract the file contents of our custom app launcher script from the pants package.
-        parent_module = module_dirname(module_dirname(ipex_launcher.__name__))
-        ipex_launcher_provider = get_provider(parent_module)
-        ipex_launcher_script = ipex_launcher_provider.get_resource_string(
-            parent_module, "ipex/ipex_launcher.py"
-        )
+        ipex_launcher_script = get_own_python_source_file_bytes(ipex_launcher.__name__)
         with temporary_file(permissions=0o644) as ipex_launcher_file:
             ipex_launcher_file.write(ipex_launcher_script)
             ipex_launcher_file.flush()
