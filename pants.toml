@@ -88,6 +88,22 @@ pants_ignore.add = [
   "/build-support/bin/native/src",
 ]
 
+[python-repos]
+repos.add = [
+  "/Users/dmcclanahan/tools/pip/dist",
+  "/Users/dmcclanahan/tools/pex/dist",
+]
+
+[pex-builder-wrapper.ipex-pex-bin]
+pex_version = "2.1.777"
+
+[download-pex-bin.ipex-pex-bin]
+version_digest_mapping = """
+{
+  'none': ('v2.1.777', 'e1af55449b2c0ed746f2dc2989bd691c1bebf5e8016fefc28beda5d8991d2726', 2694015),
+}
+"""
+
 [cache]
 # Caching is on globally by default, but we disable it here for development purposes.
 # It is explicitly re-enabled below for [cache.bootstrap] only.
@@ -372,6 +388,10 @@ verify_commit = false
 
 [python-setup]
 interpreter_cache_dir = "%(pants_bootstrapdir)s/python_cache/interpreters"
+interpreter_search_paths = [
+  '/opt/ee/python/3.7/bin',
+  '/opt/ee/python/3.6/bin',
+]
 resolver_cache_dir = "%(pants_bootstrapdir)s/python_cache/requirements"
 
 [pytest]

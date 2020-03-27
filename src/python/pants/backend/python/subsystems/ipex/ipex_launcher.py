@@ -6,17 +6,24 @@
 This script will "hydrate" a normal .pex file in the same directory, then execute it.
 """
 
+import glob
 import json
 import os
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
+from multiprocessing.pool import ThreadPool
+from urllib.request import urlopen
+from pkg_resources import Distribution, EggInfoDistribution
 
 from pex import resolver
 from pex.common import open_zip
 from pex.interpreter import PythonInterpreter
 from pex.pex_builder import PEXBuilder
 from pex.pex_info import PexInfo
-from pkg_resources import Requirement
 
 APP_CODE_PREFIX = "user_files/"
 
@@ -35,28 +42,104 @@ def _log(message):
     sys.stderr.write(message + "\n")
 
 
-def _sanitize_requirements(requirements):
-    """Remove duplicate keys such as setuptools or pex which may be injected multiple times into the
-    resulting ipex when first executed."""
-    project_names = []
-    new_requirements = {}
-
-    for r in requirements:
-        r = Requirement(r)
-        if r.marker and not r.marker.evaluate():
-            continue
-        if r.name not in new_requirements:
-            project_names.append(r.name)
-            new_requirements[r.name] = str(r)
-    sanitized_requirements = [new_requirements[n] for n in project_names]
-
-    return sanitized_requirements
-
-
 def modify_pex_info(pex_info, **kwargs):
     new_info = json.loads(pex_info.dump())
     new_info.update(kwargs)
     return PexInfo.from_json(json.dumps(new_info))
+
+
+def _extract_download_filename(name, url):
+    matched = re.match(r'^https?://.*/([^/]+)\.(whl|WHL|tar\.gz)#sha256=.*$', url)
+    if not matched:
+        raise TypeError('url for project {} did not match expected format: {}'.format(name, url))
+    filename_base, ext = matched.groups()
+    download_filename = '{}.{}'.format(filename_base, ext)
+    return download_filename
+
+
+def _make_acceptable_distribution_from_downloaded_file(downloaded_file, name, version, output_dir):
+    _, ext = os.path.splitext(downloaded_file)
+    if ext in ['.whl', '.WHL']:
+        # Wheels can be easily consumed via PEXBuilder.add_distribution()!!
+        return Distribution(
+            location=downloaded_file,
+            project_name=name,
+            version=version,
+        )
+
+    # Otherwise, we'll have to build the .tar.gz projects ourselves. Let's make this fast.
+    assert ext == '.gz', 'extension {} was not recognized for downloaded file {}'.format(ext, downloaded_file)
+    shutil.unpack_archive(downloaded_file, output_dir)
+    expected_newly_created_subdir = os.path.join(output_dir, '{}-{}'.format(name, version))
+    assert os.path.isdir(expected_newly_created_subdir), 'expected {} to be an existing directory: output dir had: {}'.format(expected_newly_created_subdir, os.listdir(output_dir))
+
+    major, minor, *_ = sys.version_info
+    interpreter_subdir_name = 'python{}.{}'.format(major, minor)
+
+    possibly_canonical_site_packages_subdir = os.path.join(
+        output_dir, 'lib', interpreter_subdir_name, 'site-packages')
+
+    subprocess.check_call(
+        [sys.executable, 'setup.py', 'install', '--prefix', output_dir],
+        env={
+            'PYTHONPATH': possibly_canonical_site_packages_subdir,
+            'PATH': os.environ['PATH'],
+        },
+        cwd=expected_newly_created_subdir,
+    )
+
+    assert os.path.isdir(possibly_canonical_site_packages_subdir), 'expected {} to exist!!'.format(possibly_canonical_site_packages_subdir)
+
+    expected_site_packages_glob = re.sub(r'[-_\+]', '*', '{}*{}*.egg*'.format(name, version))
+    egg_info_files = glob.glob(os.path.join(possibly_canonical_site_packages_subdir, expected_site_packages_glob))
+    assert len(egg_info_files) == 1, 'expected egg info for glob {} to exist! dir contained: {}'.format(expected_site_packages_glob, os.listdir(possibly_canonical_site_packages_subdir))
+
+    egg_dist = EggInfoDistribution.from_filename(egg_info_files[0])
+    # NB: We have to make sure the location is set to a directory, otherwise the pex builder will
+    # reject it outright. The containing directory should work just fine, after we've gotten all the
+    # *correct* info by *first* scanning the *actual* egg-info file!
+    egg_dist.location = os.path.dirname(egg_dist.location)
+
+    return egg_dist
+
+
+def _resolve_requirements_from_urls(output_dir, pex_builder, requirements_with_urls):
+    pool = ThreadPool(processes=len(requirements_with_urls))
+
+    urls_with_download_filenames = []
+    for req_with_url in requirements_with_urls:
+        name = req_with_url['name']
+        version = req_with_url['version']
+        url = req_with_url['url']
+        download_filename = _extract_download_filename(name, url)
+        urls_with_download_filenames.append((name, version, url, download_filename))
+
+    def download_dist_from_url(url_to_download):
+        name, version, url, download_filename = url_to_download
+        download_path = os.path.join(output_dir, download_filename)
+        _log('downloading {} into {}'.format(url, download_path))
+
+        try:
+            with urlopen(url) as response,\
+                 open(download_path, 'wb') as download_file_stream:
+
+                shutil.copyfileobj(response, download_file_stream)
+        except Exception as e:
+            _log('error when downloading {} into {}: {}'
+                 .format(url, download_filename, e))
+            raise
+
+        dist = _make_acceptable_distribution_from_downloaded_file(
+            download_path, name=name, version=version, output_dir=output_dir)
+
+        pex_builder.add_distribution(dist, dist_name=name)
+
+        return (name, version)
+
+    try:
+        yield from pool.imap_unordered(download_dist_from_url, urls_with_download_filenames)
+    finally:
+        pool.close()
 
 
 def _hydrate_pex_file(self, hydrated_pex_file):
@@ -83,26 +166,15 @@ def _hydrate_pex_file(self, hydrated_pex_file):
                 )
             )
 
-    # Perform a fully pinned intransitive resolve to hydrate the install cache.
-    resolver_settings = ipex_info["resolver_settings"]
+    # Perform a fully pinned intransitive resolve, in parallel directly from requirement URLs.
+    requirements_with_urls = ipex_info['requirements_with_urls']
 
-    sanitized_requirements = _sanitize_requirements(bootstrap_info.requirements)
-    bootstrap_info = modify_pex_info(bootstrap_info, requirements=sanitized_requirements)
-    bootstrap_builder.info = bootstrap_info
-
-    resolved_distributions = resolver.resolve(
-        requirements=bootstrap_info.requirements,
-        cache=bootstrap_info.pex_root,
-        platform="current",
-        transitive=False,
-        interpreter=bootstrap_builder.interpreter,
-        **resolver_settings
-    )
-    # TODO: this shouldn't be necessary, as we should be able to use the same 'distributions' from
-    # BOOTSTRAP-PEX-INFO. When the .ipex is executed, the normal pex bootstrap fails to see these
-    # requirements or recognize that they should be pulled from the cache for some reason.
-    for resolved_dist in resolved_distributions:
-        bootstrap_builder.add_distribution(resolved_dist.distribution)
+    for name, version in _resolve_requirements_from_urls(
+            output_dir=os.path.join(os.getcwd(), 'tmp-3'),
+            # output_dir=td,
+            pex_builder=bootstrap_builder,
+            requirements_with_urls=requirements_with_urls):
+        _log('hydrated {} at {}'.format(name, version))
 
     bootstrap_builder.build(hydrated_pex_file, bytecode_compile=False)
 

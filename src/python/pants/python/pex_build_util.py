@@ -427,8 +427,9 @@ class PexBuilderWrapper:
     def set_emit_warnings(self, emit_warnings):
         self._builder.info.emit_warnings = emit_warnings
 
-    def _set_major_minor_interpreter_constraint_for_ipex(
-        self, info: PexInfo, identity: PythonIdentity,
+    @staticmethod
+    def set_major_minor_interpreter_constraint_for_ipex(
+        info: PexInfo, identity: PythonIdentity,
     ) -> PexInfo:
         interpreter_name = identity.requirement.name
         major, minor, _patch = identity.version
@@ -442,7 +443,7 @@ class PexBuilderWrapper:
         # Ensure that (the interpreter selected to resolve requirements when the ipex is first run) is
         # (the exact same interpreter we used to resolve those requirements here). This is the only (?)
         # way to ensure that the ipex bootstrap uses the *exact* same interpreter version.
-        self._builder.info = self._set_major_minor_interpreter_constraint_for_ipex(
+        self._builder.info = self.set_major_minor_interpreter_constraint_for_ipex(
             self._builder.info, self._builder.interpreter.identity
         )
 
@@ -452,7 +453,7 @@ class PexBuilderWrapper:
 
         # Mutate the PexBuilder object which is manipulated by this subsystem.
         self._builder = PEXBuilder(interpreter=self._builder.interpreter)
-        self._builder.info = self._set_major_minor_interpreter_constraint_for_ipex(
+        self._builder.info = self.set_major_minor_interpreter_constraint_for_ipex(
             self._builder.info, self._builder.interpreter.identity
         )
 

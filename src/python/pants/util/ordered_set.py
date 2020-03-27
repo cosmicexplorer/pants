@@ -46,6 +46,9 @@ class _AbstractOrderedSet(AbstractSet[T]):
         """Returns the number of unique elements in the set."""
         return len(self._items)
 
+    def __bool__(self) -> bool:
+        return len(self) > 0
+
     def __copy__(self) -> "_AbstractOrderedSet[T]":
         """Return a shallow copy of this object."""
         return self.__class__(self)
