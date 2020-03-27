@@ -185,9 +185,10 @@ def main(self):
     # If the ipex (this pex) is already named '.pex', ensure the output filename doesn't collide by
     # inserting an intermediate '.ipex'!
     if ext == ".pex":
-        hydrated_pex_file = "{filename_base}.ipex.pex".format(filename_base=filename_base)
-    else:
-        hydrated_pex_file = "{filename_base}.pex".format(filename_base=filename_base)
+        ext = '.ipex.pex'
+
+    code_hash = PexInfo.from_pex(self).code_hash
+    hydrated_pex_file = "{}-{}{}".format(filename_base, code_hash, ext)
 
     if not os.path.exists(hydrated_pex_file):
         _log("Hydrating {} to {}...".format(self, hydrated_pex_file))
