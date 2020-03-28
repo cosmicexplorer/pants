@@ -116,7 +116,9 @@ def _hydrate_pex_file(self, hydrated_pex_file):
     # Perform a fully pinned intransitive resolve, in parallel directly from requirement URLs.
     requirements_with_urls = ipex_info['requirements_with_urls']
 
-    ipex_downloads_cache = os.path.join(td, 'ipex-downloads')
+    ipex_downloads_cache = os.path.join(
+        os.path.dirname(self),
+        '.ipex-downloads')
 
     wheels = []
     non_wheels = []
@@ -148,11 +150,16 @@ def _hydrate_pex_file(self, hydrated_pex_file):
         bootstrap_builder.add_distribution(dist, dist_name=dist.project_name)
         bootstrap_builder.add_requirement(dist.as_requirement())
 
+    dists = list(resolve(all_non_wheel_requirements,
+                         interpreter=bootstrap_builder.interpreter,
+                         build=True,
+                         transitive=False,
+                         find_links=[non_wheel_output_dir]))
     for resolved_dist in resolve(all_non_wheel_requirements,
+                                 interpreter=bootstrap_builder.interpreter,
                                  build=True,
                                  transitive=False,
-                                 find_links=[non_wheel_output_dir],
-                                 cache=bootstrap_info.pex_root):
+                                 find_links=[non_wheel_output_dir]):
         _log('wheelified non-wheel dist {}'.format(resolved_dist))
         add_dist(resolved_dist.distribution)
 

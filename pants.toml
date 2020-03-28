@@ -95,7 +95,7 @@ repos.add = [
 ]
 
 [pex-builder-wrapper.ipex-pex-bin]
-pex_version = "2.1.777"
+pex_version = "2.1.7"
 
 [download-pex-bin.ipex-pex-bin]
 version_digest_mapping = """
