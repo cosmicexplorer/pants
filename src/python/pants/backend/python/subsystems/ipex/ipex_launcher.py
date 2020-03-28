@@ -17,13 +17,14 @@ import tempfile
 from contextlib import contextmanager
 from multiprocessing.pool import ThreadPool
 from urllib.request import urlopen
-from pkg_resources import Distribution, EggInfoDistribution
+from pkg_resources import Distribution
 
 from pex import resolver
 from pex.common import open_zip
 from pex.interpreter import PythonInterpreter
 from pex.pex_builder import PEXBuilder
 from pex.pex_info import PexInfo
+from pex.resolver import resolve
 
 APP_CODE_PREFIX = "user_files/"
 
@@ -57,87 +58,33 @@ def _extract_download_filename(name, url):
     return download_filename
 
 
-def _make_acceptable_distribution_from_downloaded_file(downloaded_file, name, version, output_dir):
-    _, ext = os.path.splitext(downloaded_file)
-    if ext in ['.whl', '.WHL']:
-        # Wheels can be easily consumed via PEXBuilder.add_distribution()!!
-        return Distribution(
-            location=downloaded_file,
-            project_name=name,
-            version=version,
-        )
-
-    # Otherwise, we'll have to build the .tar.gz projects ourselves. Let's make this fast.
-    assert ext == '.gz', 'extension {} was not recognized for downloaded file {}'.format(ext, downloaded_file)
-    shutil.unpack_archive(downloaded_file, output_dir)
-    expected_newly_created_subdir = os.path.join(output_dir, '{}-{}'.format(name, version))
-    assert os.path.isdir(expected_newly_created_subdir), 'expected {} to be an existing directory: output dir had: {}'.format(expected_newly_created_subdir, os.listdir(output_dir))
-
-    major, minor, *_ = sys.version_info
-    interpreter_subdir_name = 'python{}.{}'.format(major, minor)
-
-    possibly_canonical_site_packages_subdir = os.path.join(
-        output_dir, 'lib', interpreter_subdir_name, 'site-packages')
-
-    subprocess.check_call(
-        [sys.executable, 'setup.py', 'install', '--prefix', output_dir],
-        env={
-            'PYTHONPATH': possibly_canonical_site_packages_subdir,
-            'PATH': os.environ['PATH'],
-        },
-        cwd=expected_newly_created_subdir,
-    )
-
-    assert os.path.isdir(possibly_canonical_site_packages_subdir), 'expected {} to exist!!'.format(possibly_canonical_site_packages_subdir)
-
-    expected_site_packages_glob = re.sub(r'[-_\+]', '*', '{}*{}*.egg*'.format(name, version))
-    egg_info_files = glob.glob(os.path.join(possibly_canonical_site_packages_subdir, expected_site_packages_glob))
-    assert len(egg_info_files) == 1, 'expected egg info for glob {} to exist! dir contained: {}'.format(expected_site_packages_glob, os.listdir(possibly_canonical_site_packages_subdir))
-
-    egg_dist = EggInfoDistribution.from_filename(egg_info_files[0])
-    # NB: We have to make sure the location is set to a directory, otherwise the pex builder will
-    # reject it outright. The containing directory should work just fine, after we've gotten all the
-    # *correct* info by *first* scanning the *actual* egg-info file!
-    egg_dist.location = os.path.dirname(egg_dist.location)
-
-    return egg_dist
-
-
-def _resolve_requirements_from_urls(output_dir, pex_builder, requirements_with_urls):
+def _download_urls_parallel(output_dir, requirements_with_urls):
     pool = ThreadPool(processes=len(requirements_with_urls))
 
-    urls_with_download_filenames = []
-    for req_with_url in requirements_with_urls:
-        name = req_with_url['name']
-        version = req_with_url['version']
-        url = req_with_url['url']
-        download_filename = _extract_download_filename(name, url)
-        urls_with_download_filenames.append((name, version, url, download_filename))
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
 
     def download_dist_from_url(url_to_download):
         name, version, url, download_filename = url_to_download
         download_path = os.path.join(output_dir, download_filename)
-        _log('downloading {} into {}'.format(url, download_path))
 
-        try:
-            with urlopen(url) as response,\
-                 open(download_path, 'wb') as download_file_stream:
+        if not os.path.isfile(download_path):
+            _log('downloading {} into {}'.format(url, download_path))
 
-                shutil.copyfileobj(response, download_file_stream)
-        except Exception as e:
-            _log('error when downloading {} into {}: {}'
-                 .format(url, download_filename, e))
-            raise
+            try:
+                with urlopen(url) as response,\
+                     open(download_path, 'wb') as download_file_stream:
 
-        dist = _make_acceptable_distribution_from_downloaded_file(
-            download_path, name=name, version=version, output_dir=output_dir)
+                    shutil.copyfileobj(response, download_file_stream)
+            except Exception as e:
+                _log('error when downloading {} into {}: {}'
+                     .format(url, download_filename, e))
+                raise
 
-        pex_builder.add_distribution(dist, dist_name=name)
-
-        return (name, version)
+        return (name, version, download_path)
 
     try:
-        yield from pool.imap_unordered(download_dist_from_url, urls_with_download_filenames)
+        yield from pool.imap_unordered(download_dist_from_url, requirements_with_urls)
     finally:
         pool.close()
 
@@ -169,12 +116,55 @@ def _hydrate_pex_file(self, hydrated_pex_file):
     # Perform a fully pinned intransitive resolve, in parallel directly from requirement URLs.
     requirements_with_urls = ipex_info['requirements_with_urls']
 
-    for name, version in _resolve_requirements_from_urls(
-            output_dir=os.path.join(os.getcwd(), 'tmp-3'),
-            # output_dir=td,
-            pex_builder=bootstrap_builder,
-            requirements_with_urls=requirements_with_urls):
-        _log('hydrated {} at {}'.format(name, version))
+    ipex_downloads_cache = os.path.join(td, 'ipex-downloads')
+
+    wheels = []
+    non_wheels = []
+    for req_with_url in requirements_with_urls:
+        name = req_with_url['name']
+        version = req_with_url['version']
+        url = req_with_url['url']
+        download_filename = _extract_download_filename(name, url)
+        payload = (name, version, url, download_filename)
+        if download_filename.endswith('.whl'):
+            wheels.append(payload)
+        else:
+            non_wheels.append(payload)
+
+    non_wheel_output_dir = os.path.join(ipex_downloads_cache, 'non-wheel')
+    # Block on all non-wheel requirements first because they're likely to be smaller, and we need to
+    # do more work after downloading them too.
+    all_non_wheel_requirements = [
+        '{}=={}'.format(name, version)
+        for name, version, _ in _download_urls_parallel(
+                output_dir=non_wheel_output_dir,
+                requirements_with_urls=non_wheels,
+        )
+    ]
+
+    all_dists = []
+
+    def add_dist(dist):
+        bootstrap_builder.add_distribution(dist, dist_name=dist.project_name)
+        bootstrap_builder.add_requirement(dist.as_requirement())
+
+    for resolved_dist in resolve(all_non_wheel_requirements,
+                                 build=True,
+                                 transitive=False,
+                                 find_links=[non_wheel_output_dir],
+                                 cache=bootstrap_info.pex_root):
+        _log('wheelified non-wheel dist {}'.format(resolved_dist))
+        add_dist(resolved_dist.distribution)
+
+    for name, version, download_path in _download_urls_parallel(
+            output_dir=os.path.join(ipex_downloads_cache, 'wheel'),
+            requirements_with_urls=wheels):
+        _log('hydrated {}=={} to {}'.format(name, version, download_path))
+        add_dist(Distribution(
+            location=download_path,
+            project_name=name,
+            version=version,
+        ))
 
     bootstrap_builder.build(hydrated_pex_file, bytecode_compile=False)
 

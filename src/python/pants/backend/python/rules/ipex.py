@@ -266,6 +266,7 @@ async def create_ipex(
     #                     file that is generated when the .ipex is first executed.
     bootstrap_pex_info = PexInfo.default()
     bootstrap_pex_info.entry_point = orig_request.entry_point
+    bootstrap_pex_info.add_interpreter_constraint(major_minor_only_constraint)
     bootstrap_pex_info_file = FileContent(
         path='BOOTSTRAP-PEX-INFO',
         content=bootstrap_pex_info.dump().encode(),
