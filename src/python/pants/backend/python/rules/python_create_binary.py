@@ -80,10 +80,11 @@ async def create_python_binary(
         output_filename=f"{implementation.address.target_name}.pex",
     ))
     if options.generate_ipex:
-        request = ((await Get[IpexResult](IpexRequest(request)))
-                   .underlying_request)
+        ipex_result = await Get[IpexResult](IpexRequest(request))
+        pex = ipex_result.pex
+    else:
+        pex = await Get[Pex](CreatePex, request)
 
-    pex = await Get[Pex](CreatePex, request)
     return CreatedBinary(digest=pex.directory_digest, binary_name=pex.output_filename)
 
 

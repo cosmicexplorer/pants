@@ -82,7 +82,7 @@ class IpexRequest:
 
 @dataclass(frozen=True)
 class IpexResult:
-    underlying_request: CreatePex
+    pex: Pex
 
 
 @dataclass(frozen=True)
@@ -278,18 +278,14 @@ async def create_ipex(
         path='ipex.py',
         content=get_own_python_source_file_bytes(ipex_launcher.__name__),
     )
+    ipex_launcher_file_contents = await Get[Digest](InputFilesContent(tuple([ipex_launcher_file])))
 
     # 5. Merge all the new injected files, along with the subdirectory of source files, into the new
     # CreatePex input.
     injected_files = await Get[Digest](InputFilesContent([
         ipex_info_file,
         bootstrap_pex_info_file,
-        ipex_launcher_file,
     ]))
-    merged_input_files = await Get[Digest](DirectoriesToMerge((
-        subdir_sources.directory_digest,
-        injected_files,
-    )))
 
     # The PEX-INFO we generate shouldn't have any requirements (except pex itself), or they will
     # fail to bootstrap because they were unable to find those distributions. Instead, the .pex file
@@ -298,18 +294,36 @@ async def create_ipex(
     options = ipex_pex_bin_subsystem.pex_builder_factory.get_options()
     pex_requirement = f'pex=={options.pex_version}'
     setuptools_requirement = f'setuptools=={options.setuptools_version}'
-    modified_request = dataclasses.replace(
-        orig_request,
+
+    broken_base_pex = await Get[Pex](CreatePex(
+        output_filename=orig_request.output_filename,
         requirements=PexRequirements((
             pex_requirement,
             setuptools_requirement,
         )),
         entry_point='ipex',
-        input_files_digest=merged_input_files,
-    )
-    logger.debug(f'modified pex creation request: {modified_request}')
+        input_files_digest=ipex_launcher_file_contents,
+    ))
 
-    return IpexResult(modified_request)
+    modified_pex_hack_environment = await Get[Digest](DirectoriesToMerge(tuple([
+        injected_files,
+        subdir_sources.directory_digest,
+        broken_base_pex.directory_digest,
+    ])))
+
+    modified_pex = await Get[ExecuteProcessResult](ExecuteProcessRequest(
+        argv=('zip', '-r', broken_base_pex.output_filename,
+              'BOOTSTRAP-PEX-INFO', 'IPEX-INFO', 'user_files/'),
+        input_files=modified_pex_hack_environment,
+        description='zip together all the ipex files!',
+        env={'PATH': os.environ['PATH']},
+        output_files=((broken_base_pex.output_filename,)),
+    ))
+
+    return IpexResult(Pex(
+        output_filename=orig_request.output_filename,
+        directory_digest=modified_pex.output_directory_digest
+    ))
 
 
 def rules():
