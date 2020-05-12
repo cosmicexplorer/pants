@@ -34,6 +34,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use bytes::Bytes;
+use fs::{GlobExpansionConjunction, PreparedPathGlobs, StrictGlobMatching};
 use futures::compat::Future01CompatExt;
 use futures::future;
 use hashing::Digest;
@@ -43,7 +44,7 @@ use tokio::runtime::Runtime;
 
 use store::{Snapshot, Store};
 
-pub fn criterion_benchmark(c: &mut Criterion) {
+pub fn criterion_benchmark_materialize(c: &mut Criterion) {
   // Create an executor, store containing the stuff to materialize, and a digest for the stuff.
   // To avoid benchmarking the deleting of things, we create a parent temporary directory (which
   // will be deleted at the end of the benchmark) and then skip deletion of the per-run directories.
@@ -69,7 +70,39 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, criterion_benchmark);
+pub fn criterion_benchmark_subset(c: &mut Criterion) {
+  let rt = Runtime::new().unwrap();
+  let executor = Executor::new(rt.handle().clone());
+  /* NB: We use a much larger snapshot size now! */
+  let (store, _tempdir, digest) = large_snapshot(&executor, 1000);
+
+  let mut cgroup = c.benchmark_group("snapshot_subset");
+
+  cgroup
+    .sample_size(10)
+    .measurement_time(Duration::from_secs(80))
+    .bench_function("snapshot_subset", |b| {
+      b.iter(|| {
+        let get_subset = Snapshot::get_snapshot_subset(
+          store.clone(),
+          digest,
+          PreparedPathGlobs::create(
+            vec!["**/*".to_string()],
+            StrictGlobMatching::Ignore,
+            GlobExpansionConjunction::AllMatch,
+          )
+          .unwrap(),
+        );
+        let _ = executor.block_on(get_subset).unwrap();
+      })
+    });
+}
+
+criterion_group!(
+  benches,
+  criterion_benchmark_materialize,
+  criterion_benchmark_subset
+);
 criterion_main!(benches);
 
 ///
@@ -105,8 +138,10 @@ pub fn large_snapshot(executor: &Executor, max_files: usize) -> (Store, TempDir,
         })
         .collect::<String>();
 
-      // Drop empty or too-long candidates.
+      // NB: Split the line by whitespace, then accumulate a PathBuf using each word as a path
+      // component!
       let path_buf = clean_line.split_whitespace().collect::<PathBuf>();
+      // Drop empty or too-long candidates.
       let components_too_long = path_buf.components().any(|c| c.as_os_str().len() > 255);
       if components_too_long || path_buf.as_os_str().is_empty() || path_buf.as_os_str().len() > 512
       {
