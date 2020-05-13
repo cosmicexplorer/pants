@@ -5,12 +5,27 @@ use digest::{Digest as DigestTrait, FixedOutput};
 use hashing::{Digest, Fingerprint, EMPTY_DIGEST};
 use lmdb::Error::NotFound;
 use lmdb::{self, Cursor, Database, RwTransaction, Transaction, WriteFlags};
+use serde;
+use serde_json;
 use sha2::Sha256;
 use sharded_lmdb::{ShardedLmdb, VersionedFingerprint};
 use std::collections::BinaryHeap;
 use std::path::Path;
+use std::str;
 use std::sync::Arc;
 use std::time;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct FileExpansion {
+  pub path: String,
+  pub digest: Digest,
+  pub is_executable: bool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct CachedExpansion {
+  pub files: Vec<FileExpansion>,
+}
 
 #[derive(Clone)]
 pub struct ByteStore {
@@ -23,6 +38,7 @@ struct InnerStore {
   //  2. It's nice to know whether we should be able to parse something as a proto.
   file_dbs: Result<Arc<ShardedLmdb>, String>,
   directory_dbs: Result<Arc<ShardedLmdb>, String>,
+  dir_expansion_cache: Result<Arc<ShardedLmdb>, String>,
   executor: task_executor::Executor,
 }
 
@@ -34,6 +50,7 @@ impl ByteStore {
     let root = path.as_ref();
     let files_root = root.join("files");
     let directories_root = root.join("directories");
+    let expansion_cache_root = root.join("expansion_cache");
     Ok(ByteStore {
       inner: Arc::new(InnerStore {
         // We want these stores to be allowed to grow very large, in case we are on a system with
@@ -48,6 +65,12 @@ impl ByteStore {
         file_dbs: ShardedLmdb::new(files_root, 100 * GIGABYTES, executor.clone()).map(Arc::new),
         directory_dbs: ShardedLmdb::new(directories_root, 5 * GIGABYTES, executor.clone())
           .map(Arc::new),
+        dir_expansion_cache: ShardedLmdb::new(
+          expansion_cache_root,
+          5 * GIGABYTES,
+          executor.clone(),
+        )
+        .map(Arc::new),
         executor: executor,
       }),
     })
@@ -344,6 +367,57 @@ impl ByteStore {
       }
     }
     Ok(digests)
+  }
+
+  pub fn lookup_expansion(&self, digest: Digest) -> Result<Option<CachedExpansion>, String> {
+    let Digest(fingerprint, _) = digest;
+    let effective_key = VersionedFingerprint::new(fingerprint, ShardedLmdb::schema_version());
+    let (env, expansion_database, _) = self.inner.dir_expansion_cache.clone()?.get(&fingerprint);
+    let maybe_cached: Result<Option<CachedExpansion>, String> = {
+      let txn = env
+        .begin_ro_txn()
+        .map_err(|err| format!("Failed to begin read transaction: {:?}", err))?;
+      match txn.get(expansion_database, &effective_key) {
+        Ok(bytes) => {
+          let s: &str =
+            str::from_utf8(&bytes).map_err(|err| format!("utf-8 encoding failed: {:?}", err))?;
+          let cached_contents: CachedExpansion = serde_json::from_str(s)
+            .map_err(|err| format!("json deserialization failed: {:?}", err))?;
+          Ok(Some(cached_contents))
+        }
+        Err(NotFound) => Ok(None),
+        Err(err) => Err(format!(
+          "Error reading from cached expansion store: {:?}",
+          err
+        )),
+      }
+    };
+    maybe_cached
+  }
+
+  pub fn record_expansion(
+    &self,
+    digest: Digest,
+    cached_expansion: &CachedExpansion,
+  ) -> Result<(), String> {
+    let Digest(fingerprint, _) = digest;
+    let effective_key = VersionedFingerprint::new(fingerprint, ShardedLmdb::schema_version());
+    let (env, expansion_database, _) = self.inner.dir_expansion_cache.clone()?.get(&fingerprint);
+
+    let s = serde_json::to_string(&cached_expansion)
+      .map_err(|err| format!("json serialization failed: {:?}", err))?;
+    let mut txn = env
+      .begin_rw_txn()
+      .map_err(|err| format!("Failed to begin write transaction: {:?}", err))?;
+    txn
+      .put(
+        expansion_database,
+        &effective_key,
+        &Bytes::from(s.as_bytes()),
+        WriteFlags::empty(),
+      )
+      .map_err(|err| format!("error writing cached expansion: {:?}", err))?;
+    Ok(())
   }
 }
 

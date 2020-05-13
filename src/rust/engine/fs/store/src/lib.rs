@@ -63,6 +63,7 @@ const GIGABYTES: usize = 1024 * MEGABYTES;
 pub const DEFAULT_LOCAL_STORE_GC_TARGET_BYTES: usize = 4 * GIGABYTES;
 
 mod local;
+use local::{CachedExpansion, FileExpansion};
 #[cfg(test)]
 pub mod local_tests;
 
@@ -857,47 +858,82 @@ impl Store {
     res.boxed().compat().to_boxed()
   }
 
+  async fn record_directory_expansion(&self, digest: Digest) -> Result<CachedExpansion, String> {
+    if let Some(expansion) = self.local.lookup_expansion(digest)? {
+      return Ok(expansion);
+    }
+
+    let file_contents_per_directory = self
+      .walk(digest, move |_store, path_so_far, _, directory| {
+        let result: Result<Vec<FileExpansion>, _> = directory
+          .get_files()
+          .iter()
+          .map(|file_node| {
+            let path = path_so_far.join(file_node.get_name());
+            let file_node_digest: Result<_, _> = file_node.get_digest().into();
+            Ok(FileExpansion {
+              path: format!("{}", path.display()),
+              digest: file_node_digest?,
+              is_executable: file_node.is_executable,
+            })
+          })
+          .collect::<Result<Vec<_>, String>>();
+        future::result(result).to_boxed()
+      })
+      .compat()
+      .await?;
+
+    let cached_expansion = {
+      let mut vec = Iterator::flatten(file_contents_per_directory.into_iter().map(Vec::into_iter))
+        .collect::<Vec<_>>();
+      vec.sort_by(|l, r| l.path.cmp(&r.path));
+      CachedExpansion { files: vec }
+    };
+
+    self.local.record_expansion(digest, &cached_expansion)?;
+
+    Ok(cached_expansion)
+  }
+
   ///
   /// Returns files sorted by their path.
   ///
-  pub fn contents_for_directory(&self, digest: Digest) -> BoxFuture<Vec<FileContent>, String> {
-    self
-      .walk(digest, move |store, path_so_far, _, directory| {
-        future::join_all(
-          directory
-            .get_files()
-            .iter()
-            .map(|file_node| {
-              let path = path_so_far.join(file_node.get_name());
-              let is_executable = file_node.is_executable;
-              let file_node_digest: Result<_, _> = file_node.get_digest().into();
-              let store = store.clone();
-              let res = async move {
-                let maybe_bytes = store
-                  .load_file_bytes_with(file_node_digest?, |b| b.into())
-                  .await?;
-                maybe_bytes
-                  .ok_or_else(|| format!("Couldn't find file contents for {:?}", path))
-                  .map(|(content, _metadata)| FileContent {
-                    path,
-                    content,
-                    is_executable,
-                  })
-              };
-              res.boxed().compat().to_boxed()
+  pub fn contents_for_directory(
+    &self,
+    digest: Digest,
+  ) -> Box<dyn Future<Item = Vec<FileContent>, Error = String>> {
+    let store = self.clone();
+    let store2 = self.clone();
+    let expansion: Box<dyn Future<Item = CachedExpansion, Error = String>> =
+      Box::pin(async move { store2.record_directory_expansion(digest).await })
+        .compat()
+        .to_boxed();
+    let ret: Box<dyn Future<Item = Vec<FileContent>, Error = String>> =
+      Box::new(expansion.and_then(move |expansion| {
+        future::join_all(expansion.files.into_iter().map(
+          move |FileExpansion {
+                  digest,
+                  path,
+                  is_executable,
+                }| {
+            let store = store.clone();
+            Box::pin(async move {
+              let (content, _metadata) = store
+                .load_file_bytes_with(digest, |b| b)
+                .await?
+                .ok_or_else(|| format!("Couldn't find file contents for {:?}", path))?;
+              Ok(FileContent {
+                path: PathBuf::from(&path),
+                content,
+                is_executable,
+              })
             })
-            .collect::<Vec<_>>(),
-        )
-        .to_boxed()
-      })
-      .map(|file_contents_per_directory| {
-        let mut vec =
-          Iterator::flatten(file_contents_per_directory.into_iter().map(Vec::into_iter))
-            .collect::<Vec<_>>();
-        vec.sort_by(|l, r| l.path.cmp(&r.path));
-        vec
-      })
-      .to_boxed()
+            .compat()
+            .to_boxed()
+          },
+        ))
+      }));
+    ret
   }
 
   ///
