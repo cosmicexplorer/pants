@@ -145,14 +145,20 @@ fn multi_platform_process_request_to_process_result(
 }
 
 fn directory_digest_to_files_content(context: Context, args: Vec<Value>) -> NodeFuture<Value> {
+  let ctx = context.clone();
   future::result(lift_digest(&args[0]).map_err(|str| throw(&str)))
     .and_then(move |digest| {
-      context
-        .core
-        .store()
-        .contents_for_directory(digest)
-        .map_err(|str| throw(&str))
-        .map(move |files_content| Snapshot::store_files_content(&context, &files_content))
+      Box::pin(async move {
+        let files_content = ctx
+          .core
+          .store()
+          .contents_for_directory(digest)
+          .await
+          .map_err(|str| throw(&str))?;
+        Ok(Snapshot::store_files_content(&ctx, &files_content))
+      })
+      .compat()
+      .to_boxed()
     })
     .to_boxed()
 }

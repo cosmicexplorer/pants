@@ -1178,7 +1178,6 @@ async fn contents_for_directory_empty() {
 
   let file_contents = store
     .contents_for_directory(TestDirectory::empty().digest())
-    .compat()
     .await
     .expect("Getting FileContents");
 
@@ -1213,7 +1212,6 @@ async fn contents_for_directory() {
 
   let file_contents = store
     .contents_for_directory(recursive_testdir.digest())
-    .compat()
     .await
     .expect("Getting FileContents");
 

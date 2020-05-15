@@ -652,8 +652,6 @@ impl Snapshot {
     digest: Digest,
     path_globs: PreparedPathGlobs,
   ) -> Result<Snapshot, String> {
-    log::debug!("here!");
-
     let CachedExpansion { files } = store.record_directory_expansion(digest).await?;
 
     let matched_files: Vec<FileExpansion> = files
@@ -675,7 +673,6 @@ impl Snapshot {
         Ok(ret)
       })
       .collect::<Result<Vec<_>, String>>()?;
-    /* dbg!(&abstract_stats); */
     trie
       .populate(abstract_stats)
       .map_err(|e| format!("{:?}", e))?;
@@ -1000,7 +997,6 @@ impl MerkleTrieNode {
           digest,
           permissions: FilePermissions::None,
         });
-        /* dbg!(&result); */
         result
       })
       .collect::<Result<Vec<_>, RemexecError>>();

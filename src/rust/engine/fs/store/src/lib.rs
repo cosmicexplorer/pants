@@ -859,7 +859,10 @@ impl Store {
     res.boxed().compat().to_boxed()
   }
 
-  pub async fn record_directory_expansion(&self, digest: Digest) -> Result<CachedExpansion, String> {
+  pub async fn record_directory_expansion(
+    &self,
+    digest: Digest,
+  ) -> Result<CachedExpansion, String> {
     if let Some(expansion) = self.local.lookup_expansion(digest)? {
       return Ok(expansion);
     }
@@ -899,42 +902,45 @@ impl Store {
   ///
   /// Returns files sorted by their path.
   ///
-  pub fn contents_for_directory(
-    &self,
-    digest: Digest,
-  ) -> Box<dyn Future<Item = Vec<FileContent>, Error = String>> {
+  pub async fn contents_for_directory(&self, digest: Digest) -> Result<Vec<FileContent>, String> {
+    // If we have never expanded this digest before, this will recursively traverse the digest to
+    // find all the files it contains. This can take up to a second for very large directories, but
+    // it will only happen once, because we cache expansions in an lmdb instance.
+    let expansion = self.record_directory_expansion(digest).await?;
     let store = self.clone();
-    let store2 = self.clone();
-    let expansion: Box<dyn Future<Item = CachedExpansion, Error = String>> =
-      Box::pin(async move { store2.record_directory_expansion(digest).await })
-        .compat()
-        .to_boxed();
-    let ret: Box<dyn Future<Item = Vec<FileContent>, Error = String>> =
-      Box::new(expansion.and_then(move |expansion| {
-        future::join_all(expansion.files.into_iter().map(
-          move |FileExpansion {
-                  digest,
-                  path,
-                  is_executable,
-                }| {
-            let store = store.clone();
-            Box::pin(async move {
-              let (content, _metadata) = store
-                .load_file_bytes_with(digest, |b| b)
-                .await?
-                .ok_or_else(|| format!("Couldn't find file contents for {:?}", path))?;
-              Ok(FileContent {
-                path: PathBuf::from(&path),
-                content,
+    // We separate the process of extracting file content from getting file paths in this method,
+    // which allows us to quickly obtain all the requested file contents in parallel.
+    let file_contents_tasks: Vec<BoxFuture<FileContent, String>> = expansion
+      .files
+      .into_iter()
+      .map(
+        move |FileExpansion {
+                digest,
+                path,
                 is_executable,
-              })
+              }| {
+          let store = store.clone();
+          Box::pin(async move {
+            let (content, _metadata) = store
+              .load_file_bytes_with(digest, |b| b)
+              .await?
+              .ok_or_else(|| format!("Couldn't find file contents for {:?}", path))?;
+            Ok(FileContent {
+              path: PathBuf::from(&path),
+              content,
+              is_executable,
             })
-            .compat()
-            .to_boxed()
-          },
-        ))
-      }));
-    ret
+          })
+          .compat()
+          .to_boxed()
+        },
+      )
+      .collect::<Vec<BoxFuture<FileContent, String>>>();
+    let all_file_contents: Vec<FileContent> =
+      future::join_all(file_contents_tasks.into_iter().collect::<Vec<_>>())
+        .compat()
+        .await?;
+    Ok(all_file_contents)
   }
 
   ///
