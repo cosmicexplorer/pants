@@ -29,6 +29,7 @@
 #[macro_use]
 extern crate log;
 
+mod merkle_trie;
 mod snapshot;
 pub use crate::snapshot::{OneOffStoreFileByDigest, Snapshot, StoreFileByDigest};
 #[cfg(test)]
@@ -63,7 +64,7 @@ const GIGABYTES: usize = 1024 * MEGABYTES;
 pub const DEFAULT_LOCAL_STORE_GC_TARGET_BYTES: usize = 4 * GIGABYTES;
 
 mod local;
-use local::{CachedExpansion, FileExpansion};
+pub use local::{CachedExpansion, FileExpansion};
 #[cfg(test)]
 pub mod local_tests;
 
@@ -858,7 +859,7 @@ impl Store {
     res.boxed().compat().to_boxed()
   }
 
-  async fn record_directory_expansion(&self, digest: Digest) -> Result<CachedExpansion, String> {
+  pub async fn record_directory_expansion(&self, digest: Digest) -> Result<CachedExpansion, String> {
     if let Some(expansion) = self.local.lookup_expansion(digest)? {
       return Ok(expansion);
     }

@@ -1,7 +1,9 @@
 // Copyright 2017 Pants project contributors (see CONTRIBUTORS.md).
 // Licensed under the Apache License, Version 2.0 (see LICENSE).
 
-use crate::Store;
+use crate::merkle_trie;
+use crate::{CachedExpansion, FileExpansion, Store};
+use bazel_protos::remote_execution as remexec_api;
 use boxfuture::{BoxFuture, Boxable};
 use bytes::Bytes;
 use fs::{
@@ -10,15 +12,17 @@ use fs::{
 };
 use futures::compat::Future01CompatExt;
 use futures::future::{self as future03, FutureExt, TryFutureExt};
-use futures01::future;
-use hashing::{Digest, EMPTY_DIGEST};
+use futures01::{future, Future};
+use hashing::{Digest, Fingerprint, EMPTY_DIGEST};
 use indexmap::{self, IndexMap};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
+use std::convert::{From, Into};
 use std::ffi::OsString;
 use std::fmt;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
+use std::str;
 use std::sync::Arc;
 
 #[derive(Eq, Hash, PartialEq)]
@@ -648,69 +652,59 @@ impl Snapshot {
     digest: Digest,
     path_globs: PreparedPathGlobs,
   ) -> Result<Snapshot, String> {
-    use bazel_protos::remote_execution::{Directory, DirectoryNode, FileNode};
+    log::debug!("here!");
 
-    let traverser = move |_: &Store,
-                          path_so_far: &PathBuf,
-                          _: Digest,
-                          directory: &Directory|
-          -> BoxFuture<(Vec<PathStat>, StoreManyFileDigests), String> {
-      let subdir_paths: Vec<PathBuf> = directory
-        .get_directories()
-        .iter()
-        .map(move |node: &DirectoryNode| path_so_far.join(node.get_name()))
-        .filter(|path: &PathBuf| path_globs.matches(path))
-        .collect();
+    let CachedExpansion { files } = store.record_directory_expansion(digest).await?;
 
-      let file_paths: Vec<(PathBuf, Result<Digest, String>, bool)> = directory
-        .get_files()
-        .iter()
-        .map(|node: &FileNode| {
-          (
-            path_so_far.join(node.get_name()),
-            node.get_digest().into(),
-            node.is_executable,
-          )
-        })
-        .filter(|(path, _, _)| path_globs.matches(path))
-        .collect();
+    let matched_files: Vec<FileExpansion> = files
+      .into_iter()
+      .filter(|FileExpansion { path, .. }| path_globs.matches(Path::new(&path)))
+      .collect();
 
-      let mut path_stats: Vec<PathStat> = vec![];
-      for path in subdir_paths.into_iter() {
-        path_stats.push(PathStat::dir(path.clone(), Dir(path)));
-      }
-
-      let mut hash = HashMap::new();
-      for (path, maybe_digest, is_executable) in file_paths.into_iter() {
-        let digest = match maybe_digest {
-          Ok(d) => d,
-          Err(err) => return future::err(err).to_boxed(),
+    let mut trie = merkle_trie::MerkleTrie::<Digest>::new();
+    let abstract_stats: Vec<merkle_trie::FileStat<Digest>> = matched_files
+      .iter()
+      .map(|FileExpansion { path, digest, .. }| {
+        let components = merkle_trie::PathComponents::from_path(Path::new(&path))
+          .map_err(|e| format!("{:?}", e))?;
+        let terminal = merkle_trie::MerkleTrieTerminalEntry::File(*digest);
+        let ret: merkle_trie::FileStat<Digest> = merkle_trie::FileStat {
+          components,
+          terminal,
         };
-        hash.insert(path.clone(), digest);
-        path_stats.push(PathStat::file(
-          path.clone(),
-          File {
-            path,
-            is_executable,
-          },
-        ));
-      }
+        Ok(ret)
+      })
+      .collect::<Result<Vec<_>, String>>()?;
+    /* dbg!(&abstract_stats); */
+    trie
+      .populate(abstract_stats)
+      .map_err(|e| format!("{:?}", e))?;
 
-      future::ok((path_stats, StoreManyFileDigests { hash })).to_boxed()
-    };
+    let digest: Digest = MerkleTrieNode::recursively_upload_trie(trie, store.clone())
+      .compat()
+      .await
+      .map_err(|e| format!("{:?}", e))?;
+    let path_stats: Vec<PathStat> = matched_files
+      .into_iter()
+      .map(
+        |FileExpansion {
+           path,
+           is_executable,
+           ..
+         }| {
+          let path = PathBuf::from(&path);
+          PathStat::file(
+            path.clone(),
+            File {
+              path,
+              is_executable,
+            },
+          )
+        },
+      )
+      .collect();
 
-    let path_stats_and_stores_per_directory: Vec<(Vec<PathStat>, StoreManyFileDigests)> =
-      store.walk(digest, traverser).compat().await?;
-
-    let mut final_store = StoreManyFileDigests::new();
-    let mut path_stats: Vec<PathStat> = vec![];
-    for (per_dir_path_stats, per_dir_store) in path_stats_and_stores_per_directory.into_iter() {
-      final_store.merge(per_dir_store);
-      path_stats.extend(per_dir_path_stats.into_iter());
-    }
-
-    path_stats.sort_by(|l, r| l.path().cmp(&r.path()));
-    Snapshot::from_path_stats(store, final_store, path_stats).await
+    Ok(Snapshot { digest, path_stats })
   }
 }
 
@@ -796,12 +790,16 @@ struct StoreManyFileDigests {
 }
 
 impl StoreManyFileDigests {
+  /* FIXME: can this be removed? */
+  #[allow(dead_code)]
   fn new() -> StoreManyFileDigests {
     StoreManyFileDigests {
       hash: HashMap::new(),
     }
   }
 
+  /* FIXME: can this be removed? */
+  #[allow(dead_code)]
   fn merge(&mut self, other: StoreManyFileDigests) {
     self.hash.extend(other.hash);
   }
@@ -816,5 +814,230 @@ impl StoreFileByDigest<String> for StoreManyFileDigests {
       )
     }))
     .to_boxed()
+  }
+}
+
+#[derive(Debug)]
+pub enum RemexecError {
+  InternalError(String),
+}
+impl From<String> for RemexecError {
+  fn from(err: String) -> Self {
+    RemexecError::InternalError(err)
+  }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum FilePermissions {
+  Executable,
+  None,
+}
+
+/* Necessary to mediate conversions between the remexec_api digests and pants
+ * hashing::Digests. This could be done upstream, maybe. */
+pub struct RemexecDigestWrapper {
+  pub fingerprint: Fingerprint,
+  pub size_bytes: usize,
+}
+impl From<remexec_api::Digest> for RemexecDigestWrapper {
+  fn from(digest: remexec_api::Digest) -> Self {
+    RemexecDigestWrapper {
+      fingerprint: Fingerprint::from_hex_string(&digest.hash).unwrap(),
+      size_bytes: digest.size_bytes as usize,
+    }
+  }
+}
+impl Into<remexec_api::Digest> for RemexecDigestWrapper {
+  fn into(self: Self) -> remexec_api::Digest {
+    let mut ret = remexec_api::Digest::new();
+    ret.set_hash(self.fingerprint.to_hex());
+    ret.set_size_bytes(self.size_bytes as i64);
+    ret
+  }
+}
+impl From<Digest> for RemexecDigestWrapper {
+  fn from(digest: Digest) -> Self {
+    let Digest(fingerprint, size_bytes) = digest;
+    RemexecDigestWrapper {
+      fingerprint,
+      size_bytes,
+    }
+  }
+}
+impl Into<Digest> for RemexecDigestWrapper {
+  fn into(self: Self) -> Digest {
+    Digest(self.fingerprint, self.size_bytes)
+  }
+}
+
+#[derive(Debug)]
+pub struct FileNode {
+  pub name: String,
+  pub digest: Digest,
+  pub permissions: FilePermissions,
+}
+impl From<remexec_api::FileNode> for FileNode {
+  fn from(node: remexec_api::FileNode) -> Self {
+    let digest_wrapper: RemexecDigestWrapper = node.get_digest().clone().into();
+    let digest: Digest = digest_wrapper.into();
+    FileNode {
+      name: node.get_name().to_string(),
+      digest,
+      permissions: match node.get_is_executable() {
+        true => FilePermissions::Executable,
+        false => FilePermissions::None,
+      },
+    }
+  }
+}
+impl Into<remexec_api::FileNode> for FileNode {
+  fn into(self: Self) -> remexec_api::FileNode {
+    let FileNode {
+      name,
+      digest,
+      permissions,
+    } = self;
+    let mut ret = remexec_api::FileNode::new();
+    ret.set_name(name);
+    let digest_wrapper: RemexecDigestWrapper = digest.into();
+    ret.set_digest(digest_wrapper.into());
+    ret.set_is_executable(match permissions {
+      FilePermissions::Executable => true,
+      FilePermissions::None => false,
+    });
+    ret
+  }
+}
+
+#[derive(Debug)]
+pub struct DirectoryNode {
+  pub name: String,
+  pub digest: Digest,
+}
+impl From<remexec_api::DirectoryNode> for DirectoryNode {
+  fn from(node: remexec_api::DirectoryNode) -> Self {
+    let digest_wrapper: RemexecDigestWrapper = node.get_digest().clone().into();
+    let digest: Digest = digest_wrapper.into();
+    DirectoryNode {
+      name: node.get_name().to_string(),
+      digest: digest.into(),
+    }
+  }
+}
+impl Into<remexec_api::DirectoryNode> for DirectoryNode {
+  fn into(self: Self) -> remexec_api::DirectoryNode {
+    let DirectoryNode { name, digest } = self;
+    let digest: Digest = digest.into();
+    let digest_wrapper: RemexecDigestWrapper = digest.into();
+    let mut ret = remexec_api::DirectoryNode::new();
+    ret.set_name(name);
+    ret.set_digest(digest_wrapper.into());
+    ret
+  }
+}
+
+#[derive(Debug)]
+pub struct MerkleTrieNode {
+  pub files: Vec<FileNode>,
+  pub directories: Vec<DirectoryNode>,
+}
+impl From<remexec_api::Directory> for MerkleTrieNode {
+  fn from(dir: remexec_api::Directory) -> Self {
+    let remexec_api::Directory {
+      files, directories, ..
+    } = dir;
+    MerkleTrieNode {
+      files: files.into_iter().map(|n| n.into()).collect(),
+      directories: directories.into_iter().map(|n| n.into()).collect(),
+    }
+  }
+}
+impl Into<remexec_api::Directory> for MerkleTrieNode {
+  fn into(self: Self) -> remexec_api::Directory {
+    let MerkleTrieNode { files, directories } = self;
+    let mut ret = remexec_api::Directory::new();
+    ret.set_files(protobuf::RepeatedField::from_vec(
+      files.into_iter().map(|n| n.into()).collect(),
+    ));
+    ret.set_directories(protobuf::RepeatedField::from_vec(
+      directories.into_iter().map(|n| n.into()).collect(),
+    ));
+    ret
+  }
+}
+impl MerkleTrieNode {
+  fn decode_utf8(component: merkle_trie::SinglePathComponent) -> Result<String, RemexecError> {
+    let bytes = component.extract_component_bytes();
+    str::from_utf8(&bytes)
+      .map(|p| p.to_string())
+      .map_err(|e| RemexecError::from(format!("error encoding path {:?} as utf8: {:?}", bytes, e)))
+  }
+
+  pub fn recursively_upload_trie(
+    trie: merkle_trie::MerkleTrie<Digest>,
+    store: Store,
+  ) -> BoxFuture<Digest, RemexecError> {
+    let mut files: Vec<(merkle_trie::SinglePathComponent, Digest)> = Vec::new();
+    let mut sub_tries: Vec<(
+      merkle_trie::SinglePathComponent,
+      merkle_trie::MerkleTrie<Digest>,
+    )> = Vec::new();
+
+    for (path_component, entry) in trie.extract_mapping().into_iter() {
+      match entry {
+        merkle_trie::MerkleTrieEntry::File(key) => files.push((path_component, key)),
+        merkle_trie::MerkleTrieEntry::SubTrie(sub_trie) => {
+          sub_tries.push((path_component, sub_trie))
+        }
+      }
+    }
+
+    let mapped_file_nodes: Result<Vec<FileNode>, RemexecError> = files
+      .into_iter()
+      .map(|(component, digest)| {
+        let result = Self::decode_utf8(component).map(|name| FileNode {
+          name,
+          digest,
+          permissions: FilePermissions::None,
+        });
+        /* dbg!(&result); */
+        result
+      })
+      .collect::<Result<Vec<_>, RemexecError>>();
+
+    /* Recursion!!! */
+    let mapped_dir_nodes: Vec<BoxFuture<DirectoryNode, _>> = sub_tries
+      .into_iter()
+      .map(|(component, sub_trie)| {
+        let decoded: Result<String, _> = Self::decode_utf8(component);
+        let serialized_directory: BoxFuture<Digest, _> =
+          Self::recursively_upload_trie(sub_trie, store.clone())
+            .map(|d| d.into())
+            .to_boxed();
+        future::result(decoded)
+          .join(serialized_directory)
+          .map(|(name, directory_digest)| DirectoryNode {
+            name,
+            digest: directory_digest,
+          })
+          .to_boxed()
+      })
+      .collect::<Vec<_>>();
+
+    let directory_proto: BoxFuture<remexec_api::Directory, _> = future::result(mapped_file_nodes)
+      .join(future::join_all(mapped_dir_nodes))
+      .map(|(files, directories)| MerkleTrieNode { files, directories })
+      .map(|node| node.into())
+      .to_boxed();
+
+    let directory_digest: BoxFuture<Digest, _> = Box::pin(async move {
+      let proto = directory_proto.compat().await?;
+      let digest = store.record_directory(&proto, true).await?;
+      Ok(digest)
+    })
+    .compat()
+    .to_boxed();
+
+    directory_digest
   }
 }
