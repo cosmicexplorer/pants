@@ -32,7 +32,7 @@ use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde::{Deserialize, Deserializer};
 use sha2::Sha256;
 
-use serde::de::Visitor;
+use serde::de::{Visitor, MapAccess};
 use serde::export::fmt::Error;
 use serde::export::Formatter;
 use std::fmt;
@@ -175,7 +175,6 @@ impl Serialize for Digest {
   }
 }
 
-#[cfg(not(feature = "native-repr"))]
 #[derive(Deserialize)]
 #[serde(field_identifier, rename_all = "snake_case")]
 enum Field {
@@ -183,7 +182,6 @@ enum Field {
   SizeBytes,
 }
 
-#[cfg(not(feature = "native-repr"))]
 impl<'de> Deserialize<'de> for Digest {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
   where

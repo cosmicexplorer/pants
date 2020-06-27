@@ -3,11 +3,11 @@
 use super::mmap_bindings::{self, key_t, size_t, IPC_CREAT, IPC_R, IPC_W, SHM_RDONLY};
 use super::pants_vcfs_interface;
 
-use std::ffi::{self, CStr, CString};
+use std::ffi;
 use std::io;
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use std::os::{self, unix::ffi::OsStrExt};
+use std::os;
 use std::path::Path;
 use std::ptr;
 use std::slice;

@@ -35,7 +35,7 @@ fn main() {
   mark_for_change_detection(&bindings_config_path);
   mark_for_change_detection(Path::new("src"));
 
-  let cbindgen_output = Path::new("src/test.h");
+  let cbindgen_output = Path::new("src/hashing.h");
   let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
   cbindgen::generate(&crate_dir)
     .unwrap()
