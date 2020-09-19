@@ -20,7 +20,7 @@ from pants.engine.rules import QueryRule
 from pants.engine.target import Target
 from pants.option.options_bootstrapper import OptionsBootstrapper
 from pants.testutil.option_util import create_options_bootstrapper
-from pants.testutil.python_interpreter_selection import skip_unless_python38_present
+from pants.testutil.python_interpreter_selection import skip_unless_python38_present, skip_unless_python27_present
 from pants.testutil.rule_runner import RuleRunner
 
 
@@ -345,6 +345,46 @@ def test_transitive_dependencies(rule_runner: RuleRunner) -> None:
     assert len(result) == 1
     assert result[0].exit_code == 1
     assert f"{PACKAGE}/math/add.py:5" in result[0].stdout
+
+
+@skip_unless_python27_present
+def test_works_with_python27(rule_runner: RuleRunner) -> None:
+    """A regression test that we can properly handle Python 2-only third-party dependencies.
+
+    There was a bug that this would cause the runner PEX to fail to execute because it did not have
+    Python 3 distributions of the requirements.
+    """
+    rule_runner.add_to_build_file(
+        "",
+        dedent(
+            """\
+            # We use a requirement that a) is typed, b) is compatible with Py2 and Py3, and c)
+            # has distinct wheels for Py2 and Py3 such that the Py2 wheel will not work with the 
+            # MyPy runner.
+            python_requirement_library(
+                name="x690",
+                requirements=["x690==0.2.0"],
+            )
+            """
+        ),
+    )
+    source_file = FileContent(
+        f"{PACKAGE}/py2.py",
+        dedent(
+            """\
+            from x690 import types
+
+            print "Blast from the past!"
+            """
+        ).encode(),
+    )
+    target = make_target(rule_runner, [source_file], interpreter_constraints="==2.7.*")
+    result = run_mypy(rule_runner, [target], passthrough_args="--py2")
+    assert len(result) == 1
+    print(result[0].stdout)
+    assert result[0].exit_code == 0
+    assert "Failed to execute PEX file" not in result[0].stderr
+    assert "Success: no issues found in 1 source file\n" in result[0].stdout
 
 
 @skip_unless_python38_present
