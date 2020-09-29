@@ -656,6 +656,24 @@ pub extern "C" fn graph_len(scheduler_ptr: *mut Scheduler) -> u64 {
   with_scheduler(scheduler_ptr, |scheduler| scheduler.core.graph.len() as u64)
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub enum ArchiveType {
+  TarGz,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct DecompressionRequest {
+  archive_type: ArchiveType,
+  file_to_decompress: Digest,
+}
+
+#[no_mangle]
+pub extern "C" fn decompress_generic(
+  
+)
+
 #[no_mangle]
 pub extern "C" fn decompress_tarball(
   tar_path: *const raw::c_char,

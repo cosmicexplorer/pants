@@ -6,7 +6,9 @@ import os
 import threading
 
 from pants.binaries.binary_util import BinaryRequest, BinaryUtil
-from pants.engine.fs import PathGlobs, PathGlobsAndRoot
+from pants.engine.fs import Digest, PathGlobs, PathGlobsAndRoot, Snapshot, UrlToFetch
+from pants.engine.rules import RootRule, optionable_rule, rule
+from pants.engine.selectors import Get
 from pants.fs.archive import XZCompressedTarArchiver, create_archiver
 from pants.subsystem.subsystem import Subsystem
 from pants.util.memo import memoized_method, memoized_property
@@ -112,6 +114,10 @@ class BinaryToolBase(Subsystem):
     if 'fingerprint' not in version_registration_kwargs:
       version_registration_kwargs['fingerprint'] = True
     register('--version', **version_registration_kwargs)
+    register('--fingerprint', type=str, fingerprint=True, default=None,
+             help='???')
+    register('--size-bytes', type=int, fingerprint=True, default=None,
+             help='???')
 
   @memoized_method
   def select(self, context=None):
@@ -165,13 +171,23 @@ class BinaryToolBase(Subsystem):
     return '{}{}'.format(cls._get_name(), cls.suffix)
 
   def _make_binary_request(self, version):
+    digest = self._maybe_get_digest()
     return BinaryRequest(
       supportdir=self.get_support_dir(),
       version=version,
       name=self._name_to_fetch(),
       platform_dependent=self.platform_dependent,
       external_url_generator=self.get_external_url_generator(),
-      archiver=self._get_archiver())
+      archiver=self._get_archiver(),
+      expected_digest=digest,
+    )
+
+  def _maybe_get_digest(self):
+    fp = self.get_options().fingerprint
+    size = self.get_options().size_bytes
+    if fp is not None and size is not None:
+      return Digest(fp, size)
+    return None
 
   def _select_for_version(self, version):
     binary_request = self._make_binary_request(version)
@@ -231,3 +247,27 @@ class XZ(NativeTool):
 
 
 # TODO: add @rules for downloading from UrlToFetch!
+@rule
+def download_binary(binary_request: BinaryRequest, binary_util: BinaryUtil) -> Snapshot:
+  url_generator = binary_util._get_url_generator(binary_request)
+  all_urls = binary_util._get_urls(url_generator, binary_request)
+  attempted_snapshot = None
+  exc = None
+  for url in all_urls:
+    try:
+      attempted_snapshot = yield Get(Snapshot, UrlToFetch(url, binary_request.expected_digest))
+      break
+    except Exception as e:
+      exc = e
+      continue
+
+  if attempted_snapshot is not None:
+    yield attempted_snapshot
+  else:
+    raise exc
+
+def rules():
+  return [
+    download_binary,
+    RootRule(BinaryRequest),
+  ]

@@ -1,0 +1,1177 @@
+{
+    "version": "1.0.10",
+    "targets": {
+        "src/scala/org/pantsbuild/scoverage/report:report": {
+            "targets": [
+                "3rdparty/jvm/commons-io:commons-io",
+                "3rdparty/jvm/com/github/scopt:scopt",
+                "3rdparty/jvm/com/twitter/scoverage:scalac-scoverage-plugin",
+                "3rdparty/jvm/org/slf4j:slf4j-simple",
+                "3rdparty/jvm/org/slf4j:slf4j-api",
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "commons-io:commons-io:2.5",
+                "com.github.scopt:scopt_2.12:3.7.0",
+                "org.scala-lang:scala-library:2.12.8",
+                "com.twitter.scoverage:scalac-scoverage-plugin_2.12:1.0.1-twitter",
+                "org.scala-lang.modules:scala-xml_2.12:1.2.0",
+                "org.slf4j:slf4j-simple:1.7.26",
+                "org.slf4j:slf4j-api:1.7.26"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/scoverage/report",
+                    "package_prefix": "org.pantsbuild.scoverage.report"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.scoverage.report.report",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/scoverage/report/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/scoverage/report/*Test.scala",
+                            "src/scala/org/pantsbuild/scoverage/report/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "3rdparty/jvm/commons-io:commons-io": {
+            "targets": [],
+            "libraries": [
+                "commons-io:commons-io:2.5"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.commons-io.commons-io",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty/jvm/com/github/scopt:scopt": {
+            "targets": [],
+            "libraries": [
+                "com.github.scopt:scopt_2.12:3.7.0",
+                "org.scala-lang:scala-library:2.12.8"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.com.github.scopt.scopt",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty/jvm/com/twitter/scoverage:scalac-scoverage-plugin": {
+            "targets": [],
+            "libraries": [
+                "com.twitter.scoverage:scalac-scoverage-plugin_2.12:1.0.1-twitter",
+                "org.scala-lang:scala-library:2.12.8",
+                "org.scala-lang.modules:scala-xml_2.12:1.2.0"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.com.twitter.scoverage.scalac-scoverage-plugin",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty/jvm/org/slf4j:slf4j-simple": {
+            "targets": [],
+            "libraries": [
+                "org.slf4j:slf4j-simple:1.7.26",
+                "org.slf4j:slf4j-api:1.7.26"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.org.slf4j.slf4j-simple",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty/jvm/org/slf4j:slf4j-api": {
+            "targets": [],
+            "libraries": [
+                "org.slf4j:slf4j-api:1.7.26"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.org.slf4j.slf4j-api",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "//:scala-library-synthetic": {
+            "targets": [],
+            "libraries": [
+                "org.scala-lang:scala-library:2.12.8"
+            ],
+            "roots": [],
+            "id": ".scala-library-synthetic",
+            "target_type": "SOURCE",
+            "is_code_gen": true,
+            "is_synthetic": true,
+            "pants_target_type": "jar_library",
+            "transitive": true,
+            "scope": "forced",
+            "is_target_root": false
+        },
+        "src/scala/org/pantsbuild/zinc/util:util": {
+            "targets": [
+                "3rdparty/jvm/org/scala-sbt:zinc",
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "org.scala-sbt:zinc_2.12:1.1.7",
+                "org.scala-lang:scala-library:2.12.8",
+                "org.scala-sbt:zinc-classfile_2.12:1.1.7",
+                "org.scala-sbt:compiler-interface:1.1.7",
+                "org.scala-sbt:util-interface:1.1.3",
+                "org.scala-sbt:zinc-compile-core_2.12:1.1.7",
+                "org.scala-lang.modules:scala-parser-combinators_2.12:1.0.5",
+                "org.scala-sbt:launcher-interface:1.0.0",
+                "org.scala-sbt:util-control_2.12:1.1.3",
+                "org.scala-sbt:zinc-apiinfo_2.12:1.1.7",
+                "org.scala-sbt:zinc-classpath_2.12:1.1.7",
+                "org.scala-lang:scala-compiler:2.12.6",
+                "org.scala-lang:scala-reflect:2.12.6",
+                "org.scala-lang.modules:scala-xml_2.12:1.2.0",
+                "org.scala-sbt:zinc-core_2.12:1.1.7",
+                "org.scala-sbt:util-relation_2.12:1.1.3",
+                "org.scala-sbt:zinc-ivy-integration_2.12:1.1.7",
+                "org.scala-sbt:librarymanagement-core_2.12:1.1.4",
+                "com.eed3si9n:gigahorse-okhttp_2.12:0.3.0",
+                "com.eed3si9n:gigahorse-core_2.12:0.3.0",
+                "com.typesafe:ssl-config-core_2.12:0.2.2",
+                "com.typesafe:config:1.2.0",
+                "org.reactivestreams:reactive-streams:1.0.0",
+                "org.slf4j:slf4j-api:1.7.26",
+                "com.squareup.okhttp3:okhttp:3.7.0",
+                "com.squareup.okio:okio:1.12.0",
+                "com.eed3si9n:sjson-new-core_2.12:0.8.2",
+                "com.jcraft:jsch:0.1.54",
+                "com.squareup.okhttp3:okhttp-urlconnection:3.7.0",
+                "org.scala-sbt:util-cache_2.12:1.1.3",
+                "com.eed3si9n:sjson-new-murmurhash_2.12:0.8.2",
+                "com.eed3si9n:sjson-new-scalajson_2.12:0.8.2",
+                "com.eed3si9n:shaded-scalajson_2.12:1.0.0-M4",
+                "org.spire-math:jawn-parser_2.12:0.10.4",
+                "org.scala-sbt:util-position_2.12:1.1.3",
+                "org.scala-sbt:zinc-persist_2.12:1.1.7",
+                "com.trueaccord.scalapb:scalapb-runtime_2.12:0.6.0",
+                "com.google.protobuf:protobuf-java:3.3.1",
+                "com.lihaoyi:fastparse_2.12:0.4.2",
+                "com.lihaoyi:fastparse-utils_2.12:0.4.2",
+                "com.lihaoyi:sourcecode_2.12:0.1.3",
+                "com.trueaccord.lenses:lenses_2.12:0.4.12",
+                "org.scala-sbt:sbinary_2.12:0.4.4"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/util",
+                    "package_prefix": "org.pantsbuild.zinc.util"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.util.util",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/util/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/util/*Test.scala",
+                            "src/scala/org/pantsbuild/zinc/util/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "3rdparty/jvm/org/scala-sbt:zinc": {
+            "targets": [
+                "3rdparty/jvm/org/scala-sbt:io",
+                "3rdparty/jvm/org/scala-sbt:util-logging"
+            ],
+            "libraries": [
+                "org.scala-sbt:zinc_2.12:1.1.7",
+                "org.scala-lang:scala-library:2.12.8",
+                "org.scala-sbt:zinc-classfile_2.12:1.1.7",
+                "org.scala-sbt:compiler-interface:1.1.7",
+                "org.scala-sbt:util-interface:1.1.3",
+                "org.scala-sbt:zinc-compile-core_2.12:1.1.7",
+                "org.scala-lang.modules:scala-parser-combinators_2.12:1.0.5",
+                "org.scala-sbt:launcher-interface:1.0.0",
+                "org.scala-sbt:util-control_2.12:1.1.3",
+                "org.scala-sbt:zinc-apiinfo_2.12:1.1.7",
+                "org.scala-sbt:zinc-classpath_2.12:1.1.7",
+                "org.scala-lang:scala-compiler:2.12.6",
+                "org.scala-lang:scala-reflect:2.12.6",
+                "org.scala-lang.modules:scala-xml_2.12:1.2.0",
+                "org.scala-sbt:zinc-core_2.12:1.1.7",
+                "org.scala-sbt:util-relation_2.12:1.1.3",
+                "org.scala-sbt:zinc-ivy-integration_2.12:1.1.7",
+                "org.scala-sbt:librarymanagement-core_2.12:1.1.4",
+                "com.eed3si9n:gigahorse-okhttp_2.12:0.3.0",
+                "com.eed3si9n:gigahorse-core_2.12:0.3.0",
+                "com.typesafe:ssl-config-core_2.12:0.2.2",
+                "com.typesafe:config:1.2.0",
+                "org.reactivestreams:reactive-streams:1.0.0",
+                "org.slf4j:slf4j-api:1.7.26",
+                "com.squareup.okhttp3:okhttp:3.7.0",
+                "com.squareup.okio:okio:1.12.0",
+                "com.eed3si9n:sjson-new-core_2.12:0.8.2",
+                "com.jcraft:jsch:0.1.54",
+                "com.squareup.okhttp3:okhttp-urlconnection:3.7.0",
+                "org.scala-sbt:util-cache_2.12:1.1.3",
+                "com.eed3si9n:sjson-new-murmurhash_2.12:0.8.2",
+                "com.eed3si9n:sjson-new-scalajson_2.12:0.8.2",
+                "com.eed3si9n:shaded-scalajson_2.12:1.0.0-M4",
+                "org.spire-math:jawn-parser_2.12:0.10.4",
+                "org.scala-sbt:util-position_2.12:1.1.3",
+                "org.scala-sbt:zinc-persist_2.12:1.1.7",
+                "com.trueaccord.scalapb:scalapb-runtime_2.12:0.6.0",
+                "com.google.protobuf:protobuf-java:3.3.1",
+                "com.lihaoyi:fastparse_2.12:0.4.2",
+                "com.lihaoyi:fastparse-utils_2.12:0.4.2",
+                "com.lihaoyi:sourcecode_2.12:0.1.3",
+                "com.trueaccord.lenses:lenses_2.12:0.4.12",
+                "org.scala-sbt:sbinary_2.12:0.4.4",
+                "org.scala-sbt:io_2.12:1.1.4",
+                "net.java.dev.jna:jna:4.5.0",
+                "net.java.dev.jna:jna-platform:4.5.0",
+                "org.scala-sbt:util-logging_2.12:1.1.3",
+                "com.lmax:disruptor:3.3.6",
+                "jline:jline:2.14.4",
+                "org.apache.logging.log4j:log4j-api:2.8.1",
+                "org.apache.logging.log4j:log4j-core:2.8.1"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.org.scala-sbt.zinc",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty/jvm/org/scala-sbt:io": {
+            "targets": [],
+            "libraries": [
+                "org.scala-sbt:io_2.12:1.1.4",
+                "net.java.dev.jna:jna:4.5.0",
+                "net.java.dev.jna:jna-platform:4.5.0",
+                "org.scala-lang:scala-library:2.12.8"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.org.scala-sbt.io",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty/jvm/org/scala-sbt:util-logging": {
+            "targets": [],
+            "libraries": [
+                "org.scala-sbt:util-logging_2.12:1.1.3",
+                "com.eed3si9n:sjson-new-core_2.12:0.8.2",
+                "org.scala-lang:scala-library:2.12.8",
+                "com.eed3si9n:sjson-new-scalajson_2.12:0.8.2",
+                "com.eed3si9n:shaded-scalajson_2.12:1.0.0-M4",
+                "org.spire-math:jawn-parser_2.12:0.10.4",
+                "com.lmax:disruptor:3.3.6",
+                "jline:jline:2.14.4",
+                "org.apache.logging.log4j:log4j-api:2.8.1",
+                "org.apache.logging.log4j:log4j-core:2.8.1",
+                "org.scala-lang:scala-reflect:2.12.6",
+                "org.scala-sbt:util-interface:1.1.3"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.org.scala-sbt.util-logging",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "src/scala/org/pantsbuild/zinc/compiler:compiler": {
+            "targets": [
+                "3rdparty/jvm/com/github/scopt:scopt",
+                "3rdparty/jvm/com/martiansoftware:nailgun-server",
+                "3rdparty/jvm/org/scala-lang/modules:scala-java8-compat",
+                "3rdparty/jvm/org/scala-sbt:io",
+                "3rdparty/jvm/org/scala-sbt:util-logging",
+                "3rdparty/jvm/org/scala-sbt:zinc",
+                "3rdparty:guava",
+                "3rdparty:jsr305",
+                "src/scala/org/pantsbuild/zinc/analysis:analysis",
+                "src/scala/org/pantsbuild/zinc/cache:cache",
+                "src/scala/org/pantsbuild/zinc/scalautil:scalautil",
+                "src/scala/org/pantsbuild/zinc/util:util",
+                "src/scala/META-INF/native-image/org/pantsbuild/zinc/compiler:zinc-native-image-configuration",
+                "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions:native-image-substitutions",
+                "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions:statics",
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "com.github.scopt:scopt_2.12:3.7.0",
+                "org.scala-lang:scala-library:2.12.8",
+                "com.martiansoftware:nailgun-server:0.9.1",
+                "org.scala-lang.modules:scala-java8-compat_2.12:0.8.0",
+                "org.scala-sbt:io_2.12:1.1.4",
+                "net.java.dev.jna:jna:4.5.0",
+                "net.java.dev.jna:jna-platform:4.5.0",
+                "org.scala-sbt:util-logging_2.12:1.1.3",
+                "com.eed3si9n:sjson-new-core_2.12:0.8.2",
+                "com.eed3si9n:sjson-new-scalajson_2.12:0.8.2",
+                "com.eed3si9n:shaded-scalajson_2.12:1.0.0-M4",
+                "org.spire-math:jawn-parser_2.12:0.10.4",
+                "com.lmax:disruptor:3.3.6",
+                "jline:jline:2.14.4",
+                "org.apache.logging.log4j:log4j-api:2.8.1",
+                "org.apache.logging.log4j:log4j-core:2.8.1",
+                "org.scala-lang:scala-reflect:2.12.6",
+                "org.scala-sbt:util-interface:1.1.3",
+                "org.scala-sbt:zinc_2.12:1.1.7",
+                "org.scala-sbt:zinc-classfile_2.12:1.1.7",
+                "org.scala-sbt:compiler-interface:1.1.7",
+                "org.scala-sbt:zinc-compile-core_2.12:1.1.7",
+                "org.scala-lang.modules:scala-parser-combinators_2.12:1.0.5",
+                "org.scala-sbt:launcher-interface:1.0.0",
+                "org.scala-sbt:util-control_2.12:1.1.3",
+                "org.scala-sbt:zinc-apiinfo_2.12:1.1.7",
+                "org.scala-sbt:zinc-classpath_2.12:1.1.7",
+                "org.scala-lang:scala-compiler:2.12.6",
+                "org.scala-lang.modules:scala-xml_2.12:1.2.0",
+                "org.scala-sbt:zinc-core_2.12:1.1.7",
+                "org.scala-sbt:util-relation_2.12:1.1.3",
+                "org.scala-sbt:zinc-ivy-integration_2.12:1.1.7",
+                "org.scala-sbt:librarymanagement-core_2.12:1.1.4",
+                "com.eed3si9n:gigahorse-okhttp_2.12:0.3.0",
+                "com.eed3si9n:gigahorse-core_2.12:0.3.0",
+                "com.typesafe:ssl-config-core_2.12:0.2.2",
+                "com.typesafe:config:1.2.0",
+                "org.reactivestreams:reactive-streams:1.0.0",
+                "org.slf4j:slf4j-api:1.7.26",
+                "com.squareup.okhttp3:okhttp:3.7.0",
+                "com.squareup.okio:okio:1.12.0",
+                "com.jcraft:jsch:0.1.54",
+                "com.squareup.okhttp3:okhttp-urlconnection:3.7.0",
+                "org.scala-sbt:util-cache_2.12:1.1.3",
+                "com.eed3si9n:sjson-new-murmurhash_2.12:0.8.2",
+                "org.scala-sbt:util-position_2.12:1.1.3",
+                "org.scala-sbt:zinc-persist_2.12:1.1.7",
+                "com.trueaccord.scalapb:scalapb-runtime_2.12:0.6.0",
+                "com.google.protobuf:protobuf-java:3.3.1",
+                "com.lihaoyi:fastparse_2.12:0.4.2",
+                "com.lihaoyi:fastparse-utils_2.12:0.4.2",
+                "com.lihaoyi:sourcecode_2.12:0.1.3",
+                "com.trueaccord.lenses:lenses_2.12:0.4.12",
+                "org.scala-sbt:sbinary_2.12:0.4.4",
+                "com.google.guava:guava:18.0",
+                "com.google.code.findbugs:jsr305:3.0.2"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/compiler",
+                    "package_prefix": "org.pantsbuild.zinc.compiler"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.compiler.compiler",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/compiler/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/compiler/*Test.scala",
+                            "src/scala/org/pantsbuild/zinc/compiler/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "3rdparty/jvm/com/martiansoftware:nailgun-server": {
+            "targets": [],
+            "libraries": [
+                "com.martiansoftware:nailgun-server:0.9.1"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.com.martiansoftware.nailgun-server",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty/jvm/org/scala-lang/modules:scala-java8-compat": {
+            "targets": [],
+            "libraries": [
+                "org.scala-lang.modules:scala-java8-compat_2.12:0.8.0",
+                "org.scala-lang:scala-library:2.12.8"
+            ],
+            "roots": [],
+            "id": "3rdparty.jvm.org.scala-lang.modules.scala-java8-compat",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty:guava": {
+            "targets": [],
+            "libraries": [
+                "com.google.guava:guava:18.0"
+            ],
+            "roots": [],
+            "id": "3rdparty.guava",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false
+        },
+        "3rdparty:jsr305": {
+            "targets": [],
+            "libraries": [
+                "com.google.code.findbugs:jsr305:3.0.2"
+            ],
+            "roots": [],
+            "id": "3rdparty.jsr305",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "jar_library",
+            "globs": {
+                "globs": []
+            },
+            "transitive": true,
+            "scope": "compile",
+            "is_target_root": false
+        },
+        "src/scala/org/pantsbuild/zinc/analysis:analysis": {
+            "targets": [
+                "3rdparty/jvm/org/scala-lang/modules:scala-java8-compat",
+                "3rdparty/jvm/org/scala-sbt:zinc",
+                "src/scala/org/pantsbuild/zinc/cache:cache",
+                "src/scala/org/pantsbuild/zinc/util:util",
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "org.scala-lang.modules:scala-java8-compat_2.12:0.8.0",
+                "org.scala-lang:scala-library:2.12.8",
+                "org.scala-sbt:zinc_2.12:1.1.7",
+                "org.scala-sbt:zinc-classfile_2.12:1.1.7",
+                "org.scala-sbt:compiler-interface:1.1.7",
+                "org.scala-sbt:util-interface:1.1.3",
+                "org.scala-sbt:zinc-compile-core_2.12:1.1.7",
+                "org.scala-lang.modules:scala-parser-combinators_2.12:1.0.5",
+                "org.scala-sbt:launcher-interface:1.0.0",
+                "org.scala-sbt:util-control_2.12:1.1.3",
+                "org.scala-sbt:zinc-apiinfo_2.12:1.1.7",
+                "org.scala-sbt:zinc-classpath_2.12:1.1.7",
+                "org.scala-lang:scala-compiler:2.12.6",
+                "org.scala-lang:scala-reflect:2.12.6",
+                "org.scala-lang.modules:scala-xml_2.12:1.2.0",
+                "org.scala-sbt:zinc-core_2.12:1.1.7",
+                "org.scala-sbt:util-relation_2.12:1.1.3",
+                "org.scala-sbt:zinc-ivy-integration_2.12:1.1.7",
+                "org.scala-sbt:librarymanagement-core_2.12:1.1.4",
+                "com.eed3si9n:gigahorse-okhttp_2.12:0.3.0",
+                "com.eed3si9n:gigahorse-core_2.12:0.3.0",
+                "com.typesafe:ssl-config-core_2.12:0.2.2",
+                "com.typesafe:config:1.2.0",
+                "org.reactivestreams:reactive-streams:1.0.0",
+                "org.slf4j:slf4j-api:1.7.26",
+                "com.squareup.okhttp3:okhttp:3.7.0",
+                "com.squareup.okio:okio:1.12.0",
+                "com.eed3si9n:sjson-new-core_2.12:0.8.2",
+                "com.jcraft:jsch:0.1.54",
+                "com.squareup.okhttp3:okhttp-urlconnection:3.7.0",
+                "org.scala-sbt:util-cache_2.12:1.1.3",
+                "com.eed3si9n:sjson-new-murmurhash_2.12:0.8.2",
+                "com.eed3si9n:sjson-new-scalajson_2.12:0.8.2",
+                "com.eed3si9n:shaded-scalajson_2.12:1.0.0-M4",
+                "org.spire-math:jawn-parser_2.12:0.10.4",
+                "org.scala-sbt:util-position_2.12:1.1.3",
+                "org.scala-sbt:zinc-persist_2.12:1.1.7",
+                "com.trueaccord.scalapb:scalapb-runtime_2.12:0.6.0",
+                "com.google.protobuf:protobuf-java:3.3.1",
+                "com.lihaoyi:fastparse_2.12:0.4.2",
+                "com.lihaoyi:fastparse-utils_2.12:0.4.2",
+                "com.lihaoyi:sourcecode_2.12:0.1.3",
+                "com.trueaccord.lenses:lenses_2.12:0.4.12",
+                "org.scala-sbt:sbinary_2.12:0.4.4"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/analysis",
+                    "package_prefix": "org.pantsbuild.zinc.analysis"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.analysis.analysis",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/analysis/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/analysis/*Test.scala",
+                            "src/scala/org/pantsbuild/zinc/analysis/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "src/scala/org/pantsbuild/zinc/cache:cache": {
+            "targets": [
+                "3rdparty:guava",
+                "3rdparty:jsr305",
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "com.google.guava:guava:18.0",
+                "com.google.code.findbugs:jsr305:3.0.2",
+                "org.scala-lang:scala-library:2.12.8"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/cache",
+                    "package_prefix": "org.pantsbuild.zinc.cache"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.cache.cache",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/cache/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/cache/*Test.scala",
+                            "src/scala/org/pantsbuild/zinc/cache/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "src/scala/org/pantsbuild/zinc/scalautil:scalautil": {
+            "targets": [
+                "src/scala/org/pantsbuild/zinc/util:util",
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "org.scala-lang:scala-library:2.12.8"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/scalautil",
+                    "package_prefix": "org.pantsbuild.zinc.scalautil"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.scalautil.scalautil",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/scalautil/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/scalautil/*Test.scala",
+                            "src/scala/org/pantsbuild/zinc/scalautil/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "src/scala/META-INF/native-image/org/pantsbuild/zinc/compiler:zinc-native-image-configuration": {
+            "targets": [],
+            "libraries": [],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/META-INF/native-image/org/pantsbuild/zinc/compiler",
+                    "package_prefix": "META-INF.native-image.org.pantsbuild.zinc.compiler"
+                }
+            ],
+            "id": "src.scala.META-INF.native-image.org.pantsbuild.zinc.compiler.zinc-native-image-configuration",
+            "target_type": "RESOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "resources",
+            "globs": {
+                "globs": [
+                    "src/scala/META-INF/native-image/org/pantsbuild/zinc/compiler/**/*"
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true
+        },
+        "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions:native-image-substitutions": {
+            "targets": [
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "org.scala-lang:scala-library:2.12.8"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions",
+                    "package_prefix": "org.pantsbuild.zinc.compiler.native-image-substitutions"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.compiler.native-image-substitutions.native-image-substitutions",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions/*Test.scala",
+                            "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions:statics": {
+            "targets": [],
+            "libraries": [],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions",
+                    "package_prefix": "org.pantsbuild.zinc.compiler.native-image-substitutions"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.compiler.native-image-substitutions.statics",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "java_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions/*.java"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/compiler/native-image-substitutions/*Test.java"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "src/scala/org/pantsbuild/zinc/options:options": {
+            "targets": [
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "org.scala-lang:scala-library:2.12.8"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/options",
+                    "package_prefix": "org.pantsbuild.zinc.options"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.options.options",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/options/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/options/*Test.scala",
+                            "src/scala/org/pantsbuild/zinc/options/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "src/scala/org/pantsbuild/zinc/bootstrapper:bootstrapper": {
+            "targets": [
+                "3rdparty/jvm/org/scala-sbt:zinc",
+                "3rdparty/jvm/org/scala-sbt:util-logging",
+                "3rdparty/jvm/org/scala-sbt:io",
+                "3rdparty/jvm/com/github/scopt:scopt",
+                "3rdparty/jvm/org/pantsbuild/buck/util/zip:zip",
+                "src/scala/org/pantsbuild/zinc/options:options",
+                "src/scala/org/pantsbuild/zinc/scalautil:scalautil",
+                "//:scala-library-synthetic"
+            ],
+            "libraries": [
+                "org.scala-sbt:zinc_2.12:1.1.7",
+                "org.scala-lang:scala-library:2.12.8",
+                "org.scala-sbt:zinc-classfile_2.12:1.1.7",
+                "org.scala-sbt:compiler-interface:1.1.7",
+                "org.scala-sbt:util-interface:1.1.3",
+                "org.scala-sbt:zinc-compile-core_2.12:1.1.7",
+                "org.scala-lang.modules:scala-parser-combinators_2.12:1.0.5",
+                "org.scala-sbt:launcher-interface:1.0.0",
+                "org.scala-sbt:util-control_2.12:1.1.3",
+                "org.scala-sbt:zinc-apiinfo_2.12:1.1.7",
+                "org.scala-sbt:zinc-classpath_2.12:1.1.7",
+                "org.scala-lang:scala-compiler:2.12.6",
+                "org.scala-lang:scala-reflect:2.12.6",
+                "org.scala-lang.modules:scala-xml_2.12:1.2.0",
+                "org.scala-sbt:zinc-core_2.12:1.1.7",
+                "org.scala-sbt:util-relation_2.12:1.1.3",
+                "org.scala-sbt:zinc-ivy-integration_2.12:1.1.7",
+                "org.scala-sbt:librarymanagement-core_2.12:1.1.4",
+                "com.eed3si9n:gigahorse-okhttp_2.12:0.3.0",
+                "com.eed3si9n:gigahorse-core_2.12:0.3.0",
+                "com.typesafe:ssl-config-core_2.12:0.2.2",
+                "com.typesafe:config:1.2.0",
+                "org.reactivestreams:reactive-streams:1.0.0",
+                "org.slf4j:slf4j-api:1.7.26",
+                "com.squareup.okhttp3:okhttp:3.7.0",
+                "com.squareup.okio:okio:1.12.0",
+                "com.eed3si9n:sjson-new-core_2.12:0.8.2",
+                "com.jcraft:jsch:0.1.54",
+                "com.squareup.okhttp3:okhttp-urlconnection:3.7.0",
+                "org.scala-sbt:util-cache_2.12:1.1.3",
+                "com.eed3si9n:sjson-new-murmurhash_2.12:0.8.2",
+                "com.eed3si9n:sjson-new-scalajson_2.12:0.8.2",
+                "com.eed3si9n:shaded-scalajson_2.12:1.0.0-M4",
+                "org.spire-math:jawn-parser_2.12:0.10.4",
+                "org.scala-sbt:util-position_2.12:1.1.3",
+                "org.scala-sbt:zinc-persist_2.12:1.1.7",
+                "com.trueaccord.scalapb:scalapb-runtime_2.12:0.6.0",
+                "com.google.protobuf:protobuf-java:3.3.1",
+                "com.lihaoyi:fastparse_2.12:0.4.2",
+                "com.lihaoyi:fastparse-utils_2.12:0.4.2",
+                "com.lihaoyi:sourcecode_2.12:0.1.3",
+                "com.trueaccord.lenses:lenses_2.12:0.4.12",
+                "org.scala-sbt:sbinary_2.12:0.4.4",
+                "org.scala-sbt:util-logging_2.12:1.1.3",
+                "com.lmax:disruptor:3.3.6",
+                "jline:jline:2.14.4",
+                "org.apache.logging.log4j:log4j-api:2.8.1",
+                "org.apache.logging.log4j:log4j-core:2.8.1",
+                "org.scala-sbt:io_2.12:1.1.4",
+                "net.java.dev.jna:jna:4.5.0",
+                "net.java.dev.jna:jna-platform:4.5.0",
+                "com.github.scopt:scopt_2.12:3.7.0"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/src/scala/org/pantsbuild/zinc/bootstrapper",
+                    "package_prefix": "org.pantsbuild.zinc.bootstrapper"
+                }
+            ],
+            "id": "src.scala.org.pantsbuild.zinc.bootstrapper.bootstrapper",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "scala_library",
+            "globs": {
+                "globs": [
+                    "src/scala/org/pantsbuild/zinc/bootstrapper/*.scala"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "src/scala/org/pantsbuild/zinc/bootstrapper/*Test.scala",
+                            "src/scala/org/pantsbuild/zinc/bootstrapper/*Spec.scala"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": true,
+            "excludes": [],
+            "platform": "java8"
+        },
+        "3rdparty/jvm/org/pantsbuild/buck/util/zip:zip": {
+            "targets": [
+                "3rdparty:guava"
+            ],
+            "libraries": [
+                "com.google.guava:guava:18.0"
+            ],
+            "roots": [
+                {
+                    "source_root": "/Users/dmcclanahan/tools/pants-v4/3rdparty/jvm/org/pantsbuild/buck/util/zip",
+                    "package_prefix": "org.pantsbuild.buck.util.zip"
+                }
+            ],
+            "id": "3rdparty.jvm.org.pantsbuild.buck.util.zip.zip",
+            "target_type": "SOURCE",
+            "is_code_gen": false,
+            "is_synthetic": false,
+            "pants_target_type": "java_library",
+            "globs": {
+                "globs": [
+                    "3rdparty/jvm/org/pantsbuild/buck/util/zip/*.java"
+                ],
+                "exclude": [
+                    {
+                        "globs": [
+                            "3rdparty/jvm/org/pantsbuild/buck/util/zip/*Test.java"
+                        ]
+                    }
+                ]
+            },
+            "transitive": true,
+            "scope": "default",
+            "is_target_root": false,
+            "excludes": [],
+            "platform": "java7"
+        }
+    },
+    "jvm_platforms": {
+        "default_platform": "java8",
+        "platforms": {
+            "java6": {
+                "target_level": "1.6",
+                "source_level": "1.6",
+                "args": []
+            },
+            "java7": {
+                "target_level": "1.7",
+                "source_level": "1.7",
+                "args": []
+            },
+            "java8": {
+                "target_level": "1.8",
+                "source_level": "1.8",
+                "args": []
+            }
+        }
+    },
+    "preferred_jvm_distributions": {
+        "java6": {
+            "non_strict": "/Library/Java/JavaVirtualMachines/TwitterJDK11/Contents/Home"
+        },
+        "java7": {
+            "non_strict": "/Library/Java/JavaVirtualMachines/TwitterJDK11/Contents/Home"
+        },
+        "java8": {
+            "strict": "/Library/Java/JavaVirtualMachines/TwitterJDK/Contents/Home",
+            "non_strict": "/Library/Java/JavaVirtualMachines/TwitterJDK11/Contents/Home"
+        }
+    },
+    "libraries": {
+        "commons-io:commons-io:2.5": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/commons-io/commons-io/jars/commons-io-2.5.jar"
+        },
+        "com.github.scopt:scopt_2.12:3.7.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.github.scopt/scopt_2.12/jars/scopt_2.12-3.7.0.jar"
+        },
+        "org.scala-lang:scala-library:2.12.8": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-lang/scala-library/jars/scala-library-2.12.8.jar"
+        },
+        "com.twitter.scoverage:scalac-scoverage-plugin_2.12:1.0.1-twitter": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.twitter.scoverage/scalac-scoverage-plugin_2.12/jars/scalac-scoverage-plugin_2.12-1.0.1-twitter.jar"
+        },
+        "org.scala-lang.modules:scala-xml_2.12:1.2.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-lang.modules/scala-xml_2.12/bundles/scala-xml_2.12-1.2.0.jar"
+        },
+        "org.slf4j:slf4j-simple:1.7.26": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.slf4j/slf4j-simple/jars/slf4j-simple-1.7.26.jar"
+        },
+        "org.slf4j:slf4j-api:1.7.26": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.slf4j/slf4j-api/jars/slf4j-api-1.7.26.jar"
+        },
+        "org.scala-sbt:zinc_2.12:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/zinc_2.12/jars/zinc_2.12-1.1.7.jar"
+        },
+        "org.scala-sbt:zinc-classfile_2.12:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/zinc-classfile_2.12/jars/zinc-classfile_2.12-1.1.7.jar"
+        },
+        "org.scala-sbt:compiler-interface:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/compiler-interface/jars/compiler-interface-1.1.7.jar"
+        },
+        "org.scala-sbt:util-interface:1.1.3": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/util-interface/jars/util-interface-1.1.3.jar"
+        },
+        "org.scala-sbt:zinc-compile-core_2.12:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/zinc-compile-core_2.12/jars/zinc-compile-core_2.12-1.1.7.jar"
+        },
+        "org.scala-lang.modules:scala-parser-combinators_2.12:1.0.5": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-lang.modules/scala-parser-combinators_2.12/bundles/scala-parser-combinators_2.12-1.0.5.jar"
+        },
+        "org.scala-sbt:launcher-interface:1.0.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/launcher-interface/jars/launcher-interface-1.0.0.jar"
+        },
+        "org.scala-sbt:util-control_2.12:1.1.3": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/util-control_2.12/jars/util-control_2.12-1.1.3.jar"
+        },
+        "org.scala-sbt:zinc-apiinfo_2.12:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/zinc-apiinfo_2.12/jars/zinc-apiinfo_2.12-1.1.7.jar"
+        },
+        "org.scala-sbt:zinc-classpath_2.12:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/zinc-classpath_2.12/jars/zinc-classpath_2.12-1.1.7.jar"
+        },
+        "org.scala-lang:scala-compiler:2.12.6": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-lang/scala-compiler/jars/scala-compiler-2.12.6.jar"
+        },
+        "org.scala-lang:scala-reflect:2.12.6": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-lang/scala-reflect/jars/scala-reflect-2.12.6.jar"
+        },
+        "org.scala-sbt:zinc-core_2.12:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/zinc-core_2.12/jars/zinc-core_2.12-1.1.7.jar"
+        },
+        "org.scala-sbt:util-relation_2.12:1.1.3": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/util-relation_2.12/jars/util-relation_2.12-1.1.3.jar"
+        },
+        "org.scala-sbt:zinc-ivy-integration_2.12:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/zinc-ivy-integration_2.12/jars/zinc-ivy-integration_2.12-1.1.7.jar"
+        },
+        "org.scala-sbt:librarymanagement-core_2.12:1.1.4": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/librarymanagement-core_2.12/jars/librarymanagement-core_2.12-1.1.4.jar"
+        },
+        "com.eed3si9n:gigahorse-okhttp_2.12:0.3.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.eed3si9n/gigahorse-okhttp_2.12/jars/gigahorse-okhttp_2.12-0.3.0.jar"
+        },
+        "com.eed3si9n:gigahorse-core_2.12:0.3.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.eed3si9n/gigahorse-core_2.12/jars/gigahorse-core_2.12-0.3.0.jar"
+        },
+        "com.typesafe:ssl-config-core_2.12:0.2.2": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.typesafe/ssl-config-core_2.12/bundles/ssl-config-core_2.12-0.2.2.jar"
+        },
+        "com.typesafe:config:1.2.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.typesafe/config/bundles/config-1.2.0.jar"
+        },
+        "org.reactivestreams:reactive-streams:1.0.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.reactivestreams/reactive-streams/jars/reactive-streams-1.0.0.jar"
+        },
+        "com.squareup.okhttp3:okhttp:3.7.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.squareup.okhttp3/okhttp/jars/okhttp-3.7.0.jar"
+        },
+        "com.squareup.okio:okio:1.12.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.squareup.okio/okio/jars/okio-1.12.0.jar"
+        },
+        "com.eed3si9n:sjson-new-core_2.12:0.8.2": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.eed3si9n/sjson-new-core_2.12/jars/sjson-new-core_2.12-0.8.2.jar"
+        },
+        "com.jcraft:jsch:0.1.54": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.jcraft/jsch/jars/jsch-0.1.54.jar"
+        },
+        "com.squareup.okhttp3:okhttp-urlconnection:3.7.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.squareup.okhttp3/okhttp-urlconnection/jars/okhttp-urlconnection-3.7.0.jar"
+        },
+        "org.scala-sbt:util-cache_2.12:1.1.3": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/util-cache_2.12/jars/util-cache_2.12-1.1.3.jar"
+        },
+        "com.eed3si9n:sjson-new-murmurhash_2.12:0.8.2": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.eed3si9n/sjson-new-murmurhash_2.12/jars/sjson-new-murmurhash_2.12-0.8.2.jar"
+        },
+        "com.eed3si9n:sjson-new-scalajson_2.12:0.8.2": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.eed3si9n/sjson-new-scalajson_2.12/jars/sjson-new-scalajson_2.12-0.8.2.jar"
+        },
+        "com.eed3si9n:shaded-scalajson_2.12:1.0.0-M4": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.eed3si9n/shaded-scalajson_2.12/jars/shaded-scalajson_2.12-1.0.0-M4.jar"
+        },
+        "org.spire-math:jawn-parser_2.12:0.10.4": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.spire-math/jawn-parser_2.12/jars/jawn-parser_2.12-0.10.4.jar"
+        },
+        "org.scala-sbt:util-position_2.12:1.1.3": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/util-position_2.12/jars/util-position_2.12-1.1.3.jar"
+        },
+        "org.scala-sbt:zinc-persist_2.12:1.1.7": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/zinc-persist_2.12/jars/zinc-persist_2.12-1.1.7.jar"
+        },
+        "com.trueaccord.scalapb:scalapb-runtime_2.12:0.6.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.trueaccord.scalapb/scalapb-runtime_2.12/jars/scalapb-runtime_2.12-0.6.0.jar"
+        },
+        "com.google.protobuf:protobuf-java:3.3.1": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.google.protobuf/protobuf-java/bundles/protobuf-java-3.3.1.jar"
+        },
+        "com.lihaoyi:fastparse_2.12:0.4.2": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.lihaoyi/fastparse_2.12/jars/fastparse_2.12-0.4.2.jar"
+        },
+        "com.lihaoyi:fastparse-utils_2.12:0.4.2": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.lihaoyi/fastparse-utils_2.12/jars/fastparse-utils_2.12-0.4.2.jar"
+        },
+        "com.lihaoyi:sourcecode_2.12:0.1.3": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.lihaoyi/sourcecode_2.12/jars/sourcecode_2.12-0.1.3.jar"
+        },
+        "com.trueaccord.lenses:lenses_2.12:0.4.12": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.trueaccord.lenses/lenses_2.12/jars/lenses_2.12-0.4.12.jar"
+        },
+        "org.scala-sbt:sbinary_2.12:0.4.4": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/sbinary_2.12/jars/sbinary_2.12-0.4.4.jar"
+        },
+        "org.scala-sbt:io_2.12:1.1.4": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/io_2.12/jars/io_2.12-1.1.4.jar"
+        },
+        "net.java.dev.jna:jna:4.5.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/net.java.dev.jna/jna/jars/jna-4.5.0.jar"
+        },
+        "net.java.dev.jna:jna-platform:4.5.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/net.java.dev.jna/jna-platform/jars/jna-platform-4.5.0.jar"
+        },
+        "org.scala-sbt:util-logging_2.12:1.1.3": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-sbt/util-logging_2.12/jars/util-logging_2.12-1.1.3.jar"
+        },
+        "com.lmax:disruptor:3.3.6": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.lmax/disruptor/jars/disruptor-3.3.6.jar"
+        },
+        "jline:jline:2.14.4": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/jline/jline/jars/jline-2.14.4.jar"
+        },
+        "org.apache.logging.log4j:log4j-api:2.8.1": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.apache.logging.log4j/log4j-api/jars/log4j-api-2.8.1.jar"
+        },
+        "org.apache.logging.log4j:log4j-core:2.8.1": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.apache.logging.log4j/log4j-core/jars/log4j-core-2.8.1.jar"
+        },
+        "com.martiansoftware:nailgun-server:0.9.1": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.martiansoftware/nailgun-server/jars/nailgun-server-0.9.1.jar"
+        },
+        "org.scala-lang.modules:scala-java8-compat_2.12:0.8.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/org.scala-lang.modules/scala-java8-compat_2.12/jars/scala-java8-compat_2.12-0.8.0.jar"
+        },
+        "com.google.guava:guava:18.0": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.google.guava/guava/jars/guava-18.0.jar"
+        },
+        "com.google.code.findbugs:jsr305:3.0.2": {
+            "default": "/Users/dmcclanahan/.ivy2/pants/com.google.code.findbugs/jsr305/jars/jsr305-3.0.2.jar"
+        }
+    }
+}

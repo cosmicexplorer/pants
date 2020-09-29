@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional, Tuple
 
+from pants.binaries.binary_tool import rules as binary_tool_rules
 from pants.engine.objects import Collection
 from pants.engine.rules import RootRule
 from pants.option.custom_types import GlobExpansionConjunction
@@ -224,4 +225,4 @@ def create_fs_rules():
     RootRule(DirectoryWithPrefixToStrip),
     RootRule(DirectoryWithPrefixToAdd),
     RootRule(UrlToFetch),
-  ]
+  ] + binary_tool_rules()

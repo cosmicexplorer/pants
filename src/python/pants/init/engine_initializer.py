@@ -15,6 +15,7 @@ from pants.backend.python.targets.python_tests import PythonTests
 from pants.base.build_environment import get_buildroot
 from pants.base.exiter import PANTS_SUCCEEDED_EXIT_CODE
 from pants.base.file_system_project_tree import FileSystemProjectTree
+from pants.binaries.binary_util import BinaryUtil
 from pants.build_graph.build_configuration import BuildConfiguration
 from pants.build_graph.remote_sources import RemoteSources
 from pants.engine.build_files import create_graph_rules
@@ -363,6 +364,10 @@ class EngineInitializer:
     def union_membership_singleton() -> UnionMembership:
       return UnionMembership(build_configuration.union_rules())
 
+    @rule
+    def binary_util_singleton() -> BinaryUtil:
+      return BinaryUtil.Factory.create()
+
     # Create a Scheduler containing graph and filesystem rules, with no installed goals. The
     # LegacyBuildGraph will explicitly request the products it needs.
     rules = (
@@ -372,6 +377,7 @@ class EngineInitializer:
         build_configuration_singleton,
         symbol_table_singleton,
         union_membership_singleton,
+        binary_util_singleton,
       ] +
       create_legacy_graph_tasks() +
       create_fs_rules() +

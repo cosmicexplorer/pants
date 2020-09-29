@@ -124,6 +124,7 @@ class BinaryRequest:
   platform_dependent: Any
   external_url_generator: Optional[Any]
   archiver: Optional[Any]
+  expected_digest: Optional[Any] = None
 
   def _full_name(self):
     if self.archiver:

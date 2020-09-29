@@ -53,7 +53,9 @@ def get_go_module_infos(bfa: BuildFileAddresses, all_source_roots: AllSourceRoot
 
 @rule
 def test_go_module(info: GoModuleInfo, go_dist: GoDistribution) -> TestResult:
-
+  downloaded_go_dist = yield Get(Snapshot,
+                                 BinaryRequest, go_dist._make_binary_request(go_dist.version()))
+  
 
 
 def rules():
