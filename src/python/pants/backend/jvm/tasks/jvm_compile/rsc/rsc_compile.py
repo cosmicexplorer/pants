@@ -119,10 +119,6 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
       Rsc,
     )
 
-  @classmethod
-  def product_types(cls):
-    return super().product_types() + ['rsc_args']
-
   @memoized_property
   def mirrored_target_option_actions(self):
     return {
@@ -194,7 +190,7 @@ class RscCompile(ZincCompile, MirroredTargetOptionMixin):
 
   @classmethod
   def product_types(cls):
-    return super(RscCompile, cls).product_types() + ['rsc_mixed_compile_classpath']
+    return super().product_types() + ['rsc_mixed_compile_classpath', 'rsc_args']
 
   @memoized_property
   def _rsc(self):

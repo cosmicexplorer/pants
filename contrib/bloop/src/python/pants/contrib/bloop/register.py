@@ -13,9 +13,9 @@ from pants.contrib.bloop.tasks.config.bloop_write_export import BloopWriteExport
 
 
 def register_goals():
-  task(name='bloop-export-config', action=BloopExportConfig).install('bloop')
-  task(name='bloop-gen', action=BloopWriteExport).install('bloop')
-  task(name='bloop-compile', action=BloopCompile).install('bloop')
+  task(name='bloop-export-config', action=BloopExportConfig).install('bloop-export')
+  task(name='bloop-gen', action=BloopWriteExport).install('bloop-export')
+  task(name='bloop-compile', action=BloopCompile).install()
 
 
 def rules():

@@ -25,8 +25,8 @@ object BloopConfigGen extends App {
 
   val scalaCompilerJars = scalacClasspath
     .split(":")
-    .map(Path(_))
-    // .map(jar => buildRootPath / RelPath(jar))
+    // .map(Path(_))
+    .map(jar => buildRootPath / RelPath(jar))
 
   val sourceTargets = pantsExportParsed.targets
 
@@ -127,7 +127,8 @@ object BloopConfigGen extends App {
         test = None,
         platform = Some(bloopPlatform),
         // NB: Pants does the resolution itself!!
-        resolution = None
+        resolution = None,
+        workspaceDir = Some(buildRootPath.toNIO)
       )
     }
     .toSeq

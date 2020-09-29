@@ -8,7 +8,7 @@ jar_library(
   ],
 )
 
-BLOOP_REV = '1.3.2+65-3e3621c6+20190917-1236'
+BLOOP_REV = '1.3.2+279-043629bc+20190918-1215'
 
 jar_library(
   name='bloop-frontend',
@@ -28,5 +28,12 @@ jar_library(
   name='spray-json',
   jars=[
     scala_jar(org='io.spray', name='spray-json', rev='1.3.4'),
+  ],
+)
+
+jar_library(
+  name='bloop-launcher',
+  jars=[
+    scala_jar(org='ch.epfl.scala', name='bloop-launcher', rev=BLOOP_REV),
   ],
 )

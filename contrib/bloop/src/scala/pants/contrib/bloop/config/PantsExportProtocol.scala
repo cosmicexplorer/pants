@@ -57,6 +57,7 @@ object PantsExportProtocol extends DefaultJsonProtocol {
     "transitive",
     "is_code_gen",
     "platform",
+    "resources",
     "is_synthetic",
     "classes_dir",
     "zinc_analysis",

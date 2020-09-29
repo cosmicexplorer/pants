@@ -121,8 +121,8 @@ def process_pants_compile_request(pants_compile_request, bloop_invocation_reques
     'classes_dir': '/tmp',
   })
   logger.debug(f'json output: {json_output}')
-  bloop_invocation_request.bsp_launcher_process.stdin.write(f'{json_output}\n'.encode())
-  bloop_invocation_request.bsp_launcher_process.stdin.flush()
+  # bloop_invocation_request.bsp_launcher_process.stdin.write(f'{json_output}\n'.encode())
+  # bloop_invocation_request.bsp_launcher_process.stdin.flush()
   logger.info('oh!')
   return BloopIntermediateResult(None)
 
@@ -168,7 +168,7 @@ class BloopCompile(RscCompile):
 
   @classmethod
   def prepare(cls, options, round_manager):
-    super(BloopCompile, cls).prepare(options, round_manager)
+    super().prepare(options, round_manager)
     round_manager.require_data('bloop_classes_dir')
     round_manager.require_data('rsc_args')
 
@@ -202,8 +202,7 @@ class BloopCompile(RscCompile):
       # TODO: jvm options need to be prefixed with -J and passed to the LauncherMain if we want to
       # use them!
       args=[
-        # FIXME: just pipe in the "level" option! This is a hack for easier debugging!
-        'debug', # self.get_options().level,
+        self.get_options().level,
         target_mapping_json_file,
         '--',
       ] + [t.id for t in jvm_targets],

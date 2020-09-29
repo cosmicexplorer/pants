@@ -84,7 +84,7 @@ class BloopExportConfig(ModifiedExportTaskBase):
 
     scala_compiler_jars = [
       str(coerce_relative_classpath_entry(cpe.path)) for cpe in
-      self._scala_platform.compiler_classpath_entries(self.context.products, self.context._scheduler)
+      self._scala_platform.compiler_classpath_entries(self.context.products)
     ]
 
     export_config = self.BloopExport(

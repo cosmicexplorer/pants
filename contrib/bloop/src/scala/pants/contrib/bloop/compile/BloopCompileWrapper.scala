@@ -71,6 +71,9 @@ case class BareBonesLogger(thisLevel: Level.Value) extends bloop.logging.Logger 
 
   override def trace(t: Throwable): Unit = out.println(StackTrace.trimmed(t, 0))
 
+  // FIXME: make use of the origin id!
+  override def withOriginId(originId: Option[String]): bloop.logging.Logger = this
+
   def log(
     level: Level.Value,
     message: => String
@@ -185,7 +188,7 @@ object PantsCompileMain {
                 case Some(bsp.DiagnosticSeverity.Warning) => logger.warn(printDiagnostic(d))
                 case Some(bsp.DiagnosticSeverity.Information) => logger.info(printDiagnostic(d))
                 case Some(bsp.DiagnosticSeverity.Hint) => logger.debug(printDiagnostic(d))
-                case None => logger.info(printDiagnostic(d))
+                case None => logger.debug(printDiagnostic(d))
               }
             }
         }.notification(endpoints.Build.taskStart) {
@@ -217,25 +220,6 @@ object PantsCompileMain {
       val bspServer = new BloopLanguageServer(messages, bspClient, services, scheduler, bspLogger)
       val runningClientServer = exitOnError(bspServer.startTask).runAsync(scheduler)
 
-      // NB: Currently not relevant -- this is how we can hack remote compiles via pants if we
-      // wanted to.
-      val forwardResults: Task[Unit] = parseJsonLines(bufferInput(System.in)).foreachL { reqJson =>
-        val req = endpoints.BuildTarget.run.request(bsp.RunParams(
-            target = bsp.BuildTargetIdentifier(uri = bsp.Uri(new java.net.URI("https://ok.io"))),
-            originId = None,
-            arguments = None,
-            dataKind = Some("pants-hacked-remote-compile-result"),
-            data = Some(reqJson)
-          )).map(err(_))
-            .map {
-              case bsp.RunResult(None, bsp.StatusCode.Ok) =>
-                logger.debug("bloop server successfully received hacky compile result run request!")
-              case e => throw new Exception(s"failed hacky compile result run request: $e")
-            }
-        exitOnError(req).runAsync(scheduler)
-      }
-      Task.fork(exitOnError(forwardResults)).runAsync(scheduler)
-
       def ack(a: Ack): Unit = a match {
         case Ack.Continue => ()
         case Ack.Stop => throw new Exception("stopped???")
@@ -252,7 +236,7 @@ object PantsCompileMain {
         .flatMap { result =>
           val resultData = result.data.get.as[Map[String, Boolean]].right.get
           assert(resultData("received_target_mapping"))
-          logger.info(s"initializeResult: $result")
+          logger.debug(s"initializeResult: $result")
           Task.fromFuture(endpoints.Build.initialized.notify(bsp.InitializedBuildParams()))
         }.map(ack(_))
         .flatMap { Unit =>
@@ -263,7 +247,7 @@ object PantsCompileMain {
           val targetIds = compileTargets.toSet
           val matchingTargets = targets.filter(_.displayName.filter(targetIds).isDefined).toList
           val mIds = matchingTargets.flatMap(_.displayName)
-          logger.info(s"matchingTargets: $mIds")
+          logger.debug(s"matchingTargets: $mIds")
 
           endpoints.BuildTarget.compile.request(bsp.CompileParams(
             targets = matchingTargets.map(_.id).toList,
@@ -275,7 +259,7 @@ object PantsCompileMain {
           case bsp.CompileResult(_, bsp.StatusCode.Ok,
             Some("project-name-classes-dir-mapping"),
             Some(mapping)) => {
-            logger.info(s"mapped: $mapping")
+            logger.debug(s"mapped: $mapping")
 
             val outputDir = pwd / ".pants.d" / ".tmp"
             rm(outputDir)
@@ -283,7 +267,7 @@ object PantsCompileMain {
             val nonTempDirMapping: Map[String, Path] = err(mapping.as[Map[String, String]]).map {
               case (targetId, tempClassesDir) =>
                 val curTargetOutputDir = outputDir / RelPath(targetId)
-                logger.info(s"copying temp dir $tempClassesDir to $curTargetOutputDir!!")
+                logger.debug(s"copying temp dir $tempClassesDir to $curTargetOutputDir!!")
                 // TODO: for some reason ammonite-ops `cp` just hangs here???
                 %%("cp", "-r", Path(tempClassesDir).toString, curTargetOutputDir.toString)(pwd)
                 (targetId -> curTargetOutputDir)
