@@ -941,7 +941,8 @@ pub fn make_execute_request(
   } = metadata;
 
   // TODO: Disabling append-only caches in remoting until server support exists due to
-  //       interaction with how servers match platform properties.
+  //       interaction with how servers match platform properties. See
+  //       https://github.com/pantsbuild/pants/pull/10077 for details.
   // if !req.append_only_caches.is_empty() {
   //   platform_properties.extend(NamedCaches::platform_properties(
   //     &req.append_only_caches,

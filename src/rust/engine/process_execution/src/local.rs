@@ -409,7 +409,7 @@ pub trait CapturedWorkdir {
         // Hold on to the workdir so that we can drop it explicitly after we've finished using it.
         (workdir.path().to_owned(), Some(workdir))
       } else {
-        // This consumes the `TempDir` without deleting directory on the filesystem, meaning
+        // This consumes the `TempDir` without deleting the directory on the filesystem, meaning
         // that the temporary directory will no longer be automatically deleted when dropped.
         let preserved_path = workdir.into_path();
         info!(
